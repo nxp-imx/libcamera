@@ -16,9 +16,38 @@
 #include "camera_test.h"
 #include "test.h"
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/mman.h>
+
 using namespace libcamera;
 using namespace std;
 using namespace std::chrono_literals;
+
+static void DumpData(void *buf, uint32_t bufSize)
+{
+	int  fd = -1;
+	const char *fileName = "/data/dump.yuyv";
+
+	if ((buf == NULL) || (bufSize == 0))
+		return;
+
+	fd = open(fileName, O_CREAT|O_APPEND|O_WRONLY, S_IRWXU|S_IRWXG);
+	if (fd < 0) {
+		cout << "DumpData, can't open file " << fileName << endl;
+		 return;
+	}
+
+	write(fd, buf, bufSize);
+	close(fd);
+
+	return;
+}
+
+#define OV560_8MN_NAME "/base/soc@0/bus@30800000/i2c@30a40000/ov5640_mipi@3c"
+#define OV560_8QM_NAME "/base/bus@58000000/i2c@58226000/ov5640_mipi@3c"
 
 namespace {
 
@@ -26,13 +55,24 @@ class Capture : public CameraTest, public Test
 {
 public:
 	Capture()
-		: CameraTest("platform/vimc.0 Sensor B")
+		: CameraTest(OV560_8MN_NAME)
 	{
 	}
 
 protected:
 	unsigned int completeBuffersCount_;
 	unsigned int completeRequestsCount_;
+
+	void dumpBuffer(FrameBuffer *buffer)
+	{
+		auto plans = buffer->planes();
+		FrameBuffer::Plane plan = plans[0];
+		void *virtAddr = (void*)mmap(NULL, plan.length, PROT_READ | PROT_WRITE, MAP_SHARED, plan.fd.get(), plan.offset);
+		cout << "plan offset " << plan.offset << " length " << plan.length << " fd " << plan.fd.get() << " virt addr " << virtAddr << endl;
+
+		DumpData(virtAddr, plan.length);
+		munmap(virtAddr, plan.length);
+	}
 
 	void bufferComplete([[maybe_unused]] Request *request,
 			    FrameBuffer *buffer)
@@ -41,6 +81,7 @@ protected:
 			return;
 
 		completeBuffersCount_++;
+		dumpBuffer(buffer);
 	}
 
 	void requestComplete(Request *request)
@@ -85,6 +126,12 @@ protected:
 	int run() override
 	{
 		StreamConfiguration &cfg = config_->at(0);
+
+#ifdef ANDROID
+		cfg.pixelFormat = PixelFormat::fromString("YUYV");
+		cfg.size.width = 1920;
+		cfg.size.height = 1080;
+#endif
 
 		if (camera_->acquire()) {
 			cout << "Failed to acquire the camera" << endl;

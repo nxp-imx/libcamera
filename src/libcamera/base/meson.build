@@ -22,6 +22,7 @@ libcamera_base_sources = files([
     'utils.cpp',
 ])
 
+if get_option('android_root')=='auto'
 libdw = dependency('libdw', required : false)
 libunwind = dependency('libunwind', required : false)
 
@@ -43,6 +44,15 @@ libcamera_base_deps = [
     libthreads,
     libunwind,
 ]
+
+else
+
+libcamera_base_deps = [
+    dependency('threads'),
+    libatomic,
+]
+
+endif
 
 # Internal components must use the libcamera_base_private dependency to enable
 # the use of headers which must not be exposed to the libcamera public api.

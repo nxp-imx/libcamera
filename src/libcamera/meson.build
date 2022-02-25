@@ -77,7 +77,12 @@ if not cc.has_function('dlopen')
     libdl = cc.find_library('dl')
 endif
 libudev = dependency('libudev', required : get_option('udev'))
-libyaml = dependency('yaml-0.1', required : false)
+
+if get_option('android_root')=='auto'
+    libyaml = dependency('yaml-0.1', required : false)
+else
+    libyaml = cc.find_library('libyaml', dirs : meson.current_source_dir() / '..' / 'android' / 'ndk-lib')
+endif
 
 # Use one of gnutls or libcrypto (provided by OpenSSL), trying gnutls first.
 libcrypto = dependency('gnutls', required : false)

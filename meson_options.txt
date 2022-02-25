@@ -80,3 +80,8 @@ option('pycamera',
         type : 'feature',
         value : 'disabled',
         description : 'Enable libcamera Python bindings (experimental)')
+
+option('android_root',
+        type : 'string',
+        value : 'auto',
+        description : 'root path for android source code')

@@ -594,6 +594,12 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 		}
 #endif
 
+// use yuyv for preview
+#ifdef ANDROID
+		if (stream->format == HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED)
+			stream->format = HAL_PIXEL_FORMAT_YCbCr_422_I;
+#endif
+
 		/* Defer handling of MJPEG streams until all others are known. */
 		if (stream->format == HAL_PIXEL_FORMAT_BLOB) {
 			if (jpegStream) {

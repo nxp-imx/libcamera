@@ -70,6 +70,8 @@ CameraBuffer::Private::Private([[maybe_unused]] CameraBuffer *cameraBuffer,
 		return;
 	}
 
+/* fsl::Memory has 2 fds, 1st is fd, 2nd is fd_meta */
+#ifndef ANDROID
 	/*
 	 * As Android doesn't offer an API to query buffer layouts, assume for
 	 * now that the buffer is backed by a single dmabuf, with planes being
@@ -87,6 +89,9 @@ CameraBuffer::Private::Private([[maybe_unused]] CameraBuffer *cameraBuffer,
 
 		fd_ = camera3Buffer->data[i];
 	}
+#else
+  fd_ = camera3Buffer->data[0];
+#endif
 
 	if (fd_ == -1) {
 		error_ = -EINVAL;

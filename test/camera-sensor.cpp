@@ -23,6 +23,14 @@
 using namespace std;
 using namespace libcamera;
 
+#ifdef ANDROID
+#define MEDIA_NAME	"mxc-md"
+#define ENTITY_NAME	"ov5640 2-003c"
+#else
+#define MEDIA_NAME	"vmic"
+#define ENTITY_NAME	"Sensor A"
+#endif
+
 class CameraSensorTest : public Test
 {
 protected:
@@ -39,16 +47,16 @@ protected:
 			return TestFail;
 		}
 
-		DeviceMatch dm("vimc");
+		DeviceMatch dm(MEDIA_NAME);
 		media_ = enumerator_->search(dm);
 		if (!media_) {
-			cerr << "Unable to find \'vimc\' media device node" << endl;
+			cerr << "Unable to find \'" << MEDIA_NAME << "\' media device node" << endl;
 			return TestSkip;
 		}
 
-		MediaEntity *entity = media_->getEntityByName("Sensor A");
+		MediaEntity *entity = media_->getEntityByName(ENTITY_NAME);
 		if (!entity) {
-			cerr << "Unable to find media entity 'Sensor A'" << endl;
+			cerr << "Unable to find media entity \'" << ENTITY_NAME << "\'" << endl;
 			return TestFail;
 		}
 
@@ -67,20 +75,34 @@ protected:
 
 	int run()
 	{
-		if (sensor_->model() != "Sensor A") {
+		if (sensor_->model() != "ov5640") {
 			cerr << "Incorrect sensor model '" << sensor_->model()
 			     << "'" << endl;
 			return TestFail;
 		}
 
 		const std::vector<unsigned int> &codes = sensor_->mbusCodes();
+
+		for (auto iter = codes.begin(); iter != codes.end(); iter++)
+			cout << hex << "support codec " << *iter << endl;
+
+#ifndef ANDROID
 		auto iter = std::find(codes.begin(), codes.end(),
 				      MEDIA_BUS_FMT_ARGB8888_1X32);
 		if (iter == codes.end()) {
 			cerr << "Sensor doesn't support ARGB8888_1X32" << endl;
 			return TestFail;
 		}
+#endif
 
+		auto iter_fmt = std::find(codes.begin(), codes.end(), MEDIA_BUS_FMT_YUYV8_2X8);
+		if (iter_fmt != codes.end()) {
+			const std::vector<Size> &sizes = sensor_->sizes(MEDIA_BUS_FMT_YUYV8_2X8);
+			for (auto iter_size = sizes.begin(); iter_size != sizes.end(); iter_size++)
+			cout << dec << "YUYV8_2X8 support size " << iter_size->width << " x " << iter_size->height << endl;
+		}
+
+#ifndef ANDROID
 		const std::vector<Size> &sizes = sensor_->sizes(*iter);
 		auto iter2 = std::find(sizes.begin(), sizes.end(),
 				       Size(4096, 2160));
@@ -88,6 +110,7 @@ protected:
 			cerr << "Sensor doesn't support 4096x2160" << endl;
 			return TestFail;
 		}
+#endif
 
 		const Size &resolution = sensor_->resolution();
 		if (resolution != Size(4096, 2160)) {

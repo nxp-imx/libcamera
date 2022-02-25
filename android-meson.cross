@@ -1,0 +1,22 @@
+[binaries]
+c = ['/opt/android-ndk-r25-beta1/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android33-clang', '-march=armv8-a+crc+crypto', '-fstack-protector-strong', '-Wformat', '-Wformat-security', '-Werror=format-security', '--sysroot=/opt/android-ndk-r25-beta1/toolchains/llvm/prebuilt/linux-x86_64/sysroot']
+cpp = ['/opt/android-ndk-r25-beta1/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android33-clang++', '-march=armv8-a+crc+crypto', '-fstack-protector-strong', '-Wformat', '-Wformat-security', '-Werror=format-security', '--sysroot=/opt/android-ndk-r25-beta1/toolchains/llvm/prebuilt/linux-x86_64/sysroot']
+ar = ['/opt/android-ndk-r25-beta1/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar']
+nm = ['/opt/android-ndk-r25-beta1/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm']
+strip = ['/opt/android-ndk-r25-beta1/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip']
+pkgconfig = 'pkg-config'
+
+[properties]
+needs_exe_wrapper = true
+
+[built-in options]
+c_args = ['-O2', '-pipe', '-g', '-feliminate-unused-debug-types']
+c_link_args = ['-Wl,-O1', '-Wl,--hash-style=gnu', '-Wl,--as-needed', '-Wl,-z,relro,-z,now']
+cpp_args = []
+cpp_link_args = ['-Wl,-O1', '-Wl,--hash-style=gnu', '-Wl,--as-needed', '-Wl,-z,relro,-z,now']
+
+[host_machine]
+system = 'linux'
+cpu_family = 'x86_64'
+cpu = 'x86_64'
+endian = 'little'

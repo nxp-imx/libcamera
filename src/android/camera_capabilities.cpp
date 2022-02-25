@@ -84,7 +84,11 @@ const std::map<int, const Camera3Format> camera3FormatsMap = {
 		 * usage flag. For now, copy the YCbCr_420 configuration.
 		 */
 		HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED, {
+#ifdef ANDROID
+			{ formats::YUYV },
+#else
 			{ formats::NV12, formats::NV21 },
+#endif
 			true,
 			"IMPLEMENTATION_DEFINED"
 		}

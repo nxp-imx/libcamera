@@ -182,6 +182,10 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
 			.unitCellSize = { 1400, 1400 },
 			.testPatternModes = {},
 		} },
+		{ "ov5640", {
+			.unitCellSize = { 1400, 1400 },
+			.testPatternModes = {},
+		} },
 		{ "ov5670", {
 			.unitCellSize = { 1120, 1120 },
 			.testPatternModes = {

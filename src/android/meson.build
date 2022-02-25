@@ -1,10 +1,18 @@
 # SPDX-License-Identifier: CC0-1.0
 
+if get_option('android_root')=='auto'
 android_deps = [
     dependency('libexif', required : get_option('android')),
     dependency('libjpeg', required : get_option('android')),
     libcamera_private,
 ]
+else
+    android_deps = [
+        cc.find_library('libexif', dirs : meson.current_source_dir() / 'ndk-lib'),
+        cc.find_library('libjpeg', dirs : meson.current_source_dir() / 'ndk-lib'),
+        libcamera_private,
+    ]
+endif
 
 android_enabled = true
 
@@ -15,7 +23,11 @@ foreach dep : android_deps
     endif
 endforeach
 
-libyuv_dep = dependency('libyuv', required : false)
+if get_option('android_root')=='auto'
+    libyuv_dep = dependency('libyuv', required : false)
+else
+    libyuv_dep = cc.find_library('libyuv', dirs : meson.current_source_dir() / 'ndk-lib')
+endif
 
 # Fallback to a subproject if libyuv isn't found, as it's typically not
 # provided by distributions.

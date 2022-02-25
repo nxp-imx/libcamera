@@ -251,6 +251,10 @@ if not meson.is_cross_build()
     endif
 endif
 
+if get_option('android_root')!='auto'
+    config_h.set('ANDROID', 1)
+endif
+
 # Create a symlink from the build root to the source root. This is used when
 # running libcamera from the build directory to locate resources in the source
 # directory (such as IPA configuration files).

@@ -58,7 +58,12 @@ const struct JPEGPixelFormatInfo &findPixelInfo(const PixelFormat &format)
 		JCS_UNKNOWN, PixelFormatInfo(), false
 	};
 
+/* YUYV is not supported by soft jpeg encoder, will fix later */
+#ifdef ANDROID
+	const auto iter = pixelInfo.find(formats::NV16);
+#else
 	const auto iter = pixelInfo.find(format);
+#endif
 	if (iter == pixelInfo.end()) {
 		LOG(JPEG, Error) << "Unsupported pixel format for JPEG encoder: "
 				 << format;
