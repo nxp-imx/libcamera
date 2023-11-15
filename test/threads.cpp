@@ -54,7 +54,9 @@ protected:
 		 * Cancel the thread and call a guaranteed cancellation point
 		 * (nanosleep).
 		 */
+#ifndef ANDROID
 		pthread_cancel(pthread_self());
+#endif
 
 		struct timespec req{ 0, 100*000*000 };
 		nanosleep(&req, nullptr);
