@@ -183,7 +183,7 @@ libcamera = shared_library('libcamera',
                            soversion : libcamera_soversion,
                            name_prefix : '',
                            install : true,
-                           include_directories : includes,
+                           include_directories : [includes, androir_root / 'external/libyaml/include'],
                            build_rpath : '/',
                            dependencies : libcamera_deps)
 
@@ -191,7 +191,7 @@ libcamera_public = declare_dependency(sources : [
                                           libcamera_ipa_headers,
                                           libcamera_public_headers,
                                       ],
-                                      include_directories : libcamera_includes,
+                                      include_directories : [libcamera_includes, androir_root / 'external/libyaml/include'],
                                       dependencies : libcamera_base,
                                       link_with : libcamera)
 
