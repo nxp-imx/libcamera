@@ -55,7 +55,7 @@ class Capture : public CameraTest, public Test
 {
 public:
 	Capture()
-		: CameraTest(OV560_8MN_NAME)
+		: CameraTest(OV560_8QM_NAME)
 	{
 	}
 

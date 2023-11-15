@@ -603,6 +603,8 @@ std::string PipelineHandler::configurationFile(const std::string &subdir,
  */
 void PipelineHandler::registerCamera(std::shared_ptr<Camera> camera)
 {
+	LOG(Pipeline, Info) << "==== PipelineHandler::registerCamera " + camera->id();
+
 	cameras_.push_back(camera);
 
 	if (mediaDevices_.empty())

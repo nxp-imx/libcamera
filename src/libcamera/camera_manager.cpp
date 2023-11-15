@@ -167,6 +167,8 @@ void CameraManager::Private::addCamera(std::shared_ptr<Camera> camera)
 {
 	ASSERT(Thread::current() == this);
 
+	LOG(Camera, Info) << "==== addCamera " + camera->id();
+
 	MutexLocker locker(mutex_);
 
 	for (const std::shared_ptr<Camera> &c : cameras_) {
@@ -281,7 +283,7 @@ CameraManager::~CameraManager()
  */
 int CameraManager::start()
 {
-	LOG(Camera, Info) << "libcamera " << version_;
+	LOG(Camera, Info) << "==== libcamera " << version_;
 
 	int ret = _d()->start();
 	if (ret)
@@ -341,11 +343,15 @@ std::vector<std::shared_ptr<Camera>> CameraManager::cameras() const
  */
 std::shared_ptr<Camera> CameraManager::get(const std::string &id)
 {
+
 	Private *const d = _d();
 
 	MutexLocker locker(d->mutex_);
 
+	LOG(Camera, Info) << "==== enter CameraManager::get " + id;
+
 	for (std::shared_ptr<Camera> camera : d->cameras_) {
+		LOG(Camera, Info) << "==== check camera id " << camera->id();
 		if (camera->id() == id)
 			return camera;
 	}
