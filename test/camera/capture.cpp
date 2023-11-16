@@ -48,6 +48,7 @@ static void DumpData(void *buf, uint32_t bufSize)
 
 #define OV560_8MN_NAME "/base/soc@0/bus@30800000/i2c@30a40000/ov5640_mipi@3c"
 #define OV560_8QM_NAME "/base/bus@58000000/i2c@58226000/ov5640_mipi@3c"
+#define OV560_95_NAME "/base/soc@0/bus@42000000/i2c@42530000/ov5640_mipi@3c"
 
 namespace {
 
@@ -55,7 +56,7 @@ class Capture : public CameraTest, public Test
 {
 public:
 	Capture()
-		: CameraTest(OV560_8QM_NAME)
+		: CameraTest(OV560_95_NAME)
 	{
 	}
 
