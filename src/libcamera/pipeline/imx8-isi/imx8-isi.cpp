@@ -976,44 +976,63 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 	dm.add("mxc_isi.0");
 	dm.add("mxc_isi.0.capture");
 
+  LOG(ISI, Info) << "==== enter " << __func__;
+
 	isiDev_ = acquireMediaDevice(enumerator, dm);
-	if (!isiDev_)
+	if (!isiDev_) {
+    LOG(ISI, Error) << "==== acquireMediaDevice failed";
 		return false;
+  }
 
 	/*
 	 * Acquire the subdevs and video nodes for the crossbar switch and the
 	 * processing pipelines.
 	 */
 	crossbar_ = V4L2Subdevice::fromEntityName(isiDev_, "crossbar");
-	if (!crossbar_)
+	if (!crossbar_) {
+    LOG(ISI, Error) << "==== crossbar_ NULL";
 		return false;
+  }
 
 	int ret = crossbar_->open();
-	if (ret)
+	if (ret) {
+    LOG(ISI, Error) << "==== crossbar_ open fail";
 		return false;
+  }
 
 	for (unsigned int i = 0; ; ++i) {
 		std::string entityName = "mxc_isi." + std::to_string(i);
+    LOG(ISI, Info) << "==== check " << entityName;
+ 
 		std::unique_ptr<V4L2Subdevice> isi =
 			V4L2Subdevice::fromEntityName(isiDev_, entityName);
-		if (!isi)
+		if (!isi) {
+      LOG(ISI, Error) << "==== isi NULL";
 			break;
+    }
 
 		ret = isi->open();
-		if (ret)
+		if (ret) {
+      LOG(ISI, Error) << "==== isi open fail";
 			return false;
+    }
 
 		entityName += ".capture";
+    LOG(ISI, Info) << "==== check " << entityName;
 		std::unique_ptr<V4L2VideoDevice> capture =
 			V4L2VideoDevice::fromEntityName(isiDev_, entityName);
-		if (!capture)
+		if (!capture) {
+      LOG(ISI, Error) << "==== capture NULL";
 			return false;
+    }
 
 		capture->bufferReady.connect(this, &PipelineHandlerISI::bufferReady);
 
 		ret = capture->open();
-		if (ret)
+		if (ret) {
+      LOG(ISI, Error) << "==== capture open fail";
 			return ret;
+    }
 
 		pipes_.push_back({ std::move(isi), std::move(capture) });
 	}
@@ -1032,6 +1051,8 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 	for (MediaPad *pad : crossbar_->entity()->pads()) {
 		unsigned int sink = numSinks;
 
+    LOG(ISI, Info) << "==== check crossbar pad, flags " + std::to_string(pad->flags()) + " links num " + std::to_string(pad->links().size()); 
+
 		if (!(pad->flags() & MEDIA_PAD_FL_SINK) || pad->links().empty())
 			continue;
 
@@ -1049,8 +1070,10 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 		}
 
 		pad = csi->pads()[0];
-		if (!(pad->flags() & MEDIA_PAD_FL_SINK) || pad->links().empty())
+    LOG(ISI, Info) << "csi pad flag " + std::to_string(pad->flags()) + ", links num " + std::to_string(pad->links().size()); 
+		if (!(pad->flags() & MEDIA_PAD_FL_SINK) || pad->links().empty()) {
 			continue;
+    }
 
 		MediaEntity *sensor = pad->links()[0]->source()->entity();
 		if (sensor->function() != MEDIA_ENT_F_CAM_SENSOR) {
@@ -1085,6 +1108,8 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 
 		registerCamera(std::move(camera));
 		numCameras++;
+
+    LOG(ISI, Info) << "==== set numCameras to " + std::to_string(numCameras); 
 	}
 
 	return numCameras > 0;

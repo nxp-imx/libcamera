@@ -119,6 +119,7 @@ void CameraManager::Private::createPipelineHandlers()
 		 */
 		while (1) {
 			std::shared_ptr<PipelineHandler> pipe = factory->create(o);
+			LOG(Camera, Info) << "==== create pipe";
 			if (!pipe->match(enumerator_.get()))
 				break;
 
