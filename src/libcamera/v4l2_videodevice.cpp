@@ -1567,6 +1567,8 @@ int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer)
 	struct v4l2_buffer buf = {};
 	int ret;
 
+	LOG(V4L2, Info) << "==== enter V4L2VideoDevice::queueBuffer";
+
 	if (state_ == State::Stopping) {
 		LOG(V4L2, Error) << "Device is in a stopping state.";
 		return -ESHUTDOWN;
