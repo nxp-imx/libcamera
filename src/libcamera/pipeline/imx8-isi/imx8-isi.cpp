@@ -1034,8 +1034,11 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 			return ret;
     }
 
+		LOG(ISI, Info) << "==== add pipes " << entityName;
 		pipes_.push_back({ std::move(isi), std::move(capture) });
 	}
+
+	LOG(ISI, Info) << "==== pipes size " << std::to_string(pipes_.size());
 
 	if (pipes_.empty()) {
 		LOG(ISI, Error) << "Unable to enumerate pipes";
@@ -1120,6 +1123,8 @@ PipelineHandlerISI::Pipe *PipelineHandlerISI::pipeFromStream(Camera *camera,
 {
 	ISICameraData *data = cameraData(camera);
 	unsigned int pipeIndex = data->pipeIndex(stream);
+
+	LOG(ISI, Info) << "==== pipeFromStream, pipe index " << std::to_string(pipeIndex);
 
 	ASSERT(pipeIndex < pipes_.size());
 
