@@ -1051,6 +1051,8 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 	 */
 	unsigned int numCameras = 0;
 	unsigned int numSinks = 0;
+
+  LOG(ISI, Info) << "==== crossbar_ pads " + std::to_string(crossbar_->entity()->pads().size());
 	for (MediaPad *pad : crossbar_->entity()->pads()) {
 		unsigned int sink = numSinks;
 
@@ -1112,7 +1114,7 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 		registerCamera(std::move(camera));
 		numCameras++;
 
-    LOG(ISI, Info) << "==== set numCameras to " + std::to_string(numCameras); 
+    LOG(ISI, Info) << "==== set numCameras to " + std::to_string(numCameras) + ", id " + id + " streams " + std::to_string(streams.size()); 
 	}
 
 	return numCameras > 0;
