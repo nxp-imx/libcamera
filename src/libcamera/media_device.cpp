@@ -200,6 +200,8 @@ int MediaDevice::populate()
 	__u64 version = -1;
 	int ret;
 
+  LOG(MediaDevice, Info) << "==== enter MediaDevice::populate()";
+
 	clear();
 
 	ret = open();
@@ -220,6 +222,8 @@ int MediaDevice::populate()
 	version_ = info.media_version;
 	hwRevision_ = info.hw_revision;
 
+  LOG(MediaDevice, Info) << "==== deviceNode " + deviceNode_, + ", driver " + driver_ + ", model " + model_ + \
+    ", version " + std::to_string(version_) + ", hwRevision " + std::to_string(hwRevision_);    
 	/*
 	 * Keep calling G_TOPOLOGY until the version number stays stable.
 	 */
@@ -238,6 +242,10 @@ int MediaDevice::populate()
 				<< strerror(-ret);
 			goto done;
 		}
+
+    LOG(MediaDevice, Info) << "==== topology version " + std::to_string(topology.topology_version) + \
+      " ents " + std::to_string(topology.num_entities) + ", interfaces " + std::to_string(topology.num_interfaces) + \
+      ", links " + std::to_string(topology.num_links) + ", pads " + std::to_string(topology.num_pads); 
 
 		if (version == topology.topology_version)
 			break;
@@ -619,6 +627,7 @@ struct media_v2_interface *MediaDevice::findInterface(const struct media_v2_topo
  */
 bool MediaDevice::populateEntities(const struct media_v2_topology &topology)
 {
+  LOG(MediaDevice, Info) << "==== enter MediaDevice::populateEntities";
 	struct media_v2_entity *mediaEntities = reinterpret_cast<struct media_v2_entity *>
 						(topology.ptr_entities);
 
@@ -638,6 +647,9 @@ bool MediaDevice::populateEntities(const struct media_v2_topology &topology)
 		 */
 		struct media_v2_interface *iface =
 			findInterface(topology, ent->id);
+
+    LOG(MediaDevice, Info) << "==== ent i " << std::to_string(i) << ", id " + std::to_string(ent->id) + ", name " + ent->name + \
+    ", major " + std::to_string(iface->devnode.major) + ", minor " + std::to_string(iface->devnode.minor);
 		MediaEntity *entity = new MediaEntity(this, ent, iface);
 
 		if (!addObject(entity)) {

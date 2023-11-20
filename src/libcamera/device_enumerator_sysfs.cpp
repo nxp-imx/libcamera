@@ -95,6 +95,7 @@ int DeviceEnumeratorSysfs::enumerate()
 
 int DeviceEnumeratorSysfs::populateMediaDevice(MediaDevice *media)
 {
+	LOG(DeviceEnumerator, Info) << "==== enter populateMediaDevice";
 	/* Associate entities to device node paths. */
 	for (MediaEntity *entity : media->entities()) {
 		if (entity->deviceMajor() == 0 && entity->deviceMinor() == 0)
@@ -102,6 +103,9 @@ int DeviceEnumeratorSysfs::populateMediaDevice(MediaDevice *media)
 
 		std::string deviceNode = lookupDeviceNode(entity->deviceMajor(),
 							  entity->deviceMinor());
+		LOG(DeviceEnumerator, Info) << "==== entity: deviceNode " + deviceNode << ", name " << entity->name() << \
+			", major " << std::to_string(entity->deviceMajor()) << ", minor " << std::to_string(entity->deviceMinor());
+		
 		if (deviceNode.empty())
 			return -EINVAL;
 
