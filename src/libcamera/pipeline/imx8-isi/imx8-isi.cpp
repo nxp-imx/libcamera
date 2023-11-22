@@ -825,8 +825,12 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 	 */
 	V4L2Subdevice::Routing routing = {};
 	unsigned int xbarFirstSource = crossbar_->entity()->pads().size() / 2 + 1;
+	LOG(ISI, Info) << "==== PipelineHandlerISI::configure, crossbar pads num " + std::to_string(crossbar_->entity()->pads().size()) << ", xbarFirstSource " + std::to_string(xbarFirstSource);
 
+#if 0
 	for (const auto &[idx, config] : utils::enumerate(*c)) {
+		LOG(ISI, Info) << "==== idx " << std::to_string(idx);
+/*
 		struct v4l2_subdev_route route = {
 			.sink_pad = data->xbarSink_,
 			.sink_stream = 0,
@@ -835,11 +839,26 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 			.flags = V4L2_SUBDEV_ROUTE_FL_ACTIVE,
 			.reserved = {}
 		};
+*/
+//		routing.push_back(route);
+	}
+#endif
 
-		routing.push_back(route);
+	int ret = crossbar_->getRouting(&routing, V4L2Subdevice::ActiveFormat);
+	if (ret) {
+		LOG(ISI, Error) << "==== crossbar_->getRouting failed, ret " << std::to_string(ret);
+		return ret;
 	}
 
-	int ret = crossbar_->setRouting(&routing, V4L2Subdevice::ActiveFormat);
+	LOG(ISI, Info) << "crossbar routing: " << routing.toString();
+
+
+	for (const auto &[idx, config] : utils::enumerate(*c)) {
+		LOG(ISI, Info) << "==== idx " << std::to_string(idx);
+		routing[idx].flags = V4L2_SUBDEV_ROUTE_FL_ACTIVE;
+	}	
+
+	ret = crossbar_->setRouting(&routing, V4L2Subdevice::ActiveFormat);
 	if (ret)
 		return ret;
 
