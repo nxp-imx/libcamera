@@ -35,6 +35,7 @@ static void DumpData(void *buf, uint32_t bufSize)
 		return;
 
 	fd = open(fileName, O_CREAT|O_APPEND|O_WRONLY, S_IRWXU|S_IRWXG);
+	//fd = open(fileName, O_CREAT|O_WRONLY, S_IRWXU|S_IRWXG);
 	if (fd < 0) {
 		cout << "DumpData, can't open file " << fileName << endl;
 		 return;
@@ -186,9 +187,11 @@ protected:
 		EventDispatcher *dispatcher = Thread::current()->eventDispatcher();
 
 		Timer timer;
-		timer.start(1000ms);
+		timer.start(3000ms);
+    cout << "==== start timer" << endl;
 		while (timer.isRunning())
 			dispatcher->processEvents();
+    cout << "==== stop timer" << endl;
 
 		unsigned int nbuffers = allocator_->buffers(stream).size();
 
