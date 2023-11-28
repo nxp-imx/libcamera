@@ -1076,15 +1076,18 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 	 */
 	unsigned int numCameras = 0;
 	unsigned int numSinks = 0;
+	unsigned int xbarSink = 0;
 
   LOG(ISI, Info) << "==== crossbar_ pads " + std::to_string(crossbar_->entity()->pads().size());
 	for (MediaPad *pad : crossbar_->entity()->pads()) {
 		//unsigned int sink = numSinks;
 
-    LOG(ISI, Info) << "==== check crossbar pad, flags " + std::to_string(pad->flags()) + " links num " + std::to_string(pad->links().size()); 
+    LOG(ISI, Info) << "==== check crossbar pad " + std::to_string(pad->index()) + ", flags " + std::to_string(pad->flags()) + " links num " + std::to_string(pad->links().size()); 
 
 		if (!(pad->flags() & MEDIA_PAD_FL_SINK) || pad->links().empty())
 			continue;
+
+		xbarSink = pad->index();
 
 		/*
 		 * Count each crossbar sink pad to correctly configure
@@ -1118,7 +1121,7 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 
 		data->sensor_ = std::make_unique<CameraSensor>(sensor);
 		data->csis_ = std::make_unique<V4L2Subdevice>(csi);
-		data->xbarSink_ = EVK95_CAMERA_ISI_IDEX; //sink;
+		data->xbarSink_ = xbarSink; //EVK95_CAMERA_ISI_IDEX; //sink;
 
 		ret = data->init();
 		if (ret) {
