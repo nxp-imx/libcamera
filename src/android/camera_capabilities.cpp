@@ -647,6 +647,7 @@ int CameraCapabilities::initializeStreamConfigurations()
 		}
 
 		for (const Size &res : resolutions) {
+			LOG(HAL, Info) << "==== res w " + std::to_string(res.width) + ", h " + std::to_string(res.height) + ", format " + std::to_string(androidFormat);
 			/*
 			 * Configure the Camera with the collected format and
 			 * resolution to get an updated list of controls.
@@ -670,6 +671,7 @@ int CameraCapabilities::initializeStreamConfigurations()
 
 			int64_t minFrameDuration = frameDurations->second.min().get<int64_t>() * 1000;
 			int64_t maxFrameDuration = frameDurations->second.max().get<int64_t>() * 1000;
+			LOG(HAL, Info) << "==== controls::FrameDurationLimits, min " + std::to_string(minFrameDuration) + ", max " + std::to_string(maxFrameDuration);
 
 			/*
 			 * Cap min frame duration to 30 FPS with 1% tolerance.
@@ -712,6 +714,8 @@ int CameraCapabilities::initializeStreamConfigurations()
 			minFrameDuration =
 				1e9 / static_cast<unsigned int>(floor(1e9 / minFrameDuration + 0.05f));
 
+			LOG(HAL, Info) << "==== streamConfigurations_.push_back, minFrameDuration " + std::to_string(minFrameDuration) + ", maxFrameDuration " + std::to_string(maxFrameDuration);
+
 			streamConfigurations_.push_back({
 				res, androidFormat, minFrameDuration, maxFrameDuration,
 			});
@@ -743,6 +747,7 @@ int CameraCapabilities::initializeStreamConfigurations()
 
 			maxFrameDuration_ = std::max(maxFrameDuration_,
 						     maxFrameDuration);
+			LOG(HAL, Info) << "====, maxFrameDuration_ " + std::to_string(maxFrameDuration_) + ", maxFrameDuration " + std::to_string(maxFrameDuration);
 		}
 
 		/*
@@ -1361,6 +1366,12 @@ int CameraCapabilities::initializeStaticMetadata()
 	 * smaller than 10^9 / minFps.
 	 */
 	int32_t minFps = std::ceil(1e9 / maxFrameDuration_);
+	if (minFps > maxYUVFps) {
+			LOG(HAL, Info) << "==== minFps " + std::to_string(minFps) + " > maxYUVFps " + std::to_string(maxYUVFps);
+			minFps = maxYUVFps/2;
+	}
+	
+
 	int32_t availableAeFpsTarget[] = {
 		minFps, maxYUVFps, maxYUVFps, maxYUVFps,
 	};
