@@ -53,12 +53,15 @@ public:
 
 	PipelineHandlerISI *pipe();
 
-	int init();
+	int init(V4L2VideoDevice *video);
 
 	unsigned int pipeIndex(const Stream *stream)
 	{
 		return stream - &*streams_.begin() + EVK95_CAMERA_ISI_IDEX;
 	}
+
+  void addControl(uint32_t cid, const ControlInfo &v4l2Info,
+             ControlInfoMap::Map *ctrls);
 
 	unsigned int getRawMediaBusFormat(PixelFormat *pixelFormat) const;
 	unsigned int getYuvMediaBusFormat(const PixelFormat &pixelFormat) const;
@@ -72,6 +75,7 @@ public:
 	std::vector<Stream *> enabledStreams_;
 
 	unsigned int xbarSink_;
+	V4L2VideoDevice *video_;
 };
 
 class ISICameraConfiguration : public CameraConfiguration
@@ -156,7 +160,10 @@ PipelineHandlerISI *ISICameraData::pipe()
 }
 
 /* Open and initialize pipe components. */
-int ISICameraData::init()
+/* In the pipeline tactic, One camera is not map to a given "/dev/videox", */
+/* One stream is maps to a given "/dev/videox". But the ANDROID camera HAL needs */
+/* to get some controls which are got from V4L2VideoDevice, so pass the para. */  
+int ISICameraData::init(V4L2VideoDevice *video)
 {
 	int ret = sensor_->init();
 	if (ret)
@@ -168,9 +175,151 @@ int ISICameraData::init()
 
 	properties_ = sensor_->properties();
 
+	video_ = video;
+
+	/* Initialise the supported controls. */
+	ControlInfoMap::Map ctrls;
+
+	for (const auto &ctrl : video_->controls()) {
+		uint32_t cid = ctrl.first->id();
+		const ControlInfo &info = ctrl.second;
+
+		addControl(cid, info, &ctrls);
+	}
+
+	ControlInfo durationInfo = ControlInfo{
+			{ (int64_t)16 },
+			{ (int64_t)33 },
+			{ (int64_t)33 }
+	};
+
+	ctrls.emplace(&controls::FrameDurationLimits, durationInfo);
+
+	controlInfo_ = ControlInfoMap(std::move(ctrls), controls::controls);
+
 	return 0;
 }
 
+void ISICameraData::addControl(uint32_t cid, const ControlInfo &v4l2Info,
+			       ControlInfoMap::Map *ctrls)
+{
+	const ControlId *id;
+	ControlInfo info;
+
+	LOG(ISI, Info) << "==== cid " + std::to_string(cid); 
+
+	/* Map the control ID. */
+	switch (cid) {
+	case V4L2_CID_BRIGHTNESS:
+		id = &controls::Brightness;
+		break;
+	case V4L2_CID_CONTRAST:
+		id = &controls::Contrast;
+		break;
+	case V4L2_CID_SATURATION:
+		id = &controls::Saturation;
+		break;
+	case V4L2_CID_EXPOSURE_AUTO:
+		id = &controls::AeEnable;
+		break;
+	case V4L2_CID_EXPOSURE_ABSOLUTE:
+		id = &controls::ExposureTime;
+		break;
+	case V4L2_CID_GAIN:
+		id = &controls::AnalogueGain;
+		break;
+	default:
+		return;
+	}
+
+	/* Map the control info. */
+	int32_t min = v4l2Info.min().get<int32_t>();
+	int32_t max = v4l2Info.max().get<int32_t>();
+	int32_t def = v4l2Info.def().get<int32_t>();
+
+	LOG(ISI, Info) << "==== min " + std::to_string(min) + ", max " + std::to_string(max) + ", def " + std::to_string(def);
+	switch (cid) {
+	case V4L2_CID_BRIGHTNESS: {
+		/*
+		 * The Brightness control is a float, with 0.0 mapped to the
+		 * default value. The control range is [-1.0, 1.0], but the V4L2
+		 * default may not be in the middle of the V4L2 range.
+		 * Accommodate this by restricting the range of the libcamera
+		 * control, but always within the maximum limits.
+		 */
+		float scale = std::max(max - def, def - min);
+
+		info = ControlInfo{
+			{ static_cast<float>(min - def) / scale },
+			{ static_cast<float>(max - def) / scale },
+			{ 0.0f }
+		};
+		break;
+	}
+
+	case V4L2_CID_SATURATION:
+		/*
+		 * The Saturation control is a float, with 0.0 mapped to the
+		 * minimum value (corresponding to a fully desaturated image)
+		 * and 1.0 mapped to the default value. Calculate the maximum
+		 * value accordingly.
+		 */
+		info = ControlInfo{
+			{ 0.0f },
+			{ static_cast<float>(max - min) / (def - min) },
+			{ 1.0f }
+		};
+		break;
+
+	case V4L2_CID_EXPOSURE_AUTO:
+		info = ControlInfo{ false, true, true };
+		break;
+
+	case V4L2_CID_EXPOSURE_ABSOLUTE:
+		/*
+		 * ExposureTime is in units of 1 Âµs, and UVC expects
+		 * V4L2_CID_EXPOSURE_ABSOLUTE in units of 100 Âµs.
+		 */
+		info = ControlInfo{
+			{ min * 100 },
+			{ max * 100 },
+			{ def * 100 }
+		};
+		break;
+
+	case V4L2_CID_CONTRAST:
+	case V4L2_CID_GAIN: {
+		/*
+		 * The Contrast and AnalogueGain controls are floats, with 1.0
+		 * mapped to the default value. UVC doesn't specify units, and
+		 * cameras have been seen to expose very different ranges for
+		 * the controls. Arbitrarily assume that the minimum and
+		 * maximum values are respectively no lower than 0.5 and no
+		 * higher than 4.0.
+		 */
+		float m = (4.0f - 1.0f) / (max - def);
+		float p = 1.0f - m * def;
+
+		if (m * min + p < 0.5f) {
+			m = (1.0f - 0.5f) / (def - min);
+			p = 1.0f - m * def;
+		}
+
+		info = ControlInfo{
+			{ m * min + p },
+			{ m * max + p },
+			{ 1.0f }
+		};
+		break;
+	}
+
+	default:
+		info = v4l2Info;
+		break;
+	}
+
+	ctrls->emplace(id, info);
+}
 /*
  * Get a RAW Bayer media bus format compatible with the requested pixelFormat.
  *
@@ -1123,7 +1272,8 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 		data->csis_ = std::make_unique<V4L2Subdevice>(csi);
 		data->xbarSink_ = xbarSink; //EVK95_CAMERA_ISI_IDEX; //sink;
 
-		ret = data->init();
+		V4L2VideoDevice *video = pipes_[EVK95_CAMERA_ISI_IDEX + numCameras].capture.get();
+		ret = data->init(video);
 		if (ret) {
 			LOG(ISI, Error) << "Failed to initialize camera data";
 			return false;
