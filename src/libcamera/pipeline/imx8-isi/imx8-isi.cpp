@@ -57,7 +57,7 @@ public:
 
 	unsigned int pipeIndex(const Stream *stream)
 	{
-		return stream - &*streams_.begin() + xbarSink_;
+		return stream - &*streams_.begin() + EVK95_CAMERA_ISI_IDEX;
 	}
 
 	unsigned int getRawMediaBusFormat(PixelFormat *pixelFormat) const;
