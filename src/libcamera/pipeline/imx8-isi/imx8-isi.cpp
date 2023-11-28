@@ -31,6 +31,7 @@
 
 #include "linux/media-bus-format.h"
 
+#define EVK95_CAMERA_ISI_IDEX 2
 namespace libcamera {
 
 LOG_DEFINE_CATEGORY(ISI)
@@ -1117,7 +1118,7 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 
 		data->sensor_ = std::make_unique<CameraSensor>(sensor);
 		data->csis_ = std::make_unique<V4L2Subdevice>(csi);
-		data->xbarSink_ = 2; //sink;
+		data->xbarSink_ = EVK95_CAMERA_ISI_IDEX; //sink;
 
 		ret = data->init();
 		if (ret) {
