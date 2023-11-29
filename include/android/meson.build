@@ -19,5 +19,6 @@ android_includes = ([
     include_directories(androir_root / 'external/libyaml/include'),
     include_directories(androir_root / 'frameworks/native/libs/ui/include'),
     include_directories(androir_root / 'system/core/libutils/include'),
+    include_directories(androir_root / 'system/logging/liblog/include'),
 ])
 endif

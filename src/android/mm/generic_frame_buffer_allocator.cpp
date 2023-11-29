@@ -18,7 +18,40 @@
 #include <hardware/camera3.h>
 #include <hardware/gralloc.h>
 #include <hardware/hardware.h>
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wc++98-compat-extra-semi"
+// ??? fix me
+typedef enum log_id {
+  LOG_ID_MIN = 0,
+
+  /** The main log buffer. This is the only log buffer available to apps. */
+  LOG_ID_MAIN = 0,
+  /** The radio log buffer. */
+  LOG_ID_RADIO = 1,
+  /** The event log buffer. */
+  LOG_ID_EVENTS = 2,
+  /** The system log buffer. */
+  LOG_ID_SYSTEM = 3,
+  /** The crash log buffer. */
+  LOG_ID_CRASH = 4,
+  /** The statistics log buffer. */
+  LOG_ID_STATS = 5,
+  /** The security log buffer. */
+  LOG_ID_SECURITY = 6,
+  /** The kernel log buffer. */
+  LOG_ID_KERNEL = 7,
+
+  LOG_ID_MAX,
+
+  /** Let the logging function choose the best log target. */
+  LOG_ID_DEFAULT = 0x7FFFFFFF
+} log_id_t;
+
+//#include <android/log.h>
+//#include <log/log.h>
 #include <ui/GraphicBufferAllocator.h>
+#pragma GCC diagnostic pop
 
 #include "../camera_device.h"
 #include "../frame_buffer_allocator.h"
@@ -45,6 +78,8 @@ public:
 	{
 		android::GraphicBufferAllocator::get().free(handle_);
 	}
+private:
+	const buffer_handle_t handle_;
 };
 } /* namespace */
 
@@ -54,7 +89,7 @@ class PlatformFrameBufferAllocator::Private : public Extensible::Private
 
 public:
 	Private(CameraDevice *const cameraDevice)
-		: cameraDevice_(cameraDevice),
+		: cameraDevice_(cameraDevice)
 	{
 	}
 
@@ -76,11 +111,11 @@ PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
 						const libcamera::Size &size,
 						uint32_t usage)
 {
-	int stride = 0;
+	uint32_t stride = 0;
 	buffer_handle_t handle = nullptr;
 
 	int ret = android::GraphicBufferAllocator::get().allocate(
-        size.width, size.height, halPixelFormat, 1u /*layerCount*/, usage, &handle,
+        size.width, size.height, halPixelFormat, 1u, (unsigned long)usage, &handle,
         &stride, "PlatformFrameBufferAllocator");
 	if (ret) {
 		LOG(HAL, Error) << "failed buffer allocation: " << ret;
@@ -98,7 +133,7 @@ PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
 	std::vector<FrameBuffer::Plane> planes(info.numPlanes());
 
 	SharedFD fd{ handle->data[0] };
-	LOG(HAL, Info) << "==== "planes " << std::to_string(info.numPlanes()) << ", halPixelFormat " << std::to_string(halPixelFormat) <<
+	LOG(HAL, Info) << "==== planes " << std::to_string(info.numPlanes()) << ", halPixelFormat " << std::to_string(halPixelFormat) <<
 		", stride " << std::to_string(stride) << ", fd " << std::to_string(handle->data[0]);
 
 	size_t offset = 0;

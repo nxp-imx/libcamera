@@ -1,9 +1,9 @@
 [binaries]
-c = ['/opt/android-ndk-r25-beta1/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android33-clang', '-march=armv8-a+crc+crypto', '-fstack-protector-strong', '-Wformat', '-Wformat-security', '-Werror=format-security', '--sysroot=/opt/android-ndk-r25-beta1/toolchains/llvm/prebuilt/linux-x86_64/sysroot']
-cpp = ['/opt/android-ndk-r25-beta1/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android33-clang++', '-march=armv8-a+crc+crypto', '-fstack-protector-strong', '-Wformat', '-Wformat-security', '-Werror=format-security', '--sysroot=/opt/android-ndk-r25-beta1/toolchains/llvm/prebuilt/linux-x86_64/sysroot']
-ar = ['/opt/android-ndk-r25-beta1/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar']
-nm = ['/opt/android-ndk-r25-beta1/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm']
-strip = ['/opt/android-ndk-r25-beta1/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip']
+c = ['/opt/android-ndk-r25c/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android33-clang', '-march=armv8-a+crc+crypto', '-fstack-protector-strong', '-Wformat', '-Wformat-security', '-Werror=format-security', '--sysroot=/opt/android-ndk-r25c/toolchains/llvm/prebuilt/linux-x86_64/sysroot']
+cpp = ['/opt/android-ndk-r25c/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android33-clang++', '-march=armv8-a+crc+crypto', '-fstack-protector-strong', '-Wformat', '-Wformat-security', '-Werror=format-security', '--sysroot=/opt/android-ndk-r25c/toolchains/llvm/prebuilt/linux-x86_64/sysroot']
+ar = ['/opt/android-ndk-r25c/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar']
+nm = ['/opt/android-ndk-r25c/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm']
+strip = ['/opt/android-ndk-r25c/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip']
 pkgconfig = 'pkg-config'
 
 [properties]
