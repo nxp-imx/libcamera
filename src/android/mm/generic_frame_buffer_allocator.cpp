@@ -18,6 +18,7 @@
 #include <hardware/camera3.h>
 #include <hardware/gralloc.h>
 #include <hardware/hardware.h>
+#include <ui/GraphicBufferAllocator.h>
 
 #include "../camera_device.h"
 #include "../frame_buffer_allocator.h"
@@ -33,36 +34,17 @@ class GenericFrameBufferData : public FrameBuffer::Private
 	LIBCAMERA_DECLARE_PUBLIC(FrameBuffer)
 
 public:
-	GenericFrameBufferData(struct alloc_device_t *allocDevice,
-			       buffer_handle_t handle,
+	GenericFrameBufferData(buffer_handle_t handle,
 			       const std::vector<FrameBuffer::Plane> &planes)
-		: FrameBuffer::Private(planes), allocDevice_(allocDevice),
+		: FrameBuffer::Private(planes),
 		  handle_(handle)
 	{
-		ASSERT(allocDevice_);
-		ASSERT(handle_);
 	}
 
 	~GenericFrameBufferData() override
 	{
-		/*
-		 * allocDevice_ is used to destroy handle_. allocDevice_ is
-		 * owned by PlatformFrameBufferAllocator::Private.
-		 * GenericFrameBufferData must be destroyed before it is
-		 * destroyed.
-		 *
-		 * \todo Consider managing alloc_device_t with std::shared_ptr
-		 * if this is difficult to maintain.
-		 *
-		 * \todo Thread safety against alloc_device_t is not documented.
-		 * Is it no problem to call alloc/free in parallel?
-		 */
-		allocDevice_->free(allocDevice_, handle_);
+		android::GraphicBufferAllocator::get().free(handle_);
 	}
-
-private:
-	struct alloc_device_t *allocDevice_;
-	const buffer_handle_t handle_;
 };
 } /* namespace */
 
@@ -73,11 +55,7 @@ class PlatformFrameBufferAllocator::Private : public Extensible::Private
 public:
 	Private(CameraDevice *const cameraDevice)
 		: cameraDevice_(cameraDevice),
-		  hardwareModule_(nullptr),
-		  allocDevice_(nullptr)
 	{
-		hw_get_module(GRALLOC_HARDWARE_MODULE_ID, &hardwareModule_);
-		ASSERT(hardwareModule_);
 	}
 
 	~Private() override;
@@ -87,15 +65,10 @@ public:
 
 private:
 	const CameraDevice *const cameraDevice_;
-	const struct hw_module_t *hardwareModule_;
-	struct alloc_device_t *allocDevice_;
 };
 
 PlatformFrameBufferAllocator::Private::~Private()
 {
-	if (allocDevice_)
-		gralloc_close(allocDevice_);
-	dlclose(hardwareModule_->dso);
 }
 
 std::unique_ptr<HALFrameBuffer>
@@ -103,18 +76,12 @@ PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
 						const libcamera::Size &size,
 						uint32_t usage)
 {
-	if (!allocDevice_) {
-		int ret = gralloc_open(hardwareModule_, &allocDevice_);
-		if (ret) {
-			LOG(HAL, Fatal) << "gralloc_open() failed: " << ret;
-			return nullptr;
-		}
-	}
-
 	int stride = 0;
 	buffer_handle_t handle = nullptr;
-	int ret = allocDevice_->alloc(allocDevice_, size.width, size.height,
-				      halPixelFormat, usage, &handle, &stride);
+
+	int ret = android::GraphicBufferAllocator::get().allocate(
+        size.width, size.height, halPixelFormat, 1u /*layerCount*/, usage, &handle,
+        &stride, "PlatformFrameBufferAllocator");
 	if (ret) {
 		LOG(HAL, Error) << "failed buffer allocation: " << ret;
 		return nullptr;
@@ -131,6 +98,9 @@ PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
 	std::vector<FrameBuffer::Plane> planes(info.numPlanes());
 
 	SharedFD fd{ handle->data[0] };
+	LOG(HAL, Info) << "==== "planes " << std::to_string(info.numPlanes()) << ", halPixelFormat " << std::to_string(halPixelFormat) <<
+		", stride " << std::to_string(stride) << ", fd " << std::to_string(handle->data[0]);
+
 	size_t offset = 0;
 	for (auto [i, plane] : utils::enumerate(planes)) {
 		const size_t planeSize = info.planeSize(size.height, i, stride);
@@ -139,11 +109,13 @@ PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
 		plane.offset = offset;
 		plane.length = planeSize;
 		offset += planeSize;
+
+		LOG(HAL, Info) << "==== planeSize " << std::to_string(planeSize);
 	}
 
 	return std::make_unique<HALFrameBuffer>(
 		std::make_unique<GenericFrameBufferData>(
-			allocDevice_, handle, planes),
+			handle, planes),
 		handle);
 }
 

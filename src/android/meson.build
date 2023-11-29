@@ -10,6 +10,7 @@ else
     android_deps = [
         cc.find_library('libexif', dirs : meson.current_source_dir() / 'ndk-lib'),
         cc.find_library('libjpeg', dirs : meson.current_source_dir() / 'ndk-lib'),
+        cc.find_library('libui', dirs : meson.current_source_dir() / 'ndk-lib'),
         libcamera_private,
     ]
 endif
