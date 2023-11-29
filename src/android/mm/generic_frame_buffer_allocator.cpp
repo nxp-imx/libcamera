@@ -114,6 +114,7 @@ PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
 	uint32_t stride = 0;
 	buffer_handle_t handle = nullptr;
 
+	usage |= GRALLOC_USAGE_PRIVATE_3;
 	int ret = android::GraphicBufferAllocator::get().allocate(
         size.width, size.height, halPixelFormat, 1u, (unsigned long)usage, &handle,
         &stride, "PlatformFrameBufferAllocator");
