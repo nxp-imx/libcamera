@@ -67,7 +67,8 @@ void PostProcessorYuv::process(Camera3RequestDescriptor::StreamBuffer *streamBuf
 	}
 
 /* no NV12Scale in libyuv.so, will fix later */
-#ifndef ANDROID
+//#ifndef ANDROID
+#if 1
 	int ret = libyuv::NV12Scale(sourceMapped.planes()[0].data(),
 				    sourceStride_[0],
 				    sourceMapped.planes()[1].data(),
