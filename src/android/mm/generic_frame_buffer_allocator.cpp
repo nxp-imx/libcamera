@@ -24,43 +24,10 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wc++98-compat-extra-semi"
 #pragma GCC diagnostic ignored "-Wextra-semi"
-
 #include "graphics_ext.h"
 #include "Memory.h"
 #include "MemoryDesc.h"
 #include "Allocator.h"
-// using namespace fsl;
-
-// ??? fix me
-typedef enum log_id {
-  LOG_ID_MIN = 0,
-
-  /** The main log buffer. This is the only log buffer available to apps. */
-  LOG_ID_MAIN = 0,
-  /** The radio log buffer. */
-  LOG_ID_RADIO = 1,
-  /** The event log buffer. */
-  LOG_ID_EVENTS = 2,
-  /** The system log buffer. */
-  LOG_ID_SYSTEM = 3,
-  /** The crash log buffer. */
-  LOG_ID_CRASH = 4,
-  /** The statistics log buffer. */
-  LOG_ID_STATS = 5,
-  /** The security log buffer. */
-  LOG_ID_SECURITY = 6,
-  /** The kernel log buffer. */
-  LOG_ID_KERNEL = 7,
-
-  LOG_ID_MAX,
-
-  /** Let the logging function choose the best log target. */
-  LOG_ID_DEFAULT = 0x7FFFFFFF
-} log_id_t;
-
-//#include <android/log.h>
-//#include <log/log.h>
-#include <ui/GraphicBufferAllocator.h>
 #pragma GCC diagnostic pop
 
 #include "../camera_device.h"
