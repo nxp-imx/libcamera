@@ -114,6 +114,7 @@ PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
 	uint32_t stride = 0;
 	buffer_handle_t handle = nullptr;
 
+#if 0
 	usage |= GRALLOC_USAGE_PRIVATE_3;
 	int ret = android::GraphicBufferAllocator::get().allocate(
         size.width, size.height, halPixelFormat, 1u, (unsigned long)usage, &handle,
@@ -126,6 +127,7 @@ PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
 		LOG(HAL, Fatal) << "invalid buffer_handle_t";
 		return nullptr;
 	}
+#endif
 
 	/* This code assumes the planes are mapped consecutively. */
 	const libcamera::PixelFormat pixelFormat =
@@ -135,7 +137,7 @@ PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
 
 	SharedFD fd{ handle->data[0] };
 	LOG(HAL, Info) << "==== planes " << std::to_string(info.numPlanes()) << ", halPixelFormat " << std::to_string(halPixelFormat) <<
-		", stride " << std::to_string(stride) << ", fd " << std::to_string(handle->data[0]);
+		", stride " << std::to_string(stride) << ", fd " << std::to_string(handle->data[0]) << ", usage " + std::to_string(usage);
 
 	size_t offset = 0;
 	for (auto [i, plane] : utils::enumerate(planes)) {
