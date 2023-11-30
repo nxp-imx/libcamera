@@ -19,8 +19,18 @@
 #include <hardware/gralloc.h>
 #include <hardware/hardware.h>
 
+#include <iostream>
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wc++98-compat-extra-semi"
+#pragma GCC diagnostic ignored "-Wextra-semi"
+
+#include "graphics_ext.h"
+#include "Memory.h"
+#include "MemoryDesc.h"
+#include "Allocator.h"
+// using namespace fsl;
+
 // ??? fix me
 typedef enum log_id {
   LOG_ID_MIN = 0,
@@ -76,7 +86,13 @@ public:
 
 	~GenericFrameBufferData() override
 	{
-		android::GraphicBufferAllocator::get().free(handle_);
+		int fd = handle_->data[0];	
+		if (fd > 0)
+		    close(fd);
+		
+		fsl::Memory *fslHandle = (fsl::Memory *)handle_;
+		if (fslHandle)
+		    delete fslHandle;
 	}
 private:
 	const buffer_handle_t handle_;
@@ -106,28 +122,99 @@ PlatformFrameBufferAllocator::Private::~Private()
 {
 }
 
+static uint32_t getSizeByForamtRes(int32_t format, uint32_t width, uint32_t height) {
+    uint32_t size = 0;
+
+    switch (format) {
+        case HAL_PIXEL_FORMAT_YCbCr_420_SP:
+        case HAL_PIXEL_FORMAT_YCbCr_420_P:
+        case HAL_PIXEL_FORMAT_YCbCr_420_888:
+        case HAL_PIXEL_FORMAT_YV12:
+            size = width * height * 3 / 2;
+            break;
+
+        case HAL_PIXEL_FORMAT_YCbCr_422_I:
+        case HAL_PIXEL_FORMAT_YCbCr_422_SP:
+        case HAL_PIXEL_FORMAT_RAW16:
+            size = width * height * 2;
+            break;
+
+        default:
+            LOG(HAL, Error) << __func__ << ": format " << std::to_string(format) << " not supported";
+            break;
+    }
+
+    return size;
+}
+
+static void SetBufferHandle(uint32_t size, int fd, buffer_handle_t &handle) {
+    fsl::MemoryDesc desc;
+    fsl::Memory *fslHandle = NULL;
+
+    desc.mFlag = 0;
+    desc.mWidth = desc.mStride = size / 4;
+    desc.mHeight = 1;
+    desc.mFormat = HAL_PIXEL_FORMAT_RGBA_8888;
+    desc.mFslFormat = fsl::FORMAT_RGBA8888;
+    desc.mSize = size;
+    desc.mProduceUsage = 0;
+
+   	fslHandle = new fsl::Memory(&desc, fd, -1);
+    handle = (buffer_handle_t)fslHandle;
+
+		return;
+}
+
 std::unique_ptr<HALFrameBuffer>
 PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
 						const libcamera::Size &size,
 						uint32_t usage)
 {
-	uint32_t stride = 0;
+	uint32_t stride = size.width;
 	buffer_handle_t handle = nullptr;
 
-#if 0
-	usage |= GRALLOC_USAGE_PRIVATE_3;
-	int ret = android::GraphicBufferAllocator::get().allocate(
-        size.width, size.height, halPixelFormat, 1u, (unsigned long)usage, &handle,
-        &stride, "PlatformFrameBufferAllocator");
-	if (ret) {
-		LOG(HAL, Error) << "failed buffer allocation: " << ret;
+	uint32_t ionSize = getSizeByForamtRes(halPixelFormat, size.width, size.height);
+	if (ionSize == 0)
 		return nullptr;
+	
+	int sharedFd;
+	uint64_t phyAddr = 0;
+	uint64_t virtAddr = 0;
+
+	fsl::Allocator *allocator = fsl::Allocator::getInstance();
+	if (allocator == NULL) {
+	    LOG(HAL, Error) << __func__ << ": fsl::allocator invalid";
+	    return nullptr;
 	}
-	if (!handle) {
-		LOG(HAL, Fatal) << "invalid buffer_handle_t";
-		return nullptr;
+	
+	sharedFd = allocator->allocMemory(ionSize, MEM_ALIGN, fsl::MFLAGS_CONTIGUOUS);
+	if (sharedFd < 0) {
+	    LOG(HAL, Error) << __func__ << ": allocMemory failed.";
+	    return nullptr;
+	}
+
+#if 0	
+	int err = allocator->getVaddrs(sharedFd, ionSize, virtAddr);
+	if (err != 0) {
+	    LOG(HAL, Error) << __func__ << ": getVaddrs failed.";
+	    close(sharedFd);
+	    return nullptr;
+	}
+	
+	err = allocator->getPhys(sharedFd, ionSize, phyAddr);
+	if (err != 0) {
+	    ALOGE("%s: getPhys failed.", __func__);
+	    munmap((void *)(uintptr_t)virtAddr, ionSize);
+	    close(sharedFd);
+	    return nullptr;
 	}
 #endif
+
+	SetBufferHandle(ionSize, sharedFd, handle);
+	
+	std::cout << __func__ << ": fd:" << sharedFd << ", virt:" << std::hex << virtAddr << ", phy:" << std::hex << phyAddr << ", ionSize:" << ionSize << \
+		", width:" << size.width << ", height:" << size.height << ", format:" << halPixelFormat;
+	
 
 	/* This code assumes the planes are mapped consecutively. */
 	const libcamera::PixelFormat pixelFormat =
