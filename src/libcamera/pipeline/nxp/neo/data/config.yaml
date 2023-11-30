@@ -1,0 +1,169 @@
+# SPDX-License-Identifier: CC0-1.0
+
+# Neo pipeline platform config file example
+#
+# This config file format is experimental and subject to change.
+
+# The platform config file allows to define the topology of the entities
+# involved in the media devices graphs for every camera. It is needed when
+# complex topologies are used that can not be discovered automatically at
+# run time by the pipeline implementation.
+# Multiple configurations ('platforms') can be specified in the same
+# configuration file. A platform corresponds to the resulting topologies of a
+# board connected to a set of sensors and possible companion chips like SerDes.
+# To select the relevant configuration, pipeline parses at runtime the
+# configurations from the file in their definition order. Each configuration
+# lists the required entities to be detected so that it is considered as valid.
+# As a valid platform configuration is found, it is picked by the pipeline
+# that proceeds with its definitions for subsequent pipeline configuration.
+#
+# Each platform configuration defines:
+# - The routings for subdevice entities having streams capability
+# - The camera-specific definitions
+#
+# Routing is global as it may have to be applied to subdevices shared by
+# multiple camera graphs. Setting routing resets the routing table and can not
+# be applied when the subdevice is active. Thus, routing has typically to be
+# applied once at platform startup.
+# Routing consists in a set of v4l2 routes. An individual route defines a stream
+# crossing an entity from its sink to source pad, so streams are multiplexed on
+# entities pad. At pad level, each stream can be configured with a different
+# subdevice format.
+#
+# A camera outputs one or muliple streams flowing from its entity source pad
+# down to the ISI pipe. Individual streams end up demultiplexed in separate
+# ISI channels and video devices.
+# Camera streams may be:
+# * input0: main exposure pixel data fed to ISP input0 pad (mandatory)
+# * input1: short exposure pixel data fed to ISP input1 pad (optional)
+# * embedded: embedded data when sent of side channel (optional)
+#
+
+# Nodes definition:
+#
+# platforms         = sequence of platform-entry
+# platform-entry    = mapping of {name, match sequence, routings, cameras}
+#
+# name              = arbitraty name for the platform configuration
+#
+# maching           = mapping of {entities}
+# entities          = sequence of required entities names to match this platform
+#                     config
+#
+# routings          = sequence of routing-entry
+# routing-entry     = mapping of {entity, routes}
+# entity:           = name of the entity whose routing is to be configured
+# routes:           = sequence of route-entry for that entity
+# route-entry       = sequence of parameters for v4l2 route definition listed as
+#                     [sink pad, sink stream, source pad, source stream, flags]
+#
+# cameras           = sequence of individual camera-entry definition
+# camera entry      = mapping of {entity, stream-input0, stream-input1, stream-embedded}
+# stream-input0
+# stream-input1 (optional)
+# stream-embedded (optional)
+#                   = mapping of {links, isi-pipe, mbus-format, embedded-lines}
+# links             = sequence of link-entry listing links from the graph of this camera
+# link-entry        = sequence of parameters to describe a link between entities
+#                     listed as
+#                     [source entity name, source pad, source pad stream,
+#                      sink entity name, sink pad, sink pad stream]
+# isi-pipe          = ISI pipe channel index [0..N]
+#
+# \todo remove keys below
+# mbus-code (optional)
+#                   = mbus-code for this stream (input1 and embedded streams only)
+# embedded-lines (optional)
+#                   = number of lines of embedded data (embedded stream only)
+
+%YAML 1.1
+---
+version: 1.0
+platforms:
+  - name: i.MX95 EVK + 4x MX95MBCAM modules + MX95MBDESER01
+    match:
+      entities:
+        - mx95mbcam 8-0040
+        - mx95mbcam 9-0040
+        - mx95mbcam 10-0040
+        - mx95mbcam 11-0040
+        - max96724 2-0027
+        - csidev-4ad30000.csi
+        - 4ac10000.syscon:formatter@20
+        - crossbar
+        - mxc_isi.0
+        - mxc_isi.1
+        - mxc_isi.2
+        - mxc_isi.3
+        - mxc_isi.0.capture
+        - mxc_isi.1.capture
+        - mxc_isi.2.capture
+        - mxc_isi.3.capture
+    routings:
+      - entity: max96724 2-0027
+        routes:
+          - [0, 0, 4, 0, 1]
+          - [1, 0, 4, 1, 1]
+          - [2, 0, 4, 2, 1]
+          - [3, 0, 4, 3, 1]
+      - entity: csidev-4ad30000.csi
+        routes:
+          - [0, 0, 1, 0, 1]
+          - [0, 1, 1, 1, 1]
+          - [0, 2, 1, 2, 1]
+          - [0, 3, 1, 3, 1]
+      - entity: 4ac10000.syscon:formatter@20
+        routes:
+          - [0, 0, 1, 0, 1]
+          - [0, 1, 1, 1, 1]
+          - [0, 2, 1, 2, 1]
+          - [0, 3, 1, 3, 1]
+      - entity: crossbar
+        routes:
+          - [2, 0, 5, 0, 1]
+          - [2, 1, 6, 0, 1]
+          - [2, 2, 7, 0, 1]
+          - [2, 3, 8, 0, 1]
+    cameras:
+      - entity: mx95mbcam 8-0040
+        stream-input0:
+          links:
+            - [mx95mbcam 8-0040, 0, 0, max96724 2-0027, 0, 0]
+            - [max96724 2-0027, 4, 0, csidev-4ad30000.csi, 0, 0]
+            - [csidev-4ad30000.csi, 1, 0, 4ac10000.syscon:formatter@20, 0, 0]
+            - [4ac10000.syscon:formatter@20, 1, 0, crossbar, 2, 0]
+            - [crossbar, 5, 0, mxc_isi.0, 0, 0]
+            - [mxc_isi.0, 1, 0, mxc_isi.0.capture, 0, 0]
+          isi-pipe: 0
+      - entity: mx95mbcam 9-0040
+        stream-input0:
+          links:
+            - [mx95mbcam 9-0040, 0, 0, max96724 2-0027, 1, 0]
+            - [max96724 2-0027, 4, 1, csidev-4ad30000.csi, 0, 1]
+            - [csidev-4ad30000.csi, 1, 1, 4ac10000.syscon:formatter@20, 0, 1]
+            - [4ac10000.syscon:formatter@20, 1, 1, crossbar, 2, 1]
+            - [crossbar, 6, 0, mxc_isi.1, 0, 0]
+            - [mxc_isi.1, 1, 0, mxc_isi.1.capture, 0, 0]
+          isi-pipe: 1
+      - entity: mx95mbcam 10-0040
+        stream-input0:
+          links:
+            - [mx95mbcam 10-0040, 0, 0, max96724 2-0027, 2, 0]
+            - [max96724 2-0027, 4, 2, csidev-4ad30000.csi, 0, 2]
+            - [csidev-4ad30000.csi, 1, 2, 4ac10000.syscon:formatter@20, 0, 2]
+            - [4ac10000.syscon:formatter@20, 1, 2, crossbar, 2, 2]
+            - [crossbar, 7, 0, mxc_isi.2, 0, 0]
+            - [mxc_isi.2, 1, 0, mxc_isi.2.capture, 0, 0]
+          isi-pipe: 2
+      - entity: mx95mbcam 11-0040
+        stream-input0:
+          links:
+            - [mx95mbcam 11-0040, 0, 0, max96724 2-0027, 3, 0]
+            - [max96724 2-0027, 4, 3, csidev-4ad30000.csi, 0, 3]
+            - [csidev-4ad30000.csi, 1, 3, 4ac10000.syscon:formatter@20, 0, 3]
+            - [4ac10000.syscon:formatter@20, 1, 3, crossbar, 2, 3]
+            - [crossbar, 8, 0, mxc_isi.3, 0, 0]
+            - [mxc_isi.3, 1, 0, mxc_isi.3.capture, 0, 0]
+          isi-pipe: 3
+
+...
