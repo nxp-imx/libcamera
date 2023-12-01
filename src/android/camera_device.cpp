@@ -571,7 +571,8 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 			       << ", direction: " << directionToString(stream->stream_type)
 			       << ", width: " << stream->width
 			       << ", height: " << stream->height
-			       << ", format: " << utils::hex(stream->format)
+			       << ", xx format: " << utils::hex(stream->format)
+			       << ", data_space: " << stream->data_space
 			       << ", rotation: " << rotationToString(stream->rotation)
 #if defined(OS_CHROMEOS)
 			       << ", crop_rotate_scale_degrees: "
