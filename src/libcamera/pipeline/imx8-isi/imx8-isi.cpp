@@ -896,6 +896,7 @@ PipelineHandlerISI::generateConfiguration(Camera *camera,
 	std::unique_ptr<ISICameraConfiguration> config =
 		std::make_unique<ISICameraConfiguration>(data);
 
+
 	if (roles.empty())
 		return config;
 
@@ -906,6 +907,7 @@ PipelineHandlerISI::generateConfiguration(Camera *camera,
 	}
 
 	for (const auto &role : roles) {
+  LOG(ISI, Info) << "==== PipelineHandlerISI::generateConfiguration, role " << role;
 		/*
 		 * Prefer the following formats:
 		 * - Still Capture: Full resolution YUYV
@@ -962,6 +964,8 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 {
 	ISICameraConfiguration *camConfig = static_cast<ISICameraConfiguration *>(c);
 	ISICameraData *data = cameraData(camera);
+
+  //LOG(ISI, Info) << "==== PipelineHandlerISI::configure(): stream num " << c->
 
 	/* All links are immutable except the sensor -> csis link. */
 	const MediaPad *sensorSrc = data->sensor_->entity()->getPadByIndex(0);
@@ -1035,6 +1039,8 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 	/* Now configure the ISI and video node instances, one per stream. */
 	data->enabledStreams_.clear();
 	for (const auto &config : *c) {
+
+    LOG(ISI, Info) << "==== " << __func__ << ": config width " << config.size.width << ", height " << config.size.height << ", format " << config.pixelFormat.toString();
 		Pipe *pipe = pipeFromStream(camera, config.stream());
 
 		/*

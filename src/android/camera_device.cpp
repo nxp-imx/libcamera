@@ -572,6 +572,7 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 			       << ", width: " << stream->width
 			       << ", height: " << stream->height
 			       << ", xx format: " << utils::hex(stream->format)
+             << ", max_buffers: " << stream->max_buffers
 			       << ", data_space: " << stream->data_space
 			       << ", rotation: " << rotationToString(stream->rotation)
 #if defined(OS_CHROMEOS)
@@ -579,6 +580,9 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 			       << rotationToString(stream->crop_rotate_scale_degrees)
 #endif
 			       << " (" << format << ")";
+
+    // ??? fix me
+    stream->max_buffers = 4;
 
 		if (!format.isValid())
 			return -EINVAL;
