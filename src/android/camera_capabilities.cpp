@@ -85,8 +85,7 @@ const std::map<int, const Camera3Format> camera3FormatsMap = {
 		 */
 		HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED, {
 #ifdef ANDROID
-			//{ formats::YUYV },
-			{ formats::NV12 },
+			{ formats::YUYV },
 #else
 			{ formats::NV12, formats::NV21 },
 #endif

@@ -447,7 +447,6 @@ unsigned int ISICameraData::getYuvMediaBusFormat(const PixelFormat &pixelFormat)
 	/* Prefer codes with the same encoding as the requested pixel format. */
 	const PixelFormatInfo &info = PixelFormatInfo::info(pixelFormat);
 	for (unsigned int code : supportedCodes) {
-    LOG(ISI, Info) << "==== check code " + std::to_string(code) + ", colourEncoding " + std::to_string(info.colourEncoding); 
 		if (info.colourEncoding == PixelFormatInfo::ColourEncodingYUV &&
 		    (code == MEDIA_BUS_FMT_UYVY8_1X16 ||
 		     code == MEDIA_BUS_FMT_YUV8_1X24))
@@ -604,16 +603,15 @@ ISICameraConfiguration::validateYuv(std::set<Stream *> &availableStreams,
 
 		LOG(ISI, Debug) << "Stream " << i << ": " << cfg.toString();
 
-		/* If the stream is RAW or not supported default it to NV12. */
+		/* If the stream is RAW or not supported default it to YUYV. */
 		const PixelFormatInfo &cfgInfo = PixelFormatInfo::info(cfg.pixelFormat);
 		if (cfgInfo.colourEncoding == PixelFormatInfo::ColourEncodingRAW ||
 		    !formatsMap_.count(cfg.pixelFormat)) {
 
 			LOG(ISI, Debug) << "Stream " << i << " format: "
-					<< cfg.pixelFormat << " adjusted to NV12";
+					<< cfg.pixelFormat << " adjusted to YUYV";
 
-			//cfg.pixelFormat = formats::YUYV;
-			cfg.pixelFormat = formats::NV12;
+			cfg.pixelFormat = formats::YUYV;
 			status = Adjusted;
 		}
 
@@ -776,12 +774,10 @@ StreamConfiguration PipelineHandlerISI::generateYUVConfiguration(Camera *camera,
 								 const Size &size)
 {
 	ISICameraData *data = cameraData(camera);
-	//PixelFormat pixelFormat = formats::YUYV;
-	PixelFormat pixelFormat = formats::NV12;
+	PixelFormat pixelFormat = formats::YUYV;
 	unsigned int mbusCode;
 
 	mbusCode = data->getYuvMediaBusFormat(pixelFormat);
-  LOG(ISI, Info) << "==== enter generateYUVConfiguration, mbusCode " + std::to_string(mbusCode);
 	if (!mbusCode)
 		return {};
 
@@ -790,7 +786,6 @@ StreamConfiguration PipelineHandlerISI::generateYUVConfiguration(Camera *camera,
 	sensorFmt.mbus_code = mbusCode;
 	sensorFmt.size = size;
 
-  LOG(ISI, Info) << "==== try sensor format NV12, mbusCode " + std::to_string(mbusCode);
 	int ret = data->sensor_->tryFormat(&sensorFmt);
 	if (ret) {
 		LOG(ISI, Error) << "Failed to try sensor format.";
@@ -821,8 +816,6 @@ StreamConfiguration PipelineHandlerISI::generateYUVConfiguration(Camera *camera,
 	cfg.pixelFormat = pixelFormat;
 	cfg.size = sensorSize;
 	cfg.bufferCount = 4;
-
-  LOG(ISI, Info) << "==== generateYUVConfiguration, pixelFormat " + std::to_string(pixelFormat);
 
 	return cfg;
 }
@@ -914,7 +907,7 @@ PipelineHandlerISI::generateConfiguration(Camera *camera,
 	}
 
 	for (const auto &role : roles) {
-  LOG(ISI, Info) << "====xx PipelineHandlerISI::generateConfiguration, role " << role;
+  LOG(ISI, Info) << "==== PipelineHandlerISI::generateConfiguration, role " << role;
 		/*
 		 * Prefer the following formats:
 		 * - Still Capture: Full resolution YUYV

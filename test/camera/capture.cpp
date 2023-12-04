@@ -109,7 +109,6 @@ protected:
 		if (status_ != TestPass)
 			return status_;
 
-    cout << "==== call camera_->generateConfiguration";
 		config_ = camera_->generateConfiguration({ StreamRole::VideoRecording });
 		if (!config_ || config_->size() != 1) {
 			cout << "Failed to generate default configuration" << endl;
@@ -131,8 +130,7 @@ protected:
 		StreamConfiguration &cfg = config_->at(0);
 
 #ifdef ANDROID
-		//cfg.pixelFormat = PixelFormat::fromString("YUYV");
-		cfg.pixelFormat = PixelFormat::fromString("NV12");
+		cfg.pixelFormat = PixelFormat::fromString("YUYV");
 		cfg.size.width = 1920;
 		cfg.size.height = 1080;
 #endif
@@ -142,7 +140,6 @@ protected:
 			return TestFail;
 		}
 
-    cout << "==== call camera_->configure";
 		if (camera_->configure(config_.get())) {
 			cout << "Failed to set default configuration" << endl;
 			return TestFail;
