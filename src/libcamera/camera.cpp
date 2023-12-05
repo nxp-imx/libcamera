@@ -1197,6 +1197,8 @@ int Camera::configure(CameraConfiguration *config)
 
 		stream->configuration_ = cfg;
 		d->activeStreams_.insert(stream);
+		LOG(Camera, Info) << "==== bufferCount " << cfg.bufferCount << ", w " << cfg.size.width << ", h " << cfg.size.height <<
+			", stream " << stream;
 	}
 
 	d->setState(Private::CameraConfigured);

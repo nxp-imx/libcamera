@@ -817,6 +817,8 @@ StreamConfiguration PipelineHandlerISI::generateYUVConfiguration(Camera *camera,
 	cfg.size = sensorSize;
 	cfg.bufferCount = 4;
 
+  LOG(ISI, Info) << "==== generateYUVConfiguration, cfg.bufferCount 4";
+
 	return cfg;
 }
 
@@ -1038,9 +1040,11 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 
 	/* Now configure the ISI and video node instances, one per stream. */
 	data->enabledStreams_.clear();
-	for (const auto &config : *c) {
+	for (auto &config : *c) {
 
-    LOG(ISI, Info) << "==== " << __func__ << ": config width " << config.size.width << ", height " << config.size.height << ", format " << config.pixelFormat.toString();
+    LOG(ISI, Info) << "==== " << __func__ << ": config width " << config.size.width << ", height " << config.size.height << ", format " << config.pixelFormat.toString() <<
+      ", stream " << config.stream() << ", bufferCount " << config.bufferCount; 
+
 		Pipe *pipe = pipeFromStream(camera, config.stream());
 
 		/*
@@ -1088,6 +1092,7 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 		if (ret)
 			return ret;
 
+    config.bufferCount = 4;
 		/* Store the list of enabled streams for later use. */
 		data->enabledStreams_.push_back(config.stream());
 	}
@@ -1113,6 +1118,7 @@ int PipelineHandlerISI::start(Camera *camera,
 		Pipe *pipe = pipeFromStream(camera, stream);
 		const StreamConfiguration &config = stream->configuration();
 
+    LOG(ISI, Info) << "==== start(), stream " << stream;
 		int ret = pipe->capture->importBuffers(config.bufferCount);
 		if (ret)
 			return ret;

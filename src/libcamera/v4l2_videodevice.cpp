@@ -1232,6 +1232,8 @@ int V4L2VideoDevice::requestBuffers(unsigned int count,
 	struct v4l2_requestbuffers rb = {};
 	int ret;
 
+  LOG(V4L2, Debug) << "==== requestBuffers count " << count << ", bufferType_ " << bufferType_ << ", memoryType " << memoryType;
+
 	rb.count = count;
 	rb.type = bufferType_;
 	rb.memory = memoryType;
