@@ -519,6 +519,7 @@ int validate_camera_metadata_structure(const camera_metadata_t *metadata,
             return CAMERA_METADATA_VALIDATION_ERROR;
         }
 
+#if 0
         // TODO: fix vendor_tag_ops across processes so we don't need to special
         //       case vendor-specific tags
         uint32_t tag_section = entry.tag >> 16;
@@ -528,7 +529,7 @@ int validate_camera_metadata_structure(const camera_metadata_t *metadata,
                   __FUNCTION__, i, tag_type, entry.type);
             return CAMERA_METADATA_VALIDATION_ERROR;
         }
-
+#endif
         size_t data_size;
         if (validate_and_calculate_camera_metadata_entry_data_size(&data_size, entry.type,
                 entry.count) != OK) {
