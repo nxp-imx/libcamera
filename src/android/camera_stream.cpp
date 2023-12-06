@@ -132,9 +132,10 @@ int CameraStream::configure()
 	allocator_ = std::make_unique<PlatformFrameBufferAllocator>(cameraDevice_);
 	mutex_ = std::make_unique<Mutex>();
 
+  LOG(HAL, Info) << "==== camera3Stream_ " << camera3Stream_ << ", max_buffers " << camera3Stream_->max_buffers << ", set to 4";
+
 	camera3Stream_->max_buffers = 4; //configuration().bufferCount;
 
-  LOG(HAL, Info) << "==== set max_buffers " << camera3Stream_->max_buffers;
 
 	return 0;
 }

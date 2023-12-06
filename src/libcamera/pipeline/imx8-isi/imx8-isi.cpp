@@ -31,6 +31,7 @@
 
 #include "linux/media-bus-format.h"
 
+#define MYDBG LOG(ISI, Info) << "==== " << __FILE__ << ": " << __LINE__;
 #define EVK95_CAMERA_ISI_IDEX 2
 namespace libcamera {
 
@@ -1040,6 +1041,7 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 
 	/* Now configure the ISI and video node instances, one per stream. */
 	data->enabledStreams_.clear();
+	LOG(ISI, Info) << "==== " << __func__ << ": config num " << c->size();
 	for (auto &config : *c) {
 
     LOG(ISI, Info) << "==== " << __func__ << ": config width " << config.size.width << ", height " << config.size.height << ", format " << config.pixelFormat.toString() <<
@@ -1052,8 +1054,10 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 		 * received by the CSIS.
 		 */
 		ret = pipe->isi->setFormat(0, &format);
-		if (ret)
+		if (ret) {
+			MYDBG;
 			return ret;
+		}
 
 		/*
 		 * Configure the ISI sink compose rectangle to downscale the
@@ -1064,8 +1068,10 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 		 */
 		Rectangle isiScale(config.size);
 		ret = pipe->isi->setSelection(0, V4L2_SEL_TGT_COMPOSE, &isiScale);
-		if (ret)
+		if (ret) {
+			MYDBG;
 			return ret;
+		}
 
 		/*
 		 * Set the format on ISI source pad: only the media bus code
@@ -1080,8 +1086,10 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 		isiFormat.size = config.size;
 
 		ret = pipe->isi->setFormat(1, &isiFormat);
-		if (ret)
+		if (ret) {
+			MYDBG;
 			return ret;
+		}
 
 		V4L2DeviceFormat captureFmt{};
 		captureFmt.fourcc = pipe->capture->toV4L2PixelFormat(config.pixelFormat);
@@ -1089,8 +1097,10 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 
 		/* \todo Set stride and format. */
 		ret = pipe->capture->setFormat(&captureFmt);
-		if (ret)
+		if (ret) {
+			MYDBG;
 			return ret;
+		}
 
     config.bufferCount = 4;
 		/* Store the list of enabled streams for later use. */

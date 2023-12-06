@@ -548,6 +548,8 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 		return -EINVAL;
 	}
 
+	LOG(HAL, Info) << "==== " << __func__ << ": init camera config, size " << config->size();
+
 	/*
 	 * Clear and remove any existing configuration from previous calls, and
 	 * ensure the required entries are available without further
@@ -573,6 +575,7 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 			       << ", height: " << stream->height
 			       << ", xx format: " << utils::hex(stream->format)
              << ", max_buffers: " << stream->max_buffers
+             << ", usage: " << stream->usage
 			       << ", data_space: " << stream->data_space
 			       << ", rotation: " << rotationToString(stream->rotation)
 #if defined(OS_CHROMEOS)
@@ -707,7 +710,7 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 				       << " for MJPEG support";
 
 			type = CameraStream::Type::Internal;
-			index = streamConfigs.size() - 1;
+			index = streamConfigs.size() - 1; // ??? no need -1
 		}
 
 		/* The JPEG stream will be produced by software. */
