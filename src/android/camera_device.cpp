@@ -567,13 +567,13 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 		camera3_stream_t *stream = stream_list->streams[i];
 		Size size(stream->width, stream->height);
 
-		PixelFormat format = capabilities_.toPixelFormat(stream->format);
+		PixelFormat format = capabilities_.toPixelFormat(stream->format, stream->usage);
 
-		LOG(HAL, Info) << "Stream #" << i
+		LOG(HAL, Info) << "Stream xx#" << i
 			       << ", direction: " << directionToString(stream->stream_type)
 			       << ", width: " << stream->width
 			       << ", height: " << stream->height
-			       << ", xx format: " << utils::hex(stream->format)
+			       << ", format: " << utils::hex(stream->format)
              << ", max_buffers: " << stream->max_buffers
              << ", usage: " << stream->usage
 			       << ", data_space: " << stream->data_space

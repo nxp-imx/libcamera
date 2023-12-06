@@ -53,10 +53,12 @@ const std::vector<Size> camera3Resolutions = {
  * \brief Data associated with an Android format identifier
  * \var libcameraFormats List of libcamera pixel formats compatible with the
  * Android format
+ * \var usage List of usage, bind with libcamera pixel formats. If 0, not care.
  * \var name The human-readable representation of the Android format code
  */
 struct Camera3Format {
 	std::vector<PixelFormat> libcameraFormats;
+	std::vector<uint32_t> usages;
 	bool mandatory;
 	const char *name;
 };
@@ -69,20 +71,23 @@ const std::map<int, const Camera3Format> camera3FormatsMap = {
 	{
 		HAL_PIXEL_FORMAT_BLOB, {
 			{ formats::MJPEG },
+			{ 0 },	
 			true,
 			"BLOB"
 		}
 	}, {
 		HAL_PIXEL_FORMAT_YCbCr_420_888, {
 			{ formats::NV12, formats::NV21 },
+			{ 0 },
 			true,
 			"YCbCr_420_888"
 		}
 	}, {
 		HAL_PIXEL_FORMAT_YCBCR_422_I, {
 			{ formats::YUYV },
+			{ 0 },
 			true,
-			"YUYV"
+			"YCBCR_422_I"
 		}
 	}, {
 		/*
@@ -91,10 +96,11 @@ const std::map<int, const Camera3Format> camera3FormatsMap = {
 		 */
 		HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED, {
 #ifdef ANDROID
-			{ formats::YUYV },
+			{ formats::YUYV, formats::NV12 },
 #else
 			{ formats::NV12, formats::NV21 },
 #endif
+			{ GRALLOC_USAGE_HW_TEXTURE, GRALLOC_USAGE_HW_VIDEO_ENCODER },
 			true,
 			"IMPLEMENTATION_DEFINED"
 		}
@@ -106,6 +112,7 @@ const std::map<int, const Camera3Format> camera3FormatsMap = {
 				formats::SGRBG10_CSI2P,
 				formats::SRGGB10_CSI2P
 			},
+			{ 0,0,0,0 },
 			false,
 			"RAW10"
 		}
@@ -117,6 +124,7 @@ const std::map<int, const Camera3Format> camera3FormatsMap = {
 				formats::SGRBG12_CSI2P,
 				formats::SRGGB12_CSI2P
 			},
+			{ 0,0,0,0 },
 			false,
 			"RAW12"
 		}
@@ -128,6 +136,7 @@ const std::map<int, const Camera3Format> camera3FormatsMap = {
 				formats::SGRBG16,
 				formats::SRGGB16
 			},
+			{ 0,0,0,0 },
 			false,
 			"RAW16"
 		}
@@ -1465,6 +1474,7 @@ int CameraCapabilities::initializeStaticMetadata()
 	return 0;
 }
 
+#if 0
 /* Translate Android format code to libcamera pixel format. */
 PixelFormat CameraCapabilities::toPixelFormat(int format) const
 {
@@ -1477,6 +1487,44 @@ PixelFormat CameraCapabilities::toPixelFormat(int format) const
 
 	return it->second;
 }
+#else
+PixelFormat CameraCapabilities::toPixelFormat(int format, uint32_t usage) const
+{
+
+	LOG(HAL,Info) << "==== toPixelFormat(), format " << utils::hex(format) << ", usage " << usage;
+	for (const auto &mapItem : camera3FormatsMap) {
+		int androidFormat = mapItem.first;
+		LOG(HAL,Info) << "==== check androidFormat " << utils::hex(androidFormat);
+
+		if (format != androidFormat)
+			continue;
+
+		const Camera3Format &camera3Format = mapItem.second;
+		const std::vector<PixelFormat> &libcameraFormats = camera3Format.libcameraFormats;
+		const std::vector<uint32_t> &usages = camera3Format.usages;
+		uint32_t size = libcameraFormats.size();
+
+		LOG(HAL,Info) << "==== size " << size;
+
+		if ((usage == 0) || (size == 1))
+			return libcameraFormats[0];
+
+		for (uint32_t i = 0; i < size; i++) {
+			LOG(HAL,Info) << "==== check usage " <<  usages[i];
+			if (usage == usages[i]) {
+				LOG(HAL,Info) << "==== usage match, return " << libcameraFormats[i]; 
+				return libcameraFormats[i];
+			}
+		}
+		return libcameraFormats[0];
+	}
+
+	LOG(HAL, Error) << "Requested format " << utils::hex(format) << " not supported";
+
+	return PixelFormat();
+}
+
+#endif
 
 std::unique_ptr<CameraMetadata> CameraCapabilities::requestTemplateManual() const
 {

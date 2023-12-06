@@ -29,7 +29,7 @@ public:
 		       int orientation, int facing);
 
 	CameraMetadata *staticMetadata() const { return staticMetadata_.get(); }
-	libcamera::PixelFormat toPixelFormat(int format) const;
+	libcamera::PixelFormat toPixelFormat(int format, uint32_t usage = 0) const;
 	unsigned int maxJpegBufferSize() const { return maxJpegBufferSize_; }
 
 	std::unique_ptr<CameraMetadata> requestTemplateManual() const;
