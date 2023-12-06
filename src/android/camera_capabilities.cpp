@@ -79,6 +79,12 @@ const std::map<int, const Camera3Format> camera3FormatsMap = {
 			"YCbCr_420_888"
 		}
 	}, {
+		HAL_PIXEL_FORMAT_YCBCR_422_I, {
+			{ formats::YUYV },
+			true,
+			"YUYV"
+		}
+	}, {
 		/*
 		 * \todo Translate IMPLEMENTATION_DEFINED inspecting the gralloc
 		 * usage flag. For now, copy the YCbCr_420 configuration.

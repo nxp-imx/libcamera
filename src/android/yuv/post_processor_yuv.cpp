@@ -25,6 +25,7 @@ LOG_DEFINE_CATEGORY(YUV)
 int PostProcessorYuv::configure(const StreamConfiguration &inCfg,
 				const StreamConfiguration &outCfg)
 {
+#ifndef ANDROID // yuyv -> nv12 is supported, skip below judge.
 	if (inCfg.pixelFormat != outCfg.pixelFormat) {
 		LOG(YUV, Error) << "Pixel format conversion is not supported"
 				<< " (from " << inCfg.pixelFormat
@@ -44,9 +45,65 @@ int PostProcessorYuv::configure(const StreamConfiguration &inCfg,
 				<< " (only NV12 is supported)";
 		return -EINVAL;
 	}
+#endif
 
 	calculateLengths(inCfg, outCfg);
 	return 0;
+}
+
+static void convertYUYVtoNV12SP(uint8_t *inputBuffer,
+            uint8_t *outputBuffer, int width, int height)
+{
+    uint32_t h, w;
+    uint32_t nHeight = height;
+    uint32_t nWidthDiv4 = width / 4;
+
+    uint32_t *pYSrcOffset = (uint32_t *)inputBuffer;
+    uint32_t value = 0;
+    uint32_t value2 = 0;
+
+    uint32_t *pYDstOffset = (uint32_t *)outputBuffer;
+    uint32_t *pUVDstOffset = (uint32_t *)(((uint8_t *)(outputBuffer)) + width * height);
+
+    for (h = 0; h < nHeight; h++) {
+        if (!(h & 0x1)) {
+            for (w = 0; w < nWidthDiv4; w++) {
+                value = (*pYSrcOffset);
+                value2 = (*(pYSrcOffset + 1));
+                //use bitwise operation to get data from src to improve performance.
+                *pYDstOffset = ((value & 0x000000ff) >> 0) |
+                               ((value & 0x00ff0000) >> 8) |
+                               ((value2 & 0x000000ff) << 16) |
+                               ((value2 & 0x00ff0000) << 8);
+                pYDstOffset += 1;
+
+#ifdef PLATFORM_VERSION_4
+                *pUVDstOffset = ((value & 0xff000000) >> 24) |
+                                ((value & 0x0000ff00) >> 0) |
+                                ((value2 & 0xff000000) >> 8) |
+                                ((value2 & 0x0000ff00) << 16);
+#else
+                *pUVDstOffset = ((value & 0x0000ff00) >> 8) |
+                                ((value & 0xff000000) >> 16) |
+                                ((value2 & 0x0000ff00) << 8) |
+                                ((value2 & 0xff000000) << 0);
+#endif
+                pUVDstOffset += 1;
+                pYSrcOffset += 2;
+            }
+        } else {
+            for (w = 0; w < nWidthDiv4; w++) {
+                value = (*pYSrcOffset);
+                value2 = (*(pYSrcOffset + 1));
+                *pYDstOffset = ((value & 0x000000ff) >> 0) |
+                               ((value & 0x00ff0000) >> 8) |
+                               ((value2 & 0x000000ff) << 16) |
+                               ((value2 & 0x00ff0000) << 8);
+                pYSrcOffset += 2;
+                pYDstOffset += 1;
+            }
+        }
+    }
 }
 
 void PostProcessorYuv::process(Camera3RequestDescriptor::StreamBuffer *streamBuffer)
@@ -67,8 +124,7 @@ void PostProcessorYuv::process(Camera3RequestDescriptor::StreamBuffer *streamBuf
 	}
 
 /* no NV12Scale in libyuv.so, will fix later */
-//#ifndef ANDROID
-#if 1
+#ifndef ANDROID
 	int ret = libyuv::NV12Scale(sourceMapped.planes()[0].data(),
 				    sourceStride_[0],
 				    sourceMapped.planes()[1].data(),
@@ -87,15 +143,17 @@ void PostProcessorYuv::process(Camera3RequestDescriptor::StreamBuffer *streamBuf
 		return;
 	}
 #else
-  LOG(YUV, Warning) << "PostProcessorYuv::process, skip libyuv::NV12Scale";
+	LOG(YUV, Debug) << "PostProcessorYuv::process, convertYUYVtoNV12SP";
+	convertYUYVtoNV12SP(sourceMapped.planes()[0].data(), destination->plane(0).data(), destinationSize_.width, destinationSize_.height);
 #endif
 
 	processComplete.emit(streamBuffer, PostProcessor::Status::Success);
 }
 
-bool PostProcessorYuv::isValidBuffers(const FrameBuffer &source,
-				      const CameraBuffer &destination) const
+bool PostProcessorYuv::isValidBuffers(const FrameBuffer &source __unused,
+				      const CameraBuffer &destination __unused) const
 {
+#ifndef ANDROID // yuyv -> nv12 is supported, skip below judge.
 	if (source.planes().size() != 2) {
 		LOG(YUV, Error) << "Invalid number of source planes: "
 				<< source.planes().size();
@@ -129,7 +187,7 @@ bool PostProcessorYuv::isValidBuffers(const FrameBuffer &source,
 			<< sourceLength_[1] << "}";
 		return false;
 	}
-
+#endif
 	return true;
 }
 

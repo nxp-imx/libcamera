@@ -94,6 +94,7 @@ int CameraStream::configure()
 
 		switch (outFormat) {
 		case formats::NV12:
+		case formats::YUYV:
 			postProcessor_ = std::make_unique<PostProcessorYuv>();
 			break;
 
