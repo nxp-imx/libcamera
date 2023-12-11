@@ -989,7 +989,6 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 
 #if 1
 	for (const auto &[idx, config] : utils::enumerate(*c)) {
-		LOG(ISI, Info) << "==== idx " << std::to_string(idx);
 
 		struct v4l2_subdev_route route = {
 			.sink_pad = data->xbarSink_,
@@ -1000,6 +999,7 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 			.reserved = {}
 		};
 
+		LOG(ISI, Info) << "==== add crossbard routing, idx " << idx << ", sinkpad " << route.sink_pad << ", source_pad " << route.source_pad;
 		routing.push_back(route);
 	}
 #endif
