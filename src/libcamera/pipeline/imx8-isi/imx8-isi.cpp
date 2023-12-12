@@ -127,7 +127,7 @@ protected:
 	int queueRequestDevice(Camera *camera, Request *request) override;
 
 private:
-	static constexpr Size kPreviewSize = { 1920, 1080 };
+	static constexpr Size kPreviewSize = { 1280, 800 };
 	static constexpr Size kMinISISize = { 1, 1 };
 
 	struct Pipe {
@@ -440,6 +440,12 @@ unsigned int ISICameraData::getYuvMediaBusFormat(const PixelFormat &pixelFormat)
 
 	std::sort(mbusCodes.begin(), mbusCodes.end());
 	std::sort(yuvCodes.begin(), yuvCodes.end());
+
+	for (unsigned int code : mbusCodes)
+		LOG(ISI, Info) << "==== busCode " << utils::hex(code);
+
+	for (unsigned int code : yuvCodes)
+		LOG(ISI, Info) << "==== yuvCode " << utils::hex(code);
 
 	std::vector<unsigned int> supportedCodes;
 	std::set_intersection(mbusCodes.begin(), mbusCodes.end(),

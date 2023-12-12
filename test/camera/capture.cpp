@@ -50,6 +50,7 @@ static void DumpData(void *buf, uint32_t bufSize)
 #define OV560_8MN_NAME "/base/soc@0/bus@30800000/i2c@30a40000/ov5640_mipi@3c"
 #define OV560_8QM_NAME "/base/bus@58000000/i2c@58226000/ov5640_mipi@3c"
 #define OV560_95_NAME "/base/soc@0/bus@42000000/i2c@42530000/ov5640_mipi@3c"
+#define AP1302_95_NAME "/base/soc/bus@42000000/i2c@42530000/ap1302_mipi@3c/sensors/sensor@0"
 
 namespace {
 
@@ -57,7 +58,7 @@ class Capture : public CameraTest, public Test
 {
 public:
 	Capture()
-		: CameraTest(OV560_95_NAME)
+		: CameraTest(AP1302_95_NAME)
 	{
 	}
 
@@ -131,8 +132,8 @@ protected:
 
 #ifdef ANDROID
 		cfg.pixelFormat = PixelFormat::fromString("YUYV");
-		cfg.size.width = 1920;
-		cfg.size.height = 1080;
+		cfg.size.width = 1280;
+		cfg.size.height = 800;
 #endif
 
 		if (camera_->acquire()) {
