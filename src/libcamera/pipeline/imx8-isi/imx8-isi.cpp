@@ -1288,9 +1288,7 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 
 		MediaEntity *sensor = pad->links()[0]->source()->entity();
 		if (sensor->function() != MEDIA_ENT_F_CAM_SENSOR) {
-			LOG(ISI, Debug) << "Skip unsupported subdevice "
-					<< sensor->name();
-			continue;
+				LOG(ISI, Warning) << "==== sensor " << sensor->name() << " function " << utils::hex(sensor->function()) << " is not MEDIA_ENT_F_CAM_SENSOR";
 		}
 
 		/* Create the camera data. */
