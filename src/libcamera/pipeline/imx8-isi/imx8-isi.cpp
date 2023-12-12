@@ -68,10 +68,7 @@ public:
 	unsigned int getYuvMediaBusFormat(const PixelFormat &pixelFormat) const;
 	unsigned int getMediaBusFormat(PixelFormat *pixelFormat) const;
 
-	//                  ov5640 -> csidev-4ad30000.csi-> crossbar -> mxc_isi.2 -> mxc_isi.2.capture
-	// ar0144 -> ap130x.2-003c -> csidev-4ad30000.csi-> crossbar -> mxc_isi.2 -> mxc_isi.2.capture
 	std::unique_ptr<CameraSensor> sensor_;
-	std::unique_ptr<V4L2Subdevice> adapter_; // used for ap130x.2-003c 
 	std::unique_ptr<V4L2Subdevice> csis_;
 
 	std::vector<Stream> streams_;
@@ -170,10 +167,6 @@ PipelineHandlerISI *ISICameraData::pipe()
 int ISICameraData::init(V4L2VideoDevice *video)
 {
 	int ret = sensor_->init();
-	if (ret)
-		return ret;
-
-	ret = adapter_->open();
 	if (ret)
 		return ret;
 
@@ -1044,10 +1037,6 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 	if (ret)
 		return ret;
 
-	ret = data->adapter_->setFormat(0, &format);
-	if (ret)
-		return ret;
-
 	ret = data->csis_->setFormat(0, &format);
 	if (ret)
 		return ret;
@@ -1284,7 +1273,6 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 		 */
 		numSinks++;
 
-		// csi
 		MediaEntity *csi = pad->links()[0]->source()->entity();
 		if (csi->pads().size() != 2) {
 			LOG(ISI, Debug) << "Skip unsupported CSI-2 receiver "
@@ -1298,26 +1286,9 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 			continue;
     }
 
-
-		// adapter, ap130x.2-003c
-		MediaEntity *adapter = pad->links()[0]->source()->entity();
-		if (adapter->pads().size() != 2) {
-			LOG(ISI, Debug) << "==== Skip unsupported adapter" << adapter->name() << ", pad size " << adapter->pads().size();
-	//		continue;
-		}
-
-		pad = adapter->pads()[0];
-    LOG(ISI, Info) << "adapter pad flag " + std::to_string(pad->flags()) + ", links num " + std::to_string(pad->links().size()); 
-		if (!(pad->flags() & MEDIA_PAD_FL_SINK) || pad->links().empty()) {
-			continue;
-    }
-
-
-		// sensor
 		MediaEntity *sensor = pad->links()[0]->source()->entity();
-		LOG(ISI, Info) <<  "==== sensor " << sensor->name() << ", sensor->function " << sensor->function();
 		if (sensor->function() != MEDIA_ENT_F_CAM_SENSOR) {
-			LOG(ISI, Error) << "Skip unsupported subdevice "
+			LOG(ISI, Debug) << "Skip unsupported subdevice "
 					<< sensor->name();
 			continue;
 		}
@@ -1327,7 +1298,6 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 			std::make_unique<ISICameraData>(this);
 
 		data->sensor_ = std::make_unique<CameraSensor>(sensor);
-		data->adapter_ = std::make_unique<V4L2Subdevice>(adapter);
 		data->csis_ = std::make_unique<V4L2Subdevice>(csi);
 		data->xbarSink_ = xbarSink; //EVK95_CAMERA_ISI_IDEX; //sink;
 
