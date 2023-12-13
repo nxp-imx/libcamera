@@ -196,6 +196,7 @@ int CameraSensor::init()
 	 * \todo The control API ought to have a flag to specify if a control
 	 * is read-only which could be used below.
 	 */
+#if 0
 	const ControlInfo hblank = ctrls.infoMap()->at(V4L2_CID_HBLANK);
 	const int32_t hblankMin = hblank.min().get<int32_t>();
 	const int32_t hblankMax = hblank.max().get<int32_t>();
@@ -210,6 +211,8 @@ int CameraSensor::init()
 	}
 
 	return applyTestPatternMode(controls::draft::TestPatternModeEnum::TestPatternModeOff);
+#endif
+  return 0;
 }
 
 int CameraSensor::validateSensorDriver()
