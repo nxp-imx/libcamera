@@ -26,8 +26,6 @@
 #include "libcamera/internal/formats.h"
 #include "libcamera/internal/sysfs.h"
 
-#define MYDBG LOG(CameraSensor, Info) << "==== file " << __FILE__ << ", line " << __LINE__;
-
 /**
  * \file camera_sensor.h
  * \brief A camera sensor
@@ -178,18 +176,13 @@ int CameraSensor::init()
 		return ret;
 
 	ret = initProperties();
-	if (ret) {
-    MYDBG;
+	if (ret)
 		return ret;
-  }
 
 	ret = discoverAncillaryDevices();
-	if (ret) {
-    MYDBG;
+	if (ret)
 		return ret;
-  }  
 
-#if 0
 	/*
 	 * Set HBLANK to the minimum to start with a well-defined line length,
 	 * allowing IPA modules that do not modify HBLANK to use the sensor
@@ -212,16 +205,11 @@ int CameraSensor::init()
 
 		ctrl.set(V4L2_CID_HBLANK, hblankMin);
 		ret = subdev_->setControls(&ctrl);
-		if (ret) {
-      MYDBG;
+		if (ret)
 			return ret;
-    }
 	}
 
 	return applyTestPatternMode(controls::draft::TestPatternModeEnum::TestPatternModeOff);
-#else
-  return 0;
-#endif
 }
 
 int CameraSensor::validateSensorDriver()
@@ -330,7 +318,6 @@ int CameraSensor::validateSensorDriver()
 	if (!bayerFormat_)
 		return 0;
 
-#if 0 // fix me, skip for ap1302
 	/*
 	 * For raw sensors, make sure the sensor driver supports the controls
 	 * required by the CameraSensor class.
@@ -360,8 +347,6 @@ int CameraSensor::validateSensorDriver()
 			<< "See Documentation/sensor_driver_requirements.rst in the libcamera sources for more information";
 		return err;
 	}
-
-#endif
 
 	return 0;
 }
@@ -667,7 +652,6 @@ int CameraSensor::setTestPatternMode(controls::draft::TestPatternModeEnum mode)
 
 int CameraSensor::applyTestPatternMode(controls::draft::TestPatternModeEnum mode)
 {
-  MYDBG;
 	if (testPatternModes_.empty())
 		return 0;
 
@@ -686,10 +670,8 @@ int CameraSensor::applyTestPatternMode(controls::draft::TestPatternModeEnum mode
 	ctrls.set(V4L2_CID_TEST_PATTERN, index);
 
 	int ret = setControls(&ctrls);
-	if (ret) {
-    MYDBG;
+	if (ret)
 		return ret;
-  }  
 
 	testPatternMode_ = mode;
 
