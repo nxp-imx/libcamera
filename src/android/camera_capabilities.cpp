@@ -1095,6 +1095,7 @@ int CameraCapabilities::initializeStaticMetadata()
 	}
 
 	const auto &cellSize = properties.get<Size>(properties::UnitCellSize);
+  LOG(HAL, Info) << "==== cell size " << cellSize->width  << " x " << cellSize->height;
 	if (cellSize) {
 		std::array<float, 2> physicalSize{
 			cellSize->width * pixelArraySize[0] / 1e6f,
