@@ -133,7 +133,7 @@ protected:
 #ifdef ANDROID
 		cfg.pixelFormat = PixelFormat::fromString("YUYV");
 		cfg.size.width = 1280;
-		cfg.size.height = 800;
+		cfg.size.height = 720;
 #endif
 
 		if (camera_->acquire()) {
