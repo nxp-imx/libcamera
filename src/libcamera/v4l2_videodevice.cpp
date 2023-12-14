@@ -175,6 +175,7 @@ LOG_DECLARE_CATEGORY(V4L2)
 V4L2BufferCache::V4L2BufferCache(unsigned int numEntries)
 	: lastUsedCounter_(1), missCounter_(0)
 {
+	LOG(V4L2, Info) << "==== cache_.resize " << numEntries;
 	cache_.resize(numEntries);
 }
 
@@ -189,6 +190,7 @@ V4L2BufferCache::V4L2BufferCache(unsigned int numEntries)
 V4L2BufferCache::V4L2BufferCache(const std::vector<std::unique_ptr<FrameBuffer>> &buffers)
 	: lastUsedCounter_(1), missCounter_(0)
 {
+	LOG(V4L2, Info) << "==== new V4L2BufferCache with buffers " << buffers.size();
 	for (const std::unique_ptr<FrameBuffer> &buffer : buffers)
 		cache_.emplace_back(true,
 				    lastUsedCounter_.fetch_add(1, std::memory_order_acq_rel),
@@ -233,8 +235,11 @@ int V4L2BufferCache::get(const FrameBuffer &buffer)
 	int use = -1;
 	uint64_t oldest = UINT64_MAX;
 
+	LOG(V4L2, Info) << "==== V4L2BufferCache::get(), size " << cache_.size();
 	for (unsigned int index = 0; index < cache_.size(); index++) {
 		const Entry &entry = cache_[index];
+
+		LOG(V4L2, Info) << "==== check idx " << index << ", free " << entry.free_ << ", lastUsed_ " << entry.lastUsed_ << ", oldest " << oldest;
 
 		if (!entry.free_)
 			continue;
@@ -243,10 +248,12 @@ int V4L2BufferCache::get(const FrameBuffer &buffer)
 		if (entry == buffer) {
 			hit = true;
 			use = index;
+			LOG(V4L2, Info) << "==== hit true";
 			break;
 		}
 
 		if (entry.lastUsed_ < oldest) {
+			LOG(V4L2, Info) << "==== lastUsed_ " << entry.lastUsed_  << " < oldest " << oldest;
 			use = index;
 			oldest = entry.lastUsed_;
 		}
@@ -271,6 +278,7 @@ int V4L2BufferCache::get(const FrameBuffer &buffer)
  */
 void V4L2BufferCache::put(unsigned int index)
 {
+	LOG(V4L2, Info) << "==== V4L2BufferCache::put(), index " << index << ", cache size " << cache_.size();
 	ASSERT(index < cache_.size());
 	cache_[index].free_ = true;
 }
@@ -1597,9 +1605,13 @@ int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer)
 	buf.memory = memoryType_;
 	buf.field = V4L2_FIELD_NONE;
 
+	LOG(V4L2, Info) << "==== buf index " << buf.index << ", type " << buf.type << ", memory " << buf.memory;
+
 	bool multiPlanar = V4L2_TYPE_IS_MULTIPLANAR(buf.type);
 	const std::vector<FrameBuffer::Plane> &planes = buffer->planes();
 	const unsigned int numV4l2Planes = format_.planesCount;
+
+	LOG(V4L2, Info) << "==== multiPlanar " << multiPlanar << ", planes " << planes.size() << ", numV4l2Planes " << numV4l2Planes << ", fd " << planes[0].fd.get() << ", length " << planes[0].length;
 
 	/*
 	 * Ensure that the frame buffer has enough planes, and that they're
@@ -1630,6 +1642,7 @@ int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer)
 	}
 
 	if (V4L2_TYPE_IS_OUTPUT(buf.type)) {
+		LOG(V4L2, Info) << "==== V4L2_TYPE_IS_OUTPUT";
 		const FrameMetadata &metadata = buffer->metadata();
 
 		for (const auto &plane : metadata.planes()) {
