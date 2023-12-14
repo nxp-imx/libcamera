@@ -433,12 +433,14 @@ void PipelineHandler::doQueueRequest(Request *request)
 	request->_d()->sequence_ = data->requestSequence_++;
 
 	if (request->_d()->cancelled_) {
+    LOG(Pipeline, Info) << "==== doQueueRequest, cancelled";
 		completeRequest(request);
 		return;
 	}
 
 	int ret = queueRequestDevice(camera, request);
 	if (ret) {
+    LOG(Pipeline, Info) << "==== doQueueRequest, queueRequestDevice ret " << ret;
 		request->_d()->cancel();
 		completeRequest(request);
 	}
@@ -519,6 +521,7 @@ bool PipelineHandler::completeBuffer(Request *request, FrameBuffer *buffer)
  */
 void PipelineHandler::completeRequest(Request *request)
 {
+  LOG(Pipeline, Info) << "==== enter PipelineHandler::completeRequest";
 	Camera *camera = request->_d()->camera();
 
 	request->_d()->complete();

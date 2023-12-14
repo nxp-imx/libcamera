@@ -1587,8 +1587,10 @@ int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer)
 	}
 
 	ret = cache_->get(*buffer);
-	if (ret < 0)
+	if (ret < 0) {
+    LOG(V4L2, Error) << "==== cache_->get, ret " << ret;
 		return ret;
+  }
 
 	buf.index = ret;
 	buf.type = bufferType_;

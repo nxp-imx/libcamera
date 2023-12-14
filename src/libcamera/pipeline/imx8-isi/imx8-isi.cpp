@@ -1352,6 +1352,7 @@ void PipelineHandlerISI::bufferReady(FrameBuffer *buffer)
 	if (request->hasPendingBuffers())
 		return;
 
+  LOG(ISI, Info) << "==== PipelineHandlerISI::bufferReady, call completeRequest";
 	completeRequest(request);
 }
 
