@@ -865,6 +865,8 @@ int V4L2VideoDevice::setFormat(V4L2DeviceFormat *format)
 	format_ = *format;
 	formatInfo_ = &PixelFormatInfo::info(format_.fourcc);
 
+  LOG(V4L2, Info) << "==== setFormat " << format_.toString();
+
 	return 0;
 }
 
@@ -887,6 +889,8 @@ int V4L2VideoDevice::getFormatMeta(V4L2DeviceFormat *format)
 	format->planesCount = 1;
 	format->planes[0].bpl = pix->buffersize;
 	format->planes[0].size = pix->buffersize;
+
+  LOG(V4L2, Info) << "==== " << __func__ << ", line " << __LINE__ << ", set planesCount 1 for " << format->toString();
 
 	return 0;
 }
@@ -919,6 +923,7 @@ int V4L2VideoDevice::trySetFormatMeta(V4L2DeviceFormat *format, bool set)
 	format->planes[0].bpl = pix->buffersize;
 	format->planes[0].size = pix->buffersize;
 
+  LOG(V4L2, Info) << "==== " << __func__ << ", line " << __LINE__ << ", set planesCount 1 for " << format->toString();
 	return 0;
 }
 
@@ -947,6 +952,9 @@ int V4L2VideoDevice::getFormatMultiplane(V4L2DeviceFormat *format)
 	format->fourcc = V4L2PixelFormat(pix->pixelformat);
 	format->planesCount = pix->num_planes;
 	format->colorSpace = toColorSpace(*pix);
+
+  LOG(V4L2, Info) << "==== " << __func__ << ", line " << __LINE__ << ", set planesCount " << format->planesCount << " for " << format->toString();
+
 
 	for (unsigned int i = 0; i < format->planesCount; ++i) {
 		format->planes[i].bpl = pix->plane_fmt[i].bytesperline;
@@ -998,6 +1006,7 @@ int V4L2VideoDevice::trySetFormatMultiplane(V4L2DeviceFormat *format, bool set)
 	format->size.height = pix->height;
 	format->fourcc = V4L2PixelFormat(pix->pixelformat);
 	format->planesCount = pix->num_planes;
+  LOG(V4L2, Info) << "==== " << __func__ << ", line " << __LINE__ << ", set planesCount " << format->planesCount << " for " << format->toString();
 	for (unsigned int i = 0; i < format->planesCount; ++i) {
 		format->planes[i].bpl = pix->plane_fmt[i].bytesperline;
 		format->planes[i].size = pix->plane_fmt[i].sizeimage;
@@ -1027,6 +1036,7 @@ int V4L2VideoDevice::getFormatSingleplane(V4L2DeviceFormat *format)
 	format->planes[0].bpl = pix->bytesperline;
 	format->planes[0].size = pix->sizeimage;
 	format->colorSpace = toColorSpace(*pix);
+  LOG(V4L2, Info) << "==== " << __func__ << ", line " << __LINE__ << ", set planesCount " << format->planesCount << " for " << format->toString();
 
 	return 0;
 }
@@ -1069,6 +1079,7 @@ int V4L2VideoDevice::trySetFormatSingleplane(V4L2DeviceFormat *format, bool set)
 	format->planes[0].bpl = pix->bytesperline;
 	format->planes[0].size = pix->sizeimage;
 	format->colorSpace = toColorSpace(*pix);
+  LOG(V4L2, Info) << "==== " << __func__ << ", line " << __LINE__ << ", set planesCount " << format->planesCount << " for " << format->toString();
 
 	return 0;
 }
@@ -1394,6 +1405,8 @@ std::unique_ptr<FrameBuffer> V4L2VideoDevice::createBuffer(unsigned int index)
 	buf.length = std::size(v4l2Planes);
 	buf.m.planes = v4l2Planes;
 
+  LOG(V4L2, Info) << "==== VIDIOC_QUERYBUF, index " << buf.index << ", type " << bufferType_ << ", length " << buf.length;
+
 	int ret = ioctl(VIDIOC_QUERYBUF, &buf);
 	if (ret < 0) {
 		LOG(V4L2, Error)
@@ -1611,6 +1624,7 @@ int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer)
 	const std::vector<FrameBuffer::Plane> &planes = buffer->planes();
 	const unsigned int numV4l2Planes = format_.planesCount;
 
+  LOG(V4L2, Info) << "==== format_ " << format_.toString();
 	LOG(V4L2, Info) << "==== multiPlanar " << multiPlanar << ", planes " << planes.size() << ", numV4l2Planes " << numV4l2Planes << ", fd " << planes[0].fd.get() << ", length " << planes[0].length;
 
 	/*

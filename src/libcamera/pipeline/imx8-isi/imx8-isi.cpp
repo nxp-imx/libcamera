@@ -1033,6 +1033,7 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 
 	/* Apply format to the sensor and CSIS receiver. */
 	V4L2SubdeviceFormat format = camConfig->sensorFormat_;
+	LOG(ISI, Info) << "==== sensor_->setFormat " << format.toString();
 	ret = data->sensor_->setFormat(&format);
 	if (ret)
 		return ret;
@@ -1101,6 +1102,7 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 		captureFmt.fourcc = pipe->capture->toV4L2PixelFormat(config.pixelFormat);
 		captureFmt.size = config.size;
 
+		LOG(ISI, Info) << "==== capture->setFormat " << captureFmt.toString();
 		/* \todo Set stride and format. */
 		ret = pipe->capture->setFormat(&captureFmt);
 		if (ret) {
