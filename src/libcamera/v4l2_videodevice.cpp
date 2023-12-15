@@ -1625,7 +1625,8 @@ int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer)
 	const unsigned int numV4l2Planes = format_.planesCount;
 
   LOG(V4L2, Info) << "==== format_ " << format_.toString();
-	LOG(V4L2, Info) << "==== multiPlanar " << multiPlanar << ", planes " << planes.size() << ", numV4l2Planes " << numV4l2Planes << ", fd " << planes[0].fd.get() << ", length " << planes[0].length;
+	LOG(V4L2, Info) << "==== multiPlanar " << multiPlanar << ", planes " << planes.size() << 
+    ", numV4l2Planes " << numV4l2Planes << ", fd " << planes[0].fd.get() << ", length " << planes[0].length;
 
 	/*
 	 * Ensure that the frame buffer has enough planes, and that they're

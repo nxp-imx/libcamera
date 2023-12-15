@@ -279,6 +279,7 @@ FrameBuffer::Private::~Private()
 
 namespace {
 
+#if 0
 ino_t fileDescriptorInode(const SharedFD &fd)
 {
 	if (!fd.isValid())
@@ -295,6 +296,7 @@ ino_t fileDescriptorInode(const SharedFD &fd)
 
 	return st.st_ino;
 }
+#endif
 
 } /* namespace */
 
@@ -317,16 +319,21 @@ FrameBuffer::FrameBuffer(std::unique_ptr<Private> d)
 {
 	unsigned int offset = 0;
 	bool isContiguous = true;
-	ino_t inode = 0;
+//	ino_t inode = 0;
 
+  LOG(Buffer, Debug) << "==== FrameBuffer ctor, plans " <<  _d()->planes_.size();
 	for (const auto &plane : _d()->planes_) {
 		ASSERT(plane.offset != Plane::kInvalidOffset);
+    LOG(Buffer, Debug) << "==== plane.offset " << plane.offset << ", length " << plane.length <<
+      ", total offset " << offset << ", fd " << plane.fd.get() << ", planes_[0].fd " << _d()->planes_[0].fd.get();
 
 		if (plane.offset != offset) {
+      LOG(Buffer, Debug) << "==== set isContiguous false";
 			isContiguous = false;
 			break;
 		}
 
+#if 0
 		/*
 		 * Two different dmabuf file descriptors may still refer to the
 		 * same dmabuf instance. Check this using inodes.
@@ -335,12 +342,15 @@ FrameBuffer::FrameBuffer(std::unique_ptr<Private> d)
 			if (!inode)
 				inode = fileDescriptorInode(_d()->planes_[0].fd);
 			if (fileDescriptorInode(plane.fd) != inode) {
+        LOG(Buffer, Debug) << "==== inode diff, set isContiguous false";
 				isContiguous = false;
 				break;
 			}
 		}
+#endif
 
 		offset += plane.length;
+    LOG(Buffer, Debug) << "==== set offset to " << offset;
 	}
 
 	LOG(Buffer, Debug)
