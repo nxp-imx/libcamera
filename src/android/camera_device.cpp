@@ -602,10 +602,17 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 		}
 #endif
 
+#define HAL_PIXEL_FORMAT_YCbCr_420_SP 0x103
 // use yuyv for preview
 #ifdef ANDROID
-		if (stream->format == HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED)
-			stream->format = HAL_PIXEL_FORMAT_YCbCr_422_I;
+		if (stream->format == HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED) {
+      if (stream->usage & GRALLOC_USAGE_HW_VIDEO_ENCODER)
+			  stream->format = HAL_PIXEL_FORMAT_YCbCr_420_SP;
+      else
+			  stream->format = HAL_PIXEL_FORMAT_YCbCr_422_I;
+    }
+
+    LOG(HAL, Info) << "==== set format to " << utils::hex(stream->format) << ", usage " << utils::hex(stream->usage);
 #endif
 
 		/* Defer handling of MJPEG streams until all others are known. */
