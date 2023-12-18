@@ -606,9 +606,9 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 // use yuyv for preview
 #ifdef ANDROID
 		if (stream->format == HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED) {
-   //   if (stream->usage & GRALLOC_USAGE_HW_VIDEO_ENCODER)
-	//		  stream->format = HAL_PIXEL_FORMAT_YCbCr_420_SP;
-   //   else
+      if (stream->usage & GRALLOC_USAGE_HW_VIDEO_ENCODER)
+			  stream->format = HAL_PIXEL_FORMAT_YCbCr_420_SP;
+      else
 			  stream->format = HAL_PIXEL_FORMAT_YCbCr_422_I;
     }
 
