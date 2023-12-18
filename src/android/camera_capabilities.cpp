@@ -1502,11 +1502,15 @@ PixelFormat CameraCapabilities::toPixelFormat(int format, uint32_t usage) const
 
 		const Camera3Format &camera3Format = mapItem.second;
 		const std::vector<PixelFormat> &libcameraFormats = camera3Format.libcameraFormats;
-		const std::vector<uint32_t> &usages = camera3Format.usages;
+	//	const std::vector<uint32_t> &usages = camera3Format.usages;
 		uint32_t size = libcameraFormats.size();
 
 		LOG(HAL,Info) << "==== size " << size;
 
+#if 1
+    return libcameraFormats[0];
+
+#else
 		if ((usage == 0) || (size == 1))
 			return libcameraFormats[0];
 
@@ -1518,6 +1522,8 @@ PixelFormat CameraCapabilities::toPixelFormat(int format, uint32_t usage) const
 			}
 		}
 		return libcameraFormats[0];
+#endif
+
 	}
 
 	LOG(HAL, Error) << "Requested format " << utils::hex(format) << " not supported";
