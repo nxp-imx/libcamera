@@ -26,10 +26,17 @@ using namespace libcamera;
 using namespace std;
 using namespace std::chrono_literals;
 
+static int dumpCount = 0;
+static int fileSize = 0;
 static void DumpData(void *buf, uint32_t bufSize)
 {
 	int  fd = -1;
 	const char *fileName = "/data/dump.yuyv";
+
+	dumpCount++;
+	if (dumpCount > 10)
+		return;
+
 
 	if ((buf == NULL) || (bufSize == 0))
 		return;
@@ -41,8 +48,14 @@ static void DumpData(void *buf, uint32_t bufSize)
 		 return;
 	}
 
-	write(fd, buf, bufSize);
+	int ret = write(fd, buf, bufSize);
+	if (ret < 0)
+		cout << "DumpData, write failed, ret " << ret << endl;
+
 	close(fd);
+
+	fileSize += bufSize;
+	cout << "==== dumpCount " << dumpCount << ", bufSize " << bufSize << ", fileSize " << fileSize << endl;
 
 	return;
 }
@@ -51,6 +64,11 @@ static void DumpData(void *buf, uint32_t bufSize)
 #define OV560_8QM_NAME "/base/bus@58000000/i2c@58226000/ov5640_mipi@3c"
 #define OV560_95_NAME "/base/soc@0/bus@42000000/i2c@42530000/ov5640_mipi@3c"
 #define AP1302_95_NAME "/base/soc/bus@42000000/i2c@42530000/ap1302_mipi@3c"
+
+#define CAP_FMT PixelFormat::fromString("NV12")
+#define CAP_WIDTH 1280
+#define CAP_HEIGHT 720
+#define CAP_FRAME_SIZE (CAP_WIDTH * CAP_HEIGHT * 3 / 2)
 
 namespace {
 
@@ -75,6 +93,15 @@ protected:
 
 		DumpData(virtAddr, plan.length);
 		munmap(virtAddr, plan.length);
+
+		if (plans.size() > 1) {
+			FrameBuffer::Plane plan2 = plans[1];
+			void *virtAddr2 = (void*)mmap(NULL, plan2.length, PROT_READ | PROT_WRITE, MAP_SHARED, plan2.fd.get(), plan2.offset);
+			cout << "plan2 offset " << plan2.offset << " length " << plan2.length << " fd " << plan2.fd.get() << " virt addr " << virtAddr2 << endl;
+
+			DumpData(virtAddr2, plan2.length);
+			munmap(virtAddr2, plan2.length);
+		}
 	}
 
 	void bufferComplete([[maybe_unused]] Request *request,
@@ -105,6 +132,7 @@ protected:
 		camera_->queueRequest(request);
 	}
 
+
 	int init() override
 	{
 		if (status_ != TestPass)
@@ -131,9 +159,9 @@ protected:
 		StreamConfiguration &cfg = config_->at(0);
 
 #ifdef ANDROID
-		cfg.pixelFormat = PixelFormat::fromString("YUYV");
-		cfg.size.width = 1280;
-		cfg.size.height = 720;
+		cfg.pixelFormat = CAP_FMT; 
+		cfg.size.width = CAP_WIDTH;
+		cfg.size.height = CAP_HEIGHT;
 #endif
 
 		if (camera_->acquire()) {
@@ -188,7 +216,7 @@ protected:
 		EventDispatcher *dispatcher = Thread::current()->eventDispatcher();
 
 		Timer timer;
-		timer.start(3000ms);
+		timer.start(20000ms);
     cout << "==== start timer" << endl;
 		while (timer.isRunning())
 			dispatcher->processEvents();
