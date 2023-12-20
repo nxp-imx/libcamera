@@ -976,8 +976,8 @@ int CameraDevice::processCaptureRequest(camera3_capture_request_t *camera3Reques
 	else
 		descriptor->settings_ = lastSettings_;
 
-	LOG(HAL, Debug) << "Queueing request " << descriptor->request_->cookie()
-			<< " with " << descriptor->buffers_.size() << " streams";
+	LOG(HAL, Debug) << "====xx Queueing request " << descriptor->request_->cookie()
+			<< " with " << descriptor->buffers_.size() << " streams, " << " frame_number " << camera3Request->frame_number;
 
 	/*
 	 * Process all the Direct and Internal streams first, they map directly
@@ -1346,6 +1346,7 @@ void CameraDevice::sendCaptureResults()
 		if (descriptor->status_ == Camera3RequestDescriptor::Status::Success)
 			captureResult.partial_result = 1;
 
+		LOG(HAL, Info) << "====xx process_capture_result " << ", buffers " << captureResult.num_output_buffers << ", descriptor " << (uint64_t)descriptor.get() << ", frame_number " << captureResult.frame_number;
 		callbacks_->process_capture_result(callbacks_, &captureResult);
 	}
 }
