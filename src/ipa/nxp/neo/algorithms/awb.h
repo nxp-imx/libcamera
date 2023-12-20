@@ -37,9 +37,28 @@ public:
 		     ControlList &metadata) override;
 
 private:
-	uint32_t estimateCCT(double red, double green, double blue);
+	/* \todo Make these structs available to all the ISPs ?
+		this is reused from IPU3 algorithm */
+	struct RGB {
+		RGB(double _R = 0, double _G = 0, double _B = 0)
+			: R(_R), G(_G), B(_B)
+		{
+		}
+		double R, G, B;
+		RGB &operator+=(RGB const &other)
+		{
+			R += other.R, G += other.G, B += other.B;
+			return *this;
+		}
+	};
 
-	bool rgbMode_;
+private:
+	void generateBlocks(const neoisp_meta_stats_s *stats);
+	void awbGreyWorld(IPAActiveState &activeState, IPAFrameContext &frameContext);
+	uint32_t estimateCCT(double red, double green, double blue);
+	static constexpr uint16_t gainDouble2Param(double gain);
+
+	std::vector<RGB> blocks_;
 };
 
 } /* namespace ipa::nxpneo::algorithms */

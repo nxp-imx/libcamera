@@ -28,7 +28,8 @@ struct IPASessionConfiguration {
 	} agc;
 
 	struct {
-		bool enabled;
+		/* ROI for statistics measurements */
+		struct neoisp_roi_cfg_s roi;
 	} awb;
 
 	struct {

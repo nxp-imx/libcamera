@@ -1,14 +1,15 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * Based on RkISP1 AGC/AEC mean-based control algorithm
- *     src/ipa/rkisp1/algorithms/awb.cpp
- * Copyright (C) 2021-2022, Ideas On Board
+ * Based on IPU3 AWB control algorithm
+ *     src/ipa/ipu3/algorithms/awb.cpp
+ * Copyright (C) 2021, Ideas On Board
  *
  * awb.cpp - AWB control algorithm
  * Copyright 2024 NXP
  */
 
 #include "awb.h"
+#include "nxp-neoisp-enums.h"
 
 #include <algorithm>
 #include <cmath>
@@ -34,11 +35,17 @@ namespace ipa::nxpneo::algorithms {
 
 LOG_DEFINE_CATEGORY(NxpNeoAwb)
 
-/* Minimum mean value below which AWB can't operate. */
-constexpr double kMeanMinThreshold = 2.0;
+  /**
+ * \class Awb
+ * \brief A Grey world white balance correction algorithm
+ *
+ * The Grey World algorithm assumes that the scene, in average, is neutral grey.
+ * Reference: Lam, Edmund & Fung, George. (2008). Automatic White Balancing in
+ * Digital Photography. 10.1201/9781420054538.ch10.
+ *
+ */
 
 Awb::Awb()
-	: rgbMode_(false)
 {
 }
 
@@ -48,8 +55,6 @@ Awb::Awb()
 int Awb::configure(IPAContext &context,
 		   const IPACameraSensorInfo &configInfo)
 {
-	(void)configInfo;
-
 	context.activeState.awb.gains.manual.red = 1.0;
 	context.activeState.awb.gains.manual.blue = 1.0;
 	context.activeState.awb.gains.manual.green = 1.0;
@@ -58,7 +63,18 @@ int Awb::configure(IPAContext &context,
 	context.activeState.awb.gains.automatic.green = 1.0;
 	context.activeState.awb.autoEnabled = true;
 
-	context.configuration.awb.enabled = true;
+	/*
+	 * Configuration for CTEMP Block Statistics
+	 * Limitation: ROI is defined as a centered rectangle
+	 * covering 3/4 of the image width and height.
+	 * When defining ROI as the full frame, ISP is providing 0 values
+	 * from Block Statistics.
+	 * \todo: recover to full frame definition if issue gets to be fixed
+	 */
+	context.configuration.awb.roi.xpos = configInfo.outputSize.width / 8;
+	context.configuration.awb.roi.ypos = configInfo.outputSize.height / 8;
+	context.configuration.awb.roi.width = 3 * configInfo.outputSize.width / 4;
+	context.configuration.awb.roi.height = 3 * configInfo.outputSize.height / 4;
 
 	return 0;
 }
@@ -100,14 +116,27 @@ void Awb::queueRequest(IPAContext &context,
 	}
 }
 
+constexpr uint16_t Awb::gainDouble2Param(double gain)
+{
+	/*
+	 * The colour gains applied by the OBWB for the four channels (Gr, R, B
+	 * and Gb) are expressed in the parameters structure as 16-bit integers
+	 * that store a fixed-point U8.8 value in the range [0, 256[.
+	 *
+	 * Pout = (Pin * gain) >> 8
+	 *
+	 * where 'Pin' is the input pixel value, 'Pout' the output pixel value,
+	 * and 'gain' the gain in the parameters structure as a 16-bit integer.
+	 */
+	return std::clamp(gain * 256, 0.0, 65535.0);
+}
+
 /**
  * \copydoc libcamera::ipa::Algorithm::prepare
  */
 void Awb::prepare(IPAContext &context, const uint32_t frame,
 		  IPAFrameContext &frameContext, neoisp_meta_params_s *params)
 {
-	(void)params;
-
 	/*
 	 * This is the latest time we can read the active state. This is the
 	 * most up-to-date automatic values we can read.
@@ -118,9 +147,43 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 		frameContext.awb.gains.blue = context.activeState.awb.gains.automatic.blue;
 	}
 
-	/* If we have already set the AWB measurement parameters, return. */
+	/* Configure OB_WB */
+	/* size of pixel components: set to default value */
+	/* \todo: check if WB gain should also applied on line path 0 and 1 */
+	params->regs.obwb[NEO_OBWB_MERGE_PATH].ctrl_obpp = NEO_OBWB_OBPP_20BPP;
+
+	/* Update the WB gains. */
+	params->features_cfg.obwb2_cfg = 1;
+	params->regs.obwb[NEO_OBWB_MERGE_PATH].r_ctrl_gain =
+					gainDouble2Param(frameContext.awb.gains.red);
+	params->regs.obwb[NEO_OBWB_MERGE_PATH].gr_ctrl_gain =
+					gainDouble2Param(frameContext.awb.gains.green);
+	params->regs.obwb[NEO_OBWB_MERGE_PATH].gb_ctrl_gain =
+					gainDouble2Param(frameContext.awb.gains.green);
+	params->regs.obwb[NEO_OBWB_MERGE_PATH].b_ctrl_gain =
+					gainDouble2Param(frameContext.awb.gains.blue);
+
+	/* If we have already set the CTEMP measurement parameters, return. */
 	if (frame > 0)
 		return;
+
+	/* Enable CTEMP measurements */
+	params->regs.ctemp.ctrl_enable = 1;
+	/* Enable color space correction on the input pixel components
+	   before measurements */
+	params->regs.ctemp.ctrl_cscon = 1;
+	/* size of pixel components: set to default value */
+	params->regs.ctemp.ctrl_ibpp = NEO_CTEMP_IBPP_20BPP;
+
+	/* Configure the Block Statistics measurements. */
+	params->regs.ctemp.roi = context.configuration.awb.roi;
+	params->regs.ctemp.stat_blk_size0_xsize =
+				params->regs.ctemp.roi.width / NEO_CTEMP_BLOCK_NB_X;
+	params->regs.ctemp.stat_blk_size0_ysize =
+				params->regs.ctemp.roi.height / NEO_CTEMP_BLOCK_NB_X;
+
+	/* Enable the CTEMP unit parameter update */
+	params->features_cfg.ctemp_cfg = 1;
 }
 
 uint32_t Awb::estimateCCT(double red, double green, double blue)
@@ -139,6 +202,85 @@ uint32_t Awb::estimateCCT(double red, double green, double blue)
 	return 449 * n * n * n + 3525 * n * n + 6823.3 * n + 5520.33;
 }
 
+/*
+ * Generate an RGB vector with the average values for each block.
+ */
+void Awb::generateBlocks(const neoisp_meta_stats_s *stats)
+{
+	neoisp_ctemp_mem_stats_s ctemp = stats->mems.ctemp;
+
+	blocks_.clear();
+
+	for (unsigned int i = 0; i < NEO_CTEMP_BLOCK_NB_X * NEO_CTEMP_BLOCK_NB_Y; i++) {
+		RGB block;
+		double counted = ctemp.ctemp_pix_cnt[i];
+		block.G = ctemp.ctemp_g_sum[i] / counted;
+		block.R = ctemp.ctemp_r_sum[i] / counted;
+		block.B = ctemp.ctemp_b_sum[i] / counted;
+		blocks_.push_back(block);
+	}
+}
+
+void Awb::awbGreyWorld(IPAActiveState &activeState, IPAFrameContext &frameContext)
+{
+	LOG(NxpNeoAwb, Debug) << "Grey world AWB";
+	/*
+	 * Make a separate list of the derivatives for each of red and blue, so
+	 * that we can sort them to exclude the extreme gains.
+	 */
+	std::vector<RGB> &redDerivative(blocks_);
+	std::vector<RGB> blueDerivative(redDerivative);
+	std::sort(redDerivative.begin(), redDerivative.end(),
+		  [](RGB const &a, RGB const &b) {
+			  return a.G * b.R < b.G * a.R;
+		  });
+	std::sort(blueDerivative.begin(), blueDerivative.end(),
+		  [](RGB const &a, RGB const &b) {
+			  return a.G * b.B < b.G * a.B;
+		  });
+
+	/* Average the middle half of the values. */
+	int discard = redDerivative.size() / 4;
+
+	RGB sumRed(0, 0, 0);
+	RGB sumBlue(0, 0, 0);
+	for (auto ri = redDerivative.begin() + discard,
+		  bi = blueDerivative.begin() + discard;
+	     ri != redDerivative.end() - discard; ri++, bi++)
+		sumRed += *ri, sumBlue += *bi;
+
+	/*
+	 * The ISP computes the AWB measurements after applying the colour gains,
+	 * divide by the gains that were used to get the raw means from the
+	 * sensor.
+	 */
+	sumRed.G /= frameContext.awb.gains.green;
+	sumRed.R /= frameContext.awb.gains.red;
+	sumBlue.G /= frameContext.awb.gains.green;
+	sumBlue.B /= frameContext.awb.gains.blue;
+
+	double redGain = sumRed.G / (sumRed.R + 1),
+	       blueGain = sumBlue.G / (sumBlue.B + 1);
+
+	/*
+	 * Color temperature is not relevant in Grey world but
+	 * still useful to estimate it :-)
+	 */
+	activeState.awb.temperatureK = estimateCCT(sumRed.R, sumRed.G, sumBlue.B);
+
+	/*
+	 * Clamp the gain values to the hardware, which expresses gains as Q8.8
+	 * unsigned integer values.
+	 */
+	redGain = std::clamp(redGain, 0.0, 65535.0 / 256);
+	blueGain = std::clamp(blueGain, 0.0, 65535.0 / 256);
+
+	activeState.awb.gains.automatic.red = redGain;
+	activeState.awb.gains.automatic.blue = blueGain;
+	/* Hardcode the green gain to 1.0. */
+	activeState.awb.gains.automatic.green = 1.0;
+}
+
 /**
  * \copydoc libcamera::ipa::Algorithm::process
  */
@@ -148,36 +290,10 @@ void Awb::process(IPAContext &context,
 		  const neoisp_meta_stats_s *stats,
 		  ControlList &metadata)
 {
-	(void)stats;
-
 	IPAActiveState &activeState = context.activeState;
-	double greenMean;
-	double redMean;
-	double blueMean;
 
-	/* \todo compute actual values from stats */
-	greenMean = 1.0;
-	redMean = 1.0;
-	blueMean = 1.0;
-
-	activeState.awb.temperatureK = estimateCCT(redMean, greenMean, blueMean);
-
-	/*
-	 * Estimate the red and blue gains to apply in a grey world. The green
-	 * gain is hardcoded to 1.0. Avoid divisions by zero by clamping the
-	 * divisor to a minimum value of 1.0.
-	 */
-	double redGain = greenMean / std::max(redMean, 1.0);
-	double blueGain = greenMean / std::max(blueMean, 1.0);
-
-	/* Filter the values to avoid oscillations. */
-	double speed = 0.2;
-	redGain = speed * redGain + (1 - speed) * activeState.awb.gains.automatic.red;
-	blueGain = speed * blueGain + (1 - speed) * activeState.awb.gains.automatic.blue;
-
-	activeState.awb.gains.automatic.red = redGain;
-	activeState.awb.gains.automatic.blue = blueGain;
-	activeState.awb.gains.automatic.green = 1.0;
+	generateBlocks(stats);
+	awbGreyWorld(activeState, frameContext);
 
 	frameContext.awb.temperatureK = activeState.awb.temperatureK;
 
@@ -189,8 +305,7 @@ void Awb::process(IPAContext &context,
 	metadata.set(controls::ColourTemperature, frameContext.awb.temperatureK);
 
 	LOG(NxpNeoAwb, Debug) << std::showpoint
-		<< "Means [" << redMean << ", " << greenMean << ", " << blueMean
-		<< "], gains [" << activeState.awb.gains.automatic.red << ", "
+		<< "AWB Gains [" << activeState.awb.gains.automatic.red << ", "
 		<< activeState.awb.gains.automatic.green << ", "
 		<< activeState.awb.gains.automatic.blue << "], temp "
 		<< frameContext.awb.temperatureK << "K";
