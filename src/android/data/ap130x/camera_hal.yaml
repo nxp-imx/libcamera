@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: CC0-1.0
+
+cameras:
+  "/base/soc/bus@42000000/i2c@42530000/ap1302_mipi@3c":
+    location: back
+    rotation: 0
