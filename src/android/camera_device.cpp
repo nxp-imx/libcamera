@@ -671,7 +671,7 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 		CameraStream::Type type = CameraStream::Type::Internal;
 		int index = -1;
 
-#if 0
+#if 1
 		/* Search for a compatible stream in the non-JPEG ones. */
 		for (size_t i = 0; i < streamConfigs.size(); ++i) {
 			Camera3StreamConfig &streamConfig = streamConfigs[i];
@@ -682,7 +682,7 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 			 * the encoder.
 			 */
 			if (cfg.size.width != jpegStream->width ||
-			    cfg.size.height != jpegStream->height)
+			    cfg.size.height != jpegStream->height || cfg.pixelFormat != formats::NV12)
 				continue;
 
 			LOG(HAL, Info)
