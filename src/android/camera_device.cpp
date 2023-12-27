@@ -653,6 +653,7 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 			iter->streams[0].stream->usage |= GRALLOC_USAGE_SW_READ_OFTEN;
 			stream->usage |= GRALLOC_USAGE_SW_WRITE_OFTEN;
 			iter->streams.push_back({ stream, CameraStream::Type::Mapped });
+      LOG(HAL, Info) << "==== configure, type Mapped " << ", camera3_stream_t " << stream;  
 			continue;
 		}
 
@@ -661,6 +662,8 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 		streamConfig.config.size = size;
 		streamConfig.config.pixelFormat = format;
 		streamConfigs.push_back(std::move(streamConfig));
+
+    LOG(HAL, Info) << "==== configure, type Direct " << ", camera3_stream_t " << stream;  
 	}
 
 	/* Now handle the MJPEG streams, adding a new stream if required. */
@@ -716,7 +719,7 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 			streamConfigs.push_back(std::move(streamConfig));
 
 			LOG(HAL, Info) << "Adding " << streamConfig.config.toString()
-				       << " for MJPEG support";
+				       << " for MJPEG support" << ", camera3_stream_t " << jpegStream;
 
 			type = CameraStream::Type::Internal;
 			index = streamConfigs.size() - 1; // ??? no need -1
@@ -738,6 +741,7 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 					      stream.stream, sourceStream,
 					      config->size() - 1);
 			stream.stream->priv = static_cast<void *>(&streams_.back());
+      LOG(HAL, Info) << "==== " << __func__ << ", CameraStream " << &streams_.back() << ", camera3_stream_t " << stream.stream; 
 
 			/*
 			 * The streamConfig.streams vector contains as its first
@@ -967,6 +971,8 @@ int CameraDevice::processCaptureRequest(camera3_capture_request_t *camera3Reques
 	auto descriptor = std::make_unique<Camera3RequestDescriptor>(camera_.get(),
 								     camera3Request);
 
+  const native_handle_t *hnd = *camera3Request->output_buffers[0].buffer;
+  LOG(HAL, Info) << "====xxxx processCaptureRequest fd " << hnd->data[0] << ", unic_id " <<  hnd->data[38] << ", descriptor " << descriptor.get();
 	/*
 	 * \todo The Android request model is incremental, settings passed in
 	 * previous requests are to be effective until overridden explicitly in
@@ -1009,6 +1015,8 @@ int CameraDevice::processCaptureRequest(camera3_capture_request_t *camera3Reques
 
 		MutexLocker lock(descriptor->streamsProcessMutex_);
 
+    int streamType = (int)cameraStream->type();
+    LOG(HAL, Debug) << "==== cameraStream->type() " << streamType << ", cameraStream " << cameraStream << ", camera3_stream_t " << camera3Stream;
 		switch (cameraStream->type()) {
 		case CameraStream::Type::Mapped:
 			/* Mapped streams will be handled in the next loop. */
@@ -1028,6 +1036,7 @@ int CameraDevice::processCaptureRequest(camera3_capture_request_t *camera3Reques
 			frameBuffer = buffer.frameBuffer.get();
 			acquireFence = std::move(buffer.fence);
 			LOG(HAL, Debug) << ss.str() << " (direct)";
+      LOG(HAL, Debug) << "====xxxx direct stream, buffer fd " << frameBuffer->planes()[0].fd.get();
 			break;
 
 		case CameraStream::Type::Internal:
@@ -1147,6 +1156,7 @@ int CameraDevice::processCaptureRequest(camera3_capture_request_t *camera3Reques
 		descriptors_.push(std::move(descriptor));
 	}
 
+  LOG(HAL, Info) << "==== call camera_->queueRequest "; 
 	camera_->queueRequest(request);
 
 	return 0;
@@ -1345,10 +1355,14 @@ void CameraDevice::sendCaptureResults()
 		captureResult.num_output_buffers = resultBuffers.size();
 		captureResult.output_buffers = resultBuffers.data();
 
+    const native_handle_t *hnd = *captureResult.output_buffers[0].buffer;
+    LOG(HAL, Info) << "====xxxx sendCaptureResults, fd " << hnd->data[0] << ", unic_id " <<  hnd->data[38] <<
+       ", descriptor " << (uint64_t)descriptor.get() << ", frame_number " << captureResult.frame_number;
+
 		if (descriptor->status_ == Camera3RequestDescriptor::Status::Success)
 			captureResult.partial_result = 1;
 
-		LOG(HAL, Info) << "====xx process_capture_result " << ", buffers " << captureResult.num_output_buffers << ", descriptor " << (uint64_t)descriptor.get() << ", frame_number " << captureResult.frame_number;
+	//	LOG(HAL, Info) << "====xx process_capture_result " << ", buffers " << captureResult.num_output_buffers << ", descriptor " << (uint64_t)descriptor.get() << ", frame_number " << captureResult.frame_number;
 		callbacks_->process_capture_result(callbacks_, &captureResult);
 	}
 }

@@ -10,9 +10,10 @@
 #include <libcamera/base/span.h>
 
 #include "camera_buffer.h"
+#include <libcamera/base/log.h>
 
 using namespace libcamera;
-
+LOG_DECLARE_CATEGORY(HAL)
 /*
  * \class Camera3RequestDescriptor
  *
@@ -125,6 +126,9 @@ Camera3RequestDescriptor::Camera3RequestDescriptor(
 		CameraStream *stream =
 			static_cast<CameraStream *>(buffer.stream->priv);
 
+    const native_handle_t *hnd = *buffer.buffer;
+    LOG(HAL, Info) << "==== Camera3RequestDescriptor ctor, CameraStream " << stream << ", fd " << hnd->data[0] << ", unic_id " <<  hnd->data[38]; 
+
 		buffers_.emplace_back(stream, buffer, this);
 	}
 
@@ -184,6 +188,8 @@ Camera3RequestDescriptor::StreamBuffer::StreamBuffer(
 	: stream(cameraStream), camera3Buffer(buffer.buffer),
 	  fence(buffer.acquire_fence), request(requestDescriptor)
 {
+    const native_handle_t *hnd = *camera3Buffer;
+    LOG(HAL, Info) << "====  StreamBufferctor, CameraStream " << stream << ", fd " << hnd->data[0] << ", unic_id " <<  hnd->data[38]; 
 }
 
 Camera3RequestDescriptor::StreamBuffer::~StreamBuffer() = default;

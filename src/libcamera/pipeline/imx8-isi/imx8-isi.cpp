@@ -1173,6 +1173,7 @@ void PipelineHandlerISI::stopDevice(Camera *camera)
 int PipelineHandlerISI::queueRequestDevice(Camera *camera, Request *request)
 {
 	for (auto &[stream, buffer] : request->buffers()) {
+		LOG(ISI, Info) << "====xxxx queueRequestDevice, buffers " << request->buffers().size() << ", fd " << buffer->planes()[0].fd.get();  
 		Pipe *pipe = pipeFromStream(camera, stream);
 
 		int ret = pipe->capture->queueBuffer(buffer);
@@ -1187,7 +1188,7 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 {
 	DeviceMatch dm("mxc-isi");
 	dm.add("crossbar");
-	dm.add("mxc_isi.0");
+	dm.add("mxc_isi.0"); // fix me
 	dm.add("mxc_isi.0.capture");
 
   LOG(ISI, Info) << "==== enter " << __func__;
@@ -1422,7 +1423,7 @@ void PipelineHandlerISI::bufferReady(FrameBuffer *buffer)
 	if (request->hasPendingBuffers())
 		return;
 
-  LOG(ISI, Info) << "==== PipelineHandlerISI::bufferReady, call completeRequest";
+  LOG(ISI, Info) << "====xxxx PipelineHandlerISI::bufferReady, call completeRequest. buffer cookie " << buffer->cookie() << ", fd " << buffer->planes()[0].fd.get();
 	completeRequest(request);
 }
 
