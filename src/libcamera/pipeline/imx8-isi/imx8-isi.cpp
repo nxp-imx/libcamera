@@ -11,6 +11,11 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/mman.h>
 
 #include <libcamera/base/log.h>
 #include <libcamera/base/utils.h>
@@ -30,6 +35,8 @@
 #include "libcamera/internal/v4l2_videodevice.h"
 
 #include "linux/media-bus-format.h"
+
+using namespace std;
 
 #define MYDBG LOG(ISI, Info) << "==== " << __FILE__ << ": " << __LINE__;
 #define EVK95_CAMERA_ISI_IDEX 2
@@ -1342,6 +1349,64 @@ PipelineHandlerISI::Pipe *PipelineHandlerISI::pipeFromStream(Camera *camera,
 	return &pipes_[pipeIndex];
 }
 
+static int dumpCount = 0;
+static int fileSize = 0;
+static void DumpData(void *buf, uint32_t bufSize)
+{
+  int  fd = -1;
+  const char *fileName = "/data/isi.yuyv";
+
+	LOG(ISI, Info) << "==== enter DumpData, bufSize " << bufSize;		
+
+  if (dumpCount >= 10)
+    return;
+
+
+  if ((buf == NULL) || (bufSize == 0))
+    return;
+
+  fd = open(fileName, O_CREAT|O_APPEND|O_WRONLY, S_IRWXU|S_IRWXG);
+  //fd = open(fileName, O_CREAT|O_WRONLY, S_IRWXU|S_IRWXG);
+  if (fd < 0) {
+    LOG(ISI, Info) << "DumpData, can't open file " << fileName;
+     return;
+  }
+
+  int ret = write(fd, buf, bufSize);
+  if (ret < 0)
+    LOG(ISI, Info) << "DumpData, write failed, ret " << ret;
+
+  close(fd);
+
+  fileSize += bufSize;
+
+  dumpCount++;
+  LOG(ISI, Info) << "==== dumpCount " << dumpCount << ", bufSize " << bufSize << ", fileSize " << fileSize;
+
+  return;
+}
+
+void dumpBuffer(FrameBuffer *buffer)
+{
+  auto plans = buffer->planes();
+  FrameBuffer::Plane plan = plans[0];
+  void *virtAddr = (void*)mmap(NULL, plan.length, PROT_READ | PROT_WRITE, MAP_SHARED, plan.fd.get(), plan.offset);
+  LOG(ISI, Info) << "plan offset " << plan.offset << " length " << plan.length << " fd " << plan.fd.get() << " virt addr " << virtAddr;
+
+  DumpData(virtAddr, plan.length);
+  munmap(virtAddr, plan.length);
+
+  if (plans.size() > 1) {
+    FrameBuffer::Plane plan2 = plans[1];
+    void *virtAddr2 = (void*)mmap(NULL, plan2.length, PROT_READ | PROT_WRITE, MAP_SHARED, plan2.fd.get(), plan2.offset);
+    LOG(ISI, Info) << "plan2 offset " << plan2.offset << " length " << plan2.length << " fd " << plan2.fd.get() << " virt addr " << virtAddr2;
+
+    DumpData(virtAddr2, plan2.length);
+    munmap(virtAddr2, plan2.length);
+  }
+}
+
+
 void PipelineHandlerISI::bufferReady(FrameBuffer *buffer)
 {
 	Request *request = buffer->request();
@@ -1352,6 +1417,7 @@ void PipelineHandlerISI::bufferReady(FrameBuffer *buffer)
 		metadata.set(controls::SensorTimestamp,
 			     buffer->metadata().timestamp);
 
+	dumpBuffer(buffer);
 	completeBuffer(request, buffer);
 	if (request->hasPendingBuffers())
 		return;
