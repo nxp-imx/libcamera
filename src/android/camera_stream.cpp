@@ -79,6 +79,7 @@ const StreamConfiguration &CameraStream::configuration() const
 
 Stream *CameraStream::stream() const
 {
+  LOG(HAL, Info) << "==== call configuration().stream(), cfg " << &configuration();
 	return configuration().stream();
 }
 
@@ -132,7 +133,7 @@ int CameraStream::configure()
 	allocator_ = std::make_unique<PlatformFrameBufferAllocator>(cameraDevice_);
 	mutex_ = std::make_unique<Mutex>();
 
-  LOG(HAL, Info) << "==== camera3Stream_ " << camera3Stream_ << ", max_buffers " << camera3Stream_->max_buffers << ", set to 4";
+  LOG(HAL, Info) << "==== camera3Stream_ " << camera3Stream_ << ", max_buffers " << camera3Stream_->max_buffers << ", set to 4, this " << this << ", allocator_ " << allocator_.get();
 
 	camera3Stream_->max_buffers = 4; //configuration().bufferCount;
 
@@ -210,8 +211,11 @@ void CameraStream::flush()
 
 FrameBuffer *CameraStream::getBuffer()
 {
-	if (!allocator_)
+  LOG(HAL, Info) << "==== getBuffer, allocator_ " << allocator_.get() << ", this " << this;
+	if (!allocator_) {  
+    LOG(HAL, Error) << "==== getBuffer, allocator_ NULL, this " << this;
 		return nullptr;
+  }
 
 	MutexLocker locker(*mutex_);
 
@@ -221,10 +225,12 @@ FrameBuffer *CameraStream::getBuffer()
 		 *
 		 * YCBCR_420 is the source format for both the JPEG and the YUV
 		 * post-processors.
-		 *
+		 *:w
+
 		 * \todo Store a reference to the format of the source stream
 		 * instead of hardcoding.
 		 */
+    LOG(HAL, Info) << "==== allocate size " << configuration().size << ", this " << this;
 		auto frameBuffer = allocator_->allocate(HAL_PIXEL_FORMAT_YCBCR_420_888,
 							configuration().size,
 							camera3Stream_->usage);

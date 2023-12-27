@@ -51,8 +51,8 @@ struct StreamConfiguration {
 
 	std::optional<ColorSpace> colorSpace;
 
-	Stream *stream() const { return stream_; }
-	void setStream(Stream *stream) { stream_ = stream; }
+	Stream *stream() const; // { LOG(Stream, Info) << "==== this " << this << " get stream " << stream_; return stream_; }
+	void setStream(Stream *stream); // { stream_ = stream; LOG(Stream, Info) << "==== this " << this << " setStream " << stream_; }
 	const StreamFormats &formats() const { return formats_; }
 
 	std::string toString() const;

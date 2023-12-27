@@ -593,6 +593,7 @@ ISICameraConfiguration::validateYuv(std::set<Stream *> &availableStreams,
 	StreamConfiguration &yuvConfig = config_[0];
 	PixelFormat yuvPixelFormat = yuvConfig.pixelFormat;
 
+  LOG(ISI, Debug) << "==== validateYuv";
 	/*
 	 * Make sure the sensor can produce a compatible YUV/RGB media bus
 	 * format. If the sensor can only produce RAW Bayer we can only fail
@@ -641,6 +642,7 @@ ISICameraConfiguration::validateYuv(std::set<Stream *> &availableStreams,
 		/* Assign streams in the order they are presented. */
 		auto stream = availableStreams.extract(availableStreams.begin());
 		cfg.setStream(stream.value());
+    LOG(ISI, Debug) << "cfg " << &cfg << " set stream " << &stream << ", value " << stream.value();
 	}
 
 	return status;

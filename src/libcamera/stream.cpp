@@ -294,6 +294,8 @@ StreamConfiguration::StreamConfiguration(const StreamFormats &formats)
 {
 }
 
+Stream *StreamConfiguration::stream() const { LOG(Stream, Info) << "==== this " << this << " get stream " << stream_; return stream_; }
+void StreamConfiguration::setStream(Stream *stream) { stream_ = stream; LOG(Stream, Info) << "==== this " << this << " setStream " << stream_; }
 /**
  * \var StreamConfiguration::size
  * \brief Stream size in pixels

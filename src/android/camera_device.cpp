@@ -665,9 +665,10 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 
 	/* Now handle the MJPEG streams, adding a new stream if required. */
 	if (jpegStream) {
-		CameraStream::Type type;
+		CameraStream::Type type = CameraStream::Type::Internal;
 		int index = -1;
 
+#if 0
 		/* Search for a compatible stream in the non-JPEG ones. */
 		for (size_t i = 0; i < streamConfigs.size(); ++i) {
 			Camera3StreamConfig &streamConfig = streamConfigs[i];
@@ -695,6 +696,7 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 			stream->usage |= GRALLOC_USAGE_SW_READ_OFTEN;
 			break;
 		}
+#endif
 
 		/*
 		 * Without a compatible match for JPEG encoding we must
@@ -1046,7 +1048,7 @@ int CameraDevice::processCaptureRequest(camera3_capture_request_t *camera3Reques
 		}
 
 		if (!frameBuffer) {
-			LOG(HAL, Error) << "Failed to create frame buffer";
+			LOG(HAL, Error) << "==== Failed to create frame buffer";
 			return -ENOMEM;
 		}
 

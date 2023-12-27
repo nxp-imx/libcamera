@@ -148,6 +148,8 @@ PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
 	uint64_t phyAddr = 0;
 	uint64_t virtAddr = 0;
 
+  LOG(HAL, Info) << __func__ << ": allocate, ionSize " << ionSize;
+
 	fsl::Allocator *allocator = fsl::Allocator::getInstance();
 	if (allocator == NULL) {
 	    LOG(HAL, Error) << __func__ << ": fsl::allocator invalid";

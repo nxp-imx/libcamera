@@ -65,9 +65,9 @@ static void DumpData(void *buf, uint32_t bufSize)
 #define OV560_95_NAME "/base/soc@0/bus@42000000/i2c@42530000/ov5640_mipi@3c"
 #define AP1302_95_NAME "/base/soc/bus@42000000/i2c@42530000/ap1302_mipi@3c"
 
-#define CAP_FMT PixelFormat::fromString("NV12")
-#define CAP_WIDTH 1280
-#define CAP_HEIGHT 720
+#define CAP_FMT PixelFormat::fromString("YUYV")
+#define CAP_WIDTH 640 //1280
+#define CAP_HEIGHT 480 //720
 #define CAP_FRAME_SIZE (CAP_WIDTH * CAP_HEIGHT * 3 / 2)
 
 namespace {
