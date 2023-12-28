@@ -1756,6 +1756,7 @@ int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer)
  */
 void V4L2VideoDevice::bufferAvailable()
 {
+  LOG(V4L2, Info) << "==== bufferAvailable, this " << this;
 	FrameBuffer *buffer = dequeueBuffer();
 	if (!buffer)
 		return;

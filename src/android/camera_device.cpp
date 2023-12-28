@@ -1051,6 +1051,7 @@ int CameraDevice::processCaptureRequest(camera3_capture_request_t *camera3Reques
 			buffer.internalBuffer = frameBuffer;
 			LOG(HAL, Debug) << ss.str() << " (internal)";
 
+      LOG(HAL, Info) << "==== descriptor " << descriptor.get();
 			descriptor->pendingStreamsToProcess_.insert(
 				{ cameraStream, &buffer });
 			break;

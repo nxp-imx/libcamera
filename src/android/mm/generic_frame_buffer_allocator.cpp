@@ -145,8 +145,8 @@ PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
 		return nullptr;
 	
 	int sharedFd;
-	uint64_t phyAddr = 0;
-	uint64_t virtAddr = 0;
+//	uint64_t phyAddr = 0;
+//	uint64_t virtAddr = 0;
 
   LOG(HAL, Info) << __func__ << ": allocate, ionSize " << ionSize << " with flag fsl::MFLAGS_CONTIGUOUS | fsl::MFLAGS_CACHEABLE";
 
@@ -180,8 +180,8 @@ PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
 #endif
 
 	SetBufferHandle(ionSize, sharedFd, handle);
-	
-	std::cout << __func__ << ": fd:" << sharedFd << ", virt:" << std::hex << virtAddr << ", phy:" << std::hex << phyAddr << ", ionSize:" << ionSize << \
+
+	LOG(HAL, Info) << __func__ << ": fd:" << sharedFd << ", ionSize:" << ionSize <<
 		", width:" << size.width << ", height:" << size.height << ", format:" << halPixelFormat;
 	
 
