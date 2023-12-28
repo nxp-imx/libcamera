@@ -1567,7 +1567,6 @@ int V4L2VideoDevice::releaseBuffers()
 	return requestBuffers(0, memoryType_);
 }
 
-extern void dumpBuffer(FrameBuffer *buffer);
 /**
  * \brief Queue a buffer to the video device
  * \param[in] buffer The buffer to be queued
@@ -1725,7 +1724,7 @@ int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer)
 		buf.timestamp.tv_usec = (metadata.timestamp / 1000) % 1000000;
 	}
 
-	LOG(V4L2, Debug) << "Queueing buffer " << buf.index << ", this " << this << ", tid " << gettid();
+	LOG(V4L2, Debug) << "Queueing buffer " << buf.index << ", this " << this;
 
 	ret = ioctl(VIDIOC_QBUF, &buf);
 	if (ret < 0) {
@@ -1734,14 +1733,6 @@ int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer)
 			<< strerror(-ret);
 		return ret;
 	}
-
-  if (planes.size() == 2) {
-    usleep(500000);
-    ret = ioctl(VIDIOC_DQBUF, &buf);
-    LOG(V4L2, Debug) << "==== VIDIOC_DQBUF, buf index  " << buf.index << ", this " << this << ", ret " << ret;
-    if (ret == 0)
-      dumpBuffer(buffer);
-  }
 
 	if (queuedBuffers_.empty()) {
 		fdBufferNotifier_->setEnabled(true);
@@ -1797,7 +1788,7 @@ FrameBuffer *V4L2VideoDevice::dequeueBuffer()
 		buf.m.planes = planes;
 	}
 
-  LOG(V4L2, Info) << "==== dequeueBuffer, type " << buf.type << ", memory " << buf.memory << " multiPlanar " << multiPlanar << ", this " << this << ", tid " << gettid();
+  LOG(V4L2, Info) << "==== dequeueBuffer, type " << buf.type << ", memory " << buf.memory << " multiPlanar " << multiPlanar << ", this " << this;
 	ret = ioctl(VIDIOC_DQBUF, &buf);
 	if (ret < 0) {
 		LOG(V4L2, Error)

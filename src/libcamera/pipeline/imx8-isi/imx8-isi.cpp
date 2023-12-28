@@ -1418,7 +1418,7 @@ void PipelineHandlerISI::bufferReady(FrameBuffer *buffer)
 		metadata.set(controls::SensorTimestamp,
 			     buffer->metadata().timestamp);
 
-	//dumpBuffer(buffer);
+	dumpBuffer(buffer);
 	completeBuffer(request, buffer);
 	if (request->hasPendingBuffers())
 		return;
