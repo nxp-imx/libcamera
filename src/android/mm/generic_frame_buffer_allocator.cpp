@@ -148,7 +148,7 @@ PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
 	uint64_t phyAddr = 0;
 	uint64_t virtAddr = 0;
 
-  LOG(HAL, Info) << __func__ << ": allocate, ionSize " << ionSize;
+  LOG(HAL, Info) << __func__ << ": allocate, ionSize " << ionSize << " with flag fsl::MFLAGS_CONTIGUOUS | fsl::MFLAGS_CACHEABLE";
 
 	fsl::Allocator *allocator = fsl::Allocator::getInstance();
 	if (allocator == NULL) {
@@ -156,7 +156,7 @@ PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
 	    return nullptr;
 	}
 	
-	sharedFd = allocator->allocMemory(ionSize, MEM_ALIGN, fsl::MFLAGS_CONTIGUOUS);
+	sharedFd = allocator->allocMemory(ionSize, MEM_ALIGN, fsl::MFLAGS_CONTIGUOUS | fsl::MFLAGS_CACHEABLE);
 	if (sharedFd < 0) {
 	    LOG(HAL, Error) << __func__ << ": allocMemory failed.";
 	    return nullptr;
