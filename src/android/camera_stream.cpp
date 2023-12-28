@@ -308,7 +308,10 @@ void CameraStream::PostProcessorWorker::run()
 {
 	MutexLocker locker(mutex_);
 
+  LOG(HAL, Info) << "==== enter CameraStream::PostProcessorWorker::run(), this " << this;
+
 	while (1) {
+    LOG(HAL, Info) << "==== run loop, this " << this;
 		cv_.wait(locker, [&]() LIBCAMERA_TSA_REQUIRES(mutex_) {
 			return state_ != State::Running || !requests_.empty();
 		});
@@ -320,6 +323,7 @@ void CameraStream::PostProcessorWorker::run()
 		requests_.pop();
 		locker.unlock();
 
+    LOG(HAL, Info) << "==== call process for stream %p" << this;
 		postProcessor_->process(streamBuffer);
 
 		locker.lock();

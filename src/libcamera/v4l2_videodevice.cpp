@@ -639,7 +639,7 @@ int V4L2VideoDevice::open()
 
 	LOG(V4L2, Debug)
 		<< "Opened device " << caps_.bus_info() << ": "
-		<< caps_.driver() << ": " << caps_.card();
+		<< caps_.driver() << ": " << caps_.card() << ", this " << this;
 
 	ret = initFormats();
 	if (ret)
@@ -728,7 +728,7 @@ int V4L2VideoDevice::open(SharedFD handle, enum v4l2_buf_type type)
 
 	LOG(V4L2, Debug)
 		<< "Opened device " << caps_.bus_info() << ": "
-		<< caps_.driver() << ": " << caps_.card();
+		<< caps_.driver() << ": " << caps_.card() << ", this " << this << ", bufferType_ " << bufferType_;
 
 	ret = initFormats();
 	if (ret)
@@ -1590,7 +1590,7 @@ int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer)
 	struct v4l2_buffer buf = {};
 	int ret;
 
-	LOG(V4L2, Info) << "==== enter V4L2VideoDevice::queueBuffer";
+	LOG(V4L2, Info) << "==== enter V4L2VideoDevice::queueBuffer, this " << this;
 
 	if (state_ == State::Stopping) {
 		LOG(V4L2, Error) << "Device is in a stopping state.";
@@ -1618,7 +1618,7 @@ int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer)
 	buf.memory = memoryType_;
 	buf.field = V4L2_FIELD_NONE;
 
-	LOG(V4L2, Info) << "==== buf index " << buf.index << ", type " << buf.type << ", memory " << buf.memory;
+	LOG(V4L2, Info) << "==== buf index " << buf.index << ", type " << buf.type << ", memory " << buf.memory << ", this " << this;
 
 	bool multiPlanar = V4L2_TYPE_IS_MULTIPLANAR(buf.type);
 	const std::vector<FrameBuffer::Plane> &planes = buffer->planes();
@@ -1724,7 +1724,7 @@ int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer)
 		buf.timestamp.tv_usec = (metadata.timestamp / 1000) % 1000000;
 	}
 
-	LOG(V4L2, Debug) << "Queueing buffer " << buf.index;
+	LOG(V4L2, Debug) << "Queueing buffer " << buf.index << ", this " << this;
 
 	ret = ioctl(VIDIOC_QBUF, &buf);
 	if (ret < 0) {
@@ -1788,6 +1788,7 @@ FrameBuffer *V4L2VideoDevice::dequeueBuffer()
 		buf.m.planes = planes;
 	}
 
+  LOG(V4L2, Info) << "==== dequeueBuffer, type " << buf.type << ", memory " << buf.memory << " multiPlanar " << multiPlanar << ", this " << this;
 	ret = ioctl(VIDIOC_DQBUF, &buf);
 	if (ret < 0) {
 		LOG(V4L2, Error)
@@ -1795,7 +1796,7 @@ FrameBuffer *V4L2VideoDevice::dequeueBuffer()
 		return nullptr;
 	}
 
-	LOG(V4L2, Debug) << "Dequeuing buffer " << buf.index;
+	LOG(V4L2, Debug) << "Dequeuing buffer " << buf.index << ", this " << this;
 
 	/*
 	 * If the video node fails to stream-on successfully (which can occur
@@ -1916,6 +1917,9 @@ FrameBuffer *V4L2VideoDevice::dequeueBuffer()
 	} else {
 		metadata.planes()[0].bytesused = buf.bytesused;
 	}
+
+  
+  LOG(V4L2, Debug) << "Dequeuing buffer ok " << buf.index << ", this " << this;
 
 	return buffer;
 }

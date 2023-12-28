@@ -1167,6 +1167,8 @@ void CameraDevice::requestComplete(Request *request)
 	Camera3RequestDescriptor *descriptor =
 		reinterpret_cast<Camera3RequestDescriptor *>(request->cookie());
 
+  LOG(HAL, Info) << "==== enter requestComplete(), request " << request << ", descriptor " << descriptor << ", buffers " << descriptor->buffers_.size();
+
 	/*
 	 * Prepare the capture result for the Android camera stack.
 	 *
@@ -1191,6 +1193,7 @@ void CameraDevice::requestComplete(Request *request)
 				buffer.fence = fence->release();
 		}
 		buffer.status = Camera3RequestDescriptor::Status::Success;
+    LOG(HAL, Info) << "==== set Success for buffer of stream " << stream; 
 	}
 
 	/*
@@ -1266,6 +1269,7 @@ void CameraDevice::requestComplete(Request *request)
 		buffer->srcBuffer = src;
 
 		++iter;
+    LOG(HAL, Info) << "==== call stream->process for " << stream;
 		int ret = stream->process(buffer);
 		if (ret) {
 			setBufferStatus(*buffer, Camera3RequestDescriptor::Status::Error);
