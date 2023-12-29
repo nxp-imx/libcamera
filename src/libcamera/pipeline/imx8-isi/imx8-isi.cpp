@@ -985,8 +985,27 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 
   //LOG(ISI, Info) << "==== PipelineHandlerISI::configure(): stream num " << c->
 
-	/* All links are immutable except the sensor -> csis link. */
-	const MediaPad *sensorSrc = data->sensor_->entity()->getPadByIndex(0);
+	/* All links are immutable except the sensor -> csis link.
+- entity 115: ap130x.2-003c (3 pads, 2 links, 0 routes)
+              type V4L2 subdev subtype Unknown flags 0
+              device node name /dev/v4l-subdev11
+        pad0: Sink
+                [stream:0 fmt:SGRBG12_1X12/1280x800 field:none colorspace:srgb
+                 crop.bounds:(0,0)/1280x800
+                 crop:(0,0)/1280x800]
+                <- "ar0144 0":0 [ENABLED,IMMUTABLE]
+        pad1: Sink
+                [stream:0 fmt:SGRBG12_1X12/1280x800 field:none colorspace:srgb
+                 crop.bounds:(0,0)/1280x800
+                 crop:(0,0)/1280x800]
+        pad2: Source
+                [stream:0 fmt:UYVY8_1X16/1280x800 field:none colorspace:srgb
+                 crop.bounds:(0,0)/1280x800
+                 crop:(0,0)/1280x800]
+                -> "csidev-4ad30000.csi":0 [ENABLED]
+
+*/
+	const MediaPad *sensorSrc = data->sensor_->entity()->getPadByIndex(2);
 	sensorSrc->links()[0]->setEnabled(true);
 
 	/*
