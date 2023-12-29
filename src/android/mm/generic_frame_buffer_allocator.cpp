@@ -4,6 +4,49 @@
  *
  * generic_camera_buffer.cpp - Allocate FrameBuffer using gralloc API
  */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wc++98-compat-extra-semi"
+#pragma GCC diagnostic ignored "-Wextra-semi"
+#pragma GCC diagnostic ignored "-Wsign-compare"
+#include "graphics_ext.h"
+#include "Memory.h"
+#include "MemoryDesc.h"
+#include "Allocator.h"
+
+//#include "android/log.h"
+typedef enum log_id {
+  LOG_ID_MIN = 0,
+
+  /** The main log buffer. This is the only log buffer available to apps. */
+  LOG_ID_MAIN = 0,
+  /** The radio log buffer. */
+  LOG_ID_RADIO = 1,
+  /** The event log buffer. */
+  LOG_ID_EVENTS = 2,
+  /** The system log buffer. */
+  LOG_ID_SYSTEM = 3,
+  /** The crash log buffer. */
+  LOG_ID_CRASH = 4,
+  /** The statistics log buffer. */
+  LOG_ID_STATS = 5,
+  /** The security log buffer. */
+  LOG_ID_SECURITY = 6,
+  /** The kernel log buffer. */
+  LOG_ID_KERNEL = 7,
+
+  LOG_ID_MAX,
+
+  /** Let the logging function choose the best log target. */
+  LOG_ID_DEFAULT = 0x7FFFFFFF
+} log_id_t;
+
+#include "android/src/core/buffer_descriptor.h"
+#include "android/src/core/buffer_allocation.h"
+#pragma GCC diagnostic pop
+
+#ifdef LOG
+#undef LOG
+#endif
 
 #include <dlfcn.h>
 #include <memory>
@@ -20,15 +63,6 @@
 #include <hardware/hardware.h>
 
 #include <iostream>
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wc++98-compat-extra-semi"
-#pragma GCC diagnostic ignored "-Wextra-semi"
-#include "graphics_ext.h"
-#include "Memory.h"
-#include "MemoryDesc.h"
-#include "Allocator.h"
-#pragma GCC diagnostic pop
 
 #include "../camera_device.h"
 #include "../frame_buffer_allocator.h"
@@ -53,13 +87,10 @@ public:
 
 	~GenericFrameBufferData() override
 	{
+		// fix me, need close here?
 		int fd = handle_->data[0];	
 		if (fd > 0)
 		    close(fd);
-		
-		fsl::Memory *fslHandle = (fsl::Memory *)handle_;
-		if (fslHandle)
-		    delete fslHandle;
 	}
 private:
 	const buffer_handle_t handle_;
@@ -89,6 +120,7 @@ PlatformFrameBufferAllocator::Private::~Private()
 {
 }
 
+#if 0
 static uint32_t getSizeByForamtRes(int32_t format, uint32_t width, uint32_t height) {
     uint32_t size = 0;
 
@@ -131,12 +163,69 @@ static void SetBufferHandle(uint32_t size, int fd, buffer_handle_t &handle) {
 
 		return;
 }
+#endif
 
 std::unique_ptr<HALFrameBuffer>
 PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
 						const libcamera::Size &size,
 						uint32_t usage)
 {
+	buffer_descriptor_t descriptor = {0};
+	descriptor.width = size.width;
+	descriptor.height = size.height;
+	//descriptor.producer_usage = GRALLOC_USAGE_HW_CAMERA_WRITE | GRALLOC_USAGE_SW_READ_OFTEN | GRALLOC_USAGE_PRIVATE_3;
+	descriptor.producer_usage =	0x80030003;
+	//descriptor.producer_usage = usage | GRALLOC_USAGE_PRIVATE_3 | GRALLOC_USAGE_HW_CAMERA_WRITE;
+	descriptor.consumer_usage = descriptor.producer_usage;
+	descriptor.hal_format = halPixelFormat;
+	descriptor.layer_count = 1;	
+
+	LOG(HAL, Debug) << __func__ << ": call mali_gralloc_buffer_allocate, width " << descriptor.width <<
+		", height " << descriptor.height << ", format 0x" << std::hex << descriptor.hal_format <<
+		", usage 0x" << std::hex << descriptor.producer_usage;
+
+	unique_private_handle uniq_hnd = mali_gralloc_buffer_allocate(&descriptor);
+	if (uniq_hnd == nullptr) {
+		LOG(HAL, Error) << __func__ << ": mali_gralloc_buffer_allocate failed, width " << descriptor.width <<
+			", height " << descriptor.height << ", format 0x" << std::hex << descriptor.hal_format <<
+			", usage 0x" << std::hex << descriptor.producer_usage;
+		return nullptr;
+	}
+
+	buffer_handle_t handle = uniq_hnd.get();
+	uint32_t stride = size.width;
+
+	/* This code assumes the planes are mapped consecutively. */
+	const libcamera::PixelFormat pixelFormat =
+		cameraDevice_->capabilities()->toPixelFormat(halPixelFormat);
+	const auto &info = PixelFormatInfo::info(pixelFormat);
+	std::vector<FrameBuffer::Plane> planes(info.numPlanes());
+
+	SharedFD fd{ handle->data[0] };
+	LOG(HAL, Info) << "==== planes " << std::to_string(info.numPlanes()) << ", halPixelFormat " << std::to_string(halPixelFormat) <<
+		", stride " << std::to_string(stride) << ", fd " << std::to_string(handle->data[0]) << ", usage " + std::to_string(usage);
+
+	size_t offset = 0;
+	for (auto [i, plane] : utils::enumerate(planes)) {
+		const size_t planeSize = info.planeSize(size.height, i, stride);
+
+		plane.fd = fd;
+		plane.offset = offset;
+		plane.length = planeSize;
+		offset += planeSize;
+
+		LOG(HAL, Info) << "==== planeSize " << std::to_string(planeSize);
+	}
+
+
+	return std::make_unique<HALFrameBuffer>(
+		std::make_unique<GenericFrameBufferData>(
+			handle, planes),
+		handle);
+
+
+#if 0
+/*============================================*/
 	uint32_t stride = size.width;
 	buffer_handle_t handle = nullptr;
 
@@ -195,6 +284,7 @@ PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
 	LOG(HAL, Info) << "==== planes " << std::to_string(info.numPlanes()) << ", halPixelFormat " << std::to_string(halPixelFormat) <<
 		", stride " << std::to_string(stride) << ", fd " << std::to_string(handle->data[0]) << ", usage " + std::to_string(usage);
 
+
 	size_t offset = 0;
 	for (auto [i, plane] : utils::enumerate(planes)) {
 		const size_t planeSize = info.planeSize(size.height, i, stride);
@@ -211,6 +301,7 @@ PlatformFrameBufferAllocator::Private::allocate(int halPixelFormat,
 		std::make_unique<GenericFrameBufferData>(
 			handle, planes),
 		handle);
+#endif
 }
 
 PUBLIC_FRAME_BUFFER_ALLOCATOR_IMPLEMENTATION

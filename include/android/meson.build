@@ -21,5 +21,11 @@ android_includes = ([
     include_directories(androir_root / 'system/core/libutils/include'),
     include_directories(androir_root / 'vendor/nxp-opensource/imx/display/display'),
     include_directories(androir_root / 'vendor/nxp-opensource/imx/include'),
+    include_directories(androir_root / 'vendor/nxp-opensource/imx/display/wsialloc'),
+    include_directories(androir_root / 'vendor/nxp-opensource/imx/display/wsialloc/android/src'),
+    include_directories(androir_root / 'vendor/nxp-opensource/imx/display/wsialloc/android/src/include'),
+    include_directories(androir_root / 'system/libbase/include'),
+    include_directories(androir_root / 'system/logging/liblog/include/log'),
+    include_directories(androir_root / 'system/logging/liblog/include'),
 ])
 endif

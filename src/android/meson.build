@@ -11,6 +11,8 @@ else
         cc.find_library('libexif', dirs : meson.current_source_dir() / 'ndk-lib'),
         cc.find_library('libjpeg', dirs : meson.current_source_dir() / 'ndk-lib'),
         cc.find_library('libfsldisplay', dirs : meson.current_source_dir() / 'ndk-lib'),
+        cc.find_library('libcutils', dirs : meson.current_source_dir() / 'ndk-lib'),
+        cc.find_library('android.hardware.graphics.allocator-V1-arm', dirs : meson.current_source_dir() / 'ndk-lib'),
         libcamera_private,
     ]
 endif
