@@ -521,7 +521,7 @@ bool PipelineHandler::completeBuffer(Request *request, FrameBuffer *buffer)
  */
 void PipelineHandler::completeRequest(Request *request)
 {
-  LOG(Pipeline, Info) << "==== enter PipelineHandler::completeRequest";
+  LOG(Pipeline, Debug) << "==== enter PipelineHandler::completeRequest";
 	Camera *camera = request->_d()->camera();
 
 	request->_d()->complete();

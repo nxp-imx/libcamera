@@ -1192,7 +1192,7 @@ void PipelineHandlerISI::stopDevice(Camera *camera)
 int PipelineHandlerISI::queueRequestDevice(Camera *camera, Request *request)
 {
 	for (auto &[stream, buffer] : request->buffers()) {
-		LOG(ISI, Info) << "====xxxx queueRequestDevice, buffers " << request->buffers().size() << ", fd " << buffer->planes()[0].fd.get();  
+		LOG(ISI, Debug) << "====xxxx queueRequestDevice, buffers " << request->buffers().size() << ", fd " << buffer->planes()[0].fd.get();  
 		Pipe *pipe = pipeFromStream(camera, stream);
 
 		int ret = pipe->capture->queueBuffer(buffer);
@@ -1362,7 +1362,7 @@ PipelineHandlerISI::Pipe *PipelineHandlerISI::pipeFromStream(Camera *camera,
 	ISICameraData *data = cameraData(camera);
 	unsigned int pipeIndex = data->pipeIndex(stream);
 
-	LOG(ISI, Info) << "==== pipeFromStream, pipe index " << std::to_string(pipeIndex);
+	LOG(ISI, Debug) << "==== pipeFromStream, pipe index " << std::to_string(pipeIndex);
 
 	ASSERT(pipeIndex < pipes_.size());
 
@@ -1437,12 +1437,12 @@ void PipelineHandlerISI::bufferReady(FrameBuffer *buffer)
 		metadata.set(controls::SensorTimestamp,
 			     buffer->metadata().timestamp);
 
-	dumpBuffer(buffer);
+	//dumpBuffer(buffer);
 	completeBuffer(request, buffer);
 	if (request->hasPendingBuffers())
 		return;
 
-  LOG(ISI, Info) << "====xxxx PipelineHandlerISI::bufferReady, call completeRequest. buffer cookie " << buffer->cookie() << ", fd " << buffer->planes()[0].fd.get();
+  LOG(ISI, Debug) << "====xxxx PipelineHandlerISI::bufferReady, call completeRequest. buffer cookie " << buffer->cookie() << ", fd " << buffer->planes()[0].fd.get();
 	completeRequest(request);
 }
 

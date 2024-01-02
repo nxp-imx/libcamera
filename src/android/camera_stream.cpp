@@ -79,7 +79,7 @@ const StreamConfiguration &CameraStream::configuration() const
 
 Stream *CameraStream::stream() const
 {
-  LOG(HAL, Info) << "==== call configuration().stream(), cfg " << &configuration();
+  LOG(HAL, Debug) << "==== call configuration().stream(), cfg " << &configuration();
 	return configuration().stream();
 }
 

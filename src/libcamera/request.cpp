@@ -114,7 +114,7 @@ bool Request::Private::completeBuffer(FrameBuffer *buffer)
  */
 void Request::Private::complete()
 {
-	LOG(Request, Info) << "==== Request::Private::complete(), cancelled_ " << cancelled_;
+	LOG(Request, Debug) << "==== Request::Private::complete(), cancelled_ " << cancelled_;
 	Request *request = _o<Request>();
 
 	ASSERT(request->status() == RequestPending);
@@ -136,7 +136,7 @@ void Request::Private::doCancelRequest()
 		camera_->bufferCompleted.emit(request, buffer);
 	}
 
-	LOG(Request, Info) << "==== Request::Private::doCancelRequest";
+	LOG(Request, Debug) << "==== Request::Private::doCancelRequest";
 	cancelled_ = true;
 	pending_.clear();
 	notifiers_.clear();

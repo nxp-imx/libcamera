@@ -235,11 +235,11 @@ int V4L2BufferCache::get(const FrameBuffer &buffer)
 	int use = -1;
 	uint64_t oldest = UINT64_MAX;
 
-	LOG(V4L2, Info) << "==== V4L2BufferCache::get(), size " << cache_.size();
+	LOG(V4L2, Debug) << "==== V4L2BufferCache::get(), size " << cache_.size();
 	for (unsigned int index = 0; index < cache_.size(); index++) {
 		const Entry &entry = cache_[index];
 
-		LOG(V4L2, Info) << "==== check idx " << index << ", free " << entry.free_ << ", lastUsed_ " << entry.lastUsed_ << ", oldest " << oldest;
+		LOG(V4L2, Debug) << "==== check idx " << index << ", free " << entry.free_ << ", lastUsed_ " << entry.lastUsed_ << ", oldest " << oldest;
 
 		if (!entry.free_)
 			continue;
@@ -248,12 +248,12 @@ int V4L2BufferCache::get(const FrameBuffer &buffer)
 		if (entry == buffer) {
 			hit = true;
 			use = index;
-			LOG(V4L2, Info) << "==== hit true";
+			LOG(V4L2, Debug) << "==== hit true";
 			break;
 		}
 
 		if (entry.lastUsed_ < oldest) {
-			LOG(V4L2, Info) << "==== lastUsed_ " << entry.lastUsed_  << " < oldest " << oldest;
+			LOG(V4L2, Debug) << "==== lastUsed_ " << entry.lastUsed_  << " < oldest " << oldest;
 			use = index;
 			oldest = entry.lastUsed_;
 		}
@@ -278,7 +278,7 @@ int V4L2BufferCache::get(const FrameBuffer &buffer)
  */
 void V4L2BufferCache::put(unsigned int index)
 {
-	LOG(V4L2, Info) << "==== V4L2BufferCache::put(), index " << index << ", cache size " << cache_.size();
+	LOG(V4L2, Debug) << "==== V4L2BufferCache::put(), index " << index << ", cache size " << cache_.size();
 	ASSERT(index < cache_.size());
 	cache_[index].free_ = true;
 }
@@ -1590,7 +1590,7 @@ int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer)
 	struct v4l2_buffer buf = {};
 	int ret;
 
-	LOG(V4L2, Info) << "==== enter V4L2VideoDevice::queueBuffer, this " << this;
+	LOG(V4L2, Debug) << "==== enter V4L2VideoDevice::queueBuffer, this " << this;
 
 	if (state_ == State::Stopping) {
 		LOG(V4L2, Error) << "Device is in a stopping state.";
@@ -1618,14 +1618,14 @@ int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer)
 	buf.memory = memoryType_;
 	buf.field = V4L2_FIELD_NONE;
 
-	LOG(V4L2, Info) << "==== buf index " << buf.index << ", type " << buf.type << ", memory " << buf.memory << ", this " << this;
+	LOG(V4L2, Debug) << "==== buf index " << buf.index << ", type " << buf.type << ", memory " << buf.memory << ", this " << this;
 
 	bool multiPlanar = V4L2_TYPE_IS_MULTIPLANAR(buf.type);
 	const std::vector<FrameBuffer::Plane> &planes = buffer->planes();
 	const unsigned int numV4l2Planes = format_.planesCount;
 
-  LOG(V4L2, Info) << "==== format_ " << format_.toString();
-	LOG(V4L2, Info) << "==== multiPlanar " << multiPlanar << ", planes " << planes.size() << 
+  LOG(V4L2, Debug) << "==== format_ " << format_.toString();
+	LOG(V4L2, Debug) << "==== multiPlanar " << multiPlanar << ", planes " << planes.size() << 
     ", numV4l2Planes " << numV4l2Planes << ", fd " << planes[0].fd.get() << ", length " << planes[0].length;
 
 	/*
@@ -1756,7 +1756,7 @@ int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer)
  */
 void V4L2VideoDevice::bufferAvailable()
 {
-  LOG(V4L2, Info) << "==== bufferAvailable, this " << this;
+  LOG(V4L2, Debug) << "==== bufferAvailable, this " << this;
 	FrameBuffer *buffer = dequeueBuffer();
 	if (!buffer)
 		return;
@@ -1789,7 +1789,7 @@ FrameBuffer *V4L2VideoDevice::dequeueBuffer()
 		buf.m.planes = planes;
 	}
 
-  LOG(V4L2, Info) << "==== dequeueBuffer, type " << buf.type << ", memory " << buf.memory << " multiPlanar " << multiPlanar << ", this " << this;
+  LOG(V4L2, Debug) << "==== dequeueBuffer, type " << buf.type << ", memory " << buf.memory << " multiPlanar " << multiPlanar << ", this " << this;
 	ret = ioctl(VIDIOC_DQBUF, &buf);
 	if (ret < 0) {
 		LOG(V4L2, Error)

@@ -127,7 +127,7 @@ Camera3RequestDescriptor::Camera3RequestDescriptor(
 			static_cast<CameraStream *>(buffer.stream->priv);
 
     const native_handle_t *hnd = *buffer.buffer;
-    LOG(HAL, Info) << "==== Camera3RequestDescriptor ctor, CameraStream " << stream << ", fd " << hnd->data[0] << ", unic_id " <<  hnd->data[38]; 
+    LOG(HAL, Debug) << "==== Camera3RequestDescriptor ctor, CameraStream " << stream << ", fd " << hnd->data[0] << ", unic_id " <<  hnd->data[38]; 
 
 		buffers_.emplace_back(stream, buffer, this);
 	}
@@ -189,7 +189,7 @@ Camera3RequestDescriptor::StreamBuffer::StreamBuffer(
 	  fence(buffer.acquire_fence), request(requestDescriptor)
 {
     const native_handle_t *hnd = *camera3Buffer;
-    LOG(HAL, Info) << "====  StreamBufferctor, CameraStream " << stream << ", fd " << hnd->data[0] << ", unic_id " <<  hnd->data[38]; 
+    LOG(HAL, Debug) << "====  StreamBufferctor, CameraStream " << stream << ", fd " << hnd->data[0] << ", unic_id " <<  hnd->data[38]; 
 }
 
 Camera3RequestDescriptor::StreamBuffer::~StreamBuffer() = default;

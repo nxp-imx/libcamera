@@ -1297,7 +1297,7 @@ int Camera::queueRequest(Request *request)
 		return -EINVAL;
 	}
 
-	LOG(Camera, Info) << "==== request buffers " << request->buffers().size();
+	LOG(Camera, Debug) << "==== request buffers " << request->buffers().size();
 	for (auto const &it : request->buffers()) {
 		const Stream *stream = it.first;
 

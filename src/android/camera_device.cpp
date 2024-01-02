@@ -972,7 +972,7 @@ int CameraDevice::processCaptureRequest(camera3_capture_request_t *camera3Reques
 								     camera3Request);
 
   const native_handle_t *hnd = *camera3Request->output_buffers[0].buffer;
-  LOG(HAL, Info) << "====xxxx processCaptureRequest fd " << hnd->data[0] << ", unic_id " <<  hnd->data[38] << ", descriptor " << descriptor.get();
+  LOG(HAL, Debug) << "====xxxx processCaptureRequest fd " << hnd->data[0] << ", unic_id " <<  hnd->data[38] << ", descriptor " << descriptor.get();
 	/*
 	 * \todo The Android request model is incremental, settings passed in
 	 * previous requests are to be effective until overridden explicitly in
@@ -1157,7 +1157,7 @@ int CameraDevice::processCaptureRequest(camera3_capture_request_t *camera3Reques
 		descriptors_.push(std::move(descriptor));
 	}
 
-  LOG(HAL, Info) << "==== call camera_->queueRequest "; 
+  LOG(HAL, Debug) << "==== call camera_->queueRequest "; 
 	camera_->queueRequest(request);
 
 	return 0;
@@ -1168,7 +1168,7 @@ void CameraDevice::requestComplete(Request *request)
 	Camera3RequestDescriptor *descriptor =
 		reinterpret_cast<Camera3RequestDescriptor *>(request->cookie());
 
-  LOG(HAL, Info) << "==== enter requestComplete(), request " << request << ", descriptor " << descriptor << ", buffers " << descriptor->buffers_.size();
+  LOG(HAL, Debug) << "==== enter requestComplete(), request " << request << ", descriptor " << descriptor << ", buffers " << descriptor->buffers_.size();
 
 	/*
 	 * Prepare the capture result for the Android camera stack.
@@ -1194,7 +1194,7 @@ void CameraDevice::requestComplete(Request *request)
 				buffer.fence = fence->release();
 		}
 		buffer.status = Camera3RequestDescriptor::Status::Success;
-    LOG(HAL, Info) << "==== set Success for buffer of stream " << stream; 
+    LOG(HAL, Debug) << "==== set Success for buffer of stream " << stream; 
 	}
 
 	/*
@@ -1361,7 +1361,7 @@ void CameraDevice::sendCaptureResults()
 		captureResult.output_buffers = resultBuffers.data();
 
     const native_handle_t *hnd = *captureResult.output_buffers[0].buffer;
-    LOG(HAL, Info) << "====xxxx sendCaptureResults, fd " << hnd->data[0] << ", unic_id " <<  hnd->data[38] <<
+    LOG(HAL, Debug) << "====xxxx sendCaptureResults, fd " << hnd->data[0] << ", unic_id " <<  hnd->data[38] <<
        ", descriptor " << (uint64_t)descriptor.get() << ", frame_number " << captureResult.frame_number;
 
 		if (descriptor->status_ == Camera3RequestDescriptor::Status::Success)
