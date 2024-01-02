@@ -1,0 +1,5 @@
+cp build/test/camera/capture ~/share_home2/android-14-imx95/vendor/nxp/fsl-proprietary/libcamera
+cp build/src/libcamera/libcamera.so.0.1 ~/share_home2/android-14-imx95/vendor/nxp/fsl-proprietary/libcamera
+cp build/src/libcamera/base/libcamera-base.so.0.1 ~/share_home2/android-14-imx95/vendor/nxp/fsl-proprietary/libcamera
+cp build/src/android/libcamera-hal.so ~/share_home2/android-14-imx95/vendor/nxp/fsl-proprietary/libcamera
+cp src/android/data/ap130x/camera_hal.yaml ~/share_home2/android-14-imx95/vendor/nxp/fsl-proprietary/libcamera
