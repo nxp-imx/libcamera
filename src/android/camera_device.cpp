@@ -972,7 +972,8 @@ int CameraDevice::processCaptureRequest(camera3_capture_request_t *camera3Reques
 								     camera3Request);
 
   const native_handle_t *hnd = *camera3Request->output_buffers[0].buffer;
-  LOG(HAL, Debug) << "====xxxx processCaptureRequest fd " << hnd->data[0] << ", unic_id " <<  hnd->data[38] << ", descriptor " << descriptor.get();
+  //LOG(HAL, Debug) << "====xxxx processCaptureRequest fd " << hnd->data[0] << ", unic_id " <<  hnd->data[38] << ", descriptor " << descriptor.get();
+  LOG(HAL, Debug) << "====xxxx processCaptureRequest fd " << hnd->data[0] << ", descriptor " << descriptor.get();
 	/*
 	 * \todo The Android request model is incremental, settings passed in
 	 * previous requests are to be effective until overridden explicitly in
@@ -1361,7 +1362,9 @@ void CameraDevice::sendCaptureResults()
 		captureResult.output_buffers = resultBuffers.data();
 
     const native_handle_t *hnd = *captureResult.output_buffers[0].buffer;
-    LOG(HAL, Debug) << "====xxxx sendCaptureResults, fd " << hnd->data[0] << ", unic_id " <<  hnd->data[38] <<
+    //LOG(HAL, Debug) << "====xxxx sendCaptureResults, fd " << hnd->data[0] << ", unic_id " <<  hnd->data[38] <<
+      // ", descriptor " << (uint64_t)descriptor.get() << ", frame_number " << captureResult.frame_number;
+    LOG(HAL, Debug) << "====xxxx sendCaptureResults, fd " << hnd->data[0] <<
        ", descriptor " << (uint64_t)descriptor.get() << ", frame_number " << captureResult.frame_number;
 
 		if (descriptor->status_ == Camera3RequestDescriptor::Status::Success)
