@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <sys/time.h>
 
 using namespace libcamera;
 using namespace std;
@@ -60,6 +61,37 @@ static void DumpData(void *buf, uint32_t bufSize)
 	return;
 }
 
+
+#define US_PER_SEC      1000000
+#define STAT_ITVL_US    (2*US_PER_SEC)
+
+static void fpsStat() {
+    uint64_t curUS;
+    static uint64_t preUS;
+    struct timeval val;
+    uint64_t itvl = 0;
+    float fps;
+    static uint64_t frames;
+
+    frames++;
+
+		memset(&val, 0, sizeof(val));
+    gettimeofday(&val, NULL);
+    curUS = val.tv_sec * US_PER_SEC + val.tv_usec;
+    itvl = curUS - preUS;
+
+    if(itvl >= STAT_ITVL_US) {
+        fps = frames * US_PER_SEC /itvl;
+        if(preUS > 0)
+            printf("==== fps %f\n", fps);
+
+        preUS = curUS;
+        frames = 0;
+    }
+
+    return;
+}
+
 #define OV560_8MN_NAME "/base/soc@0/bus@30800000/i2c@30a40000/ov5640_mipi@3c"
 #define OV560_8QM_NAME "/base/bus@58000000/i2c@58226000/ov5640_mipi@3c"
 #define OV560_95_NAME "/base/soc@0/bus@42000000/i2c@42530000/ov5640_mipi@3c"
@@ -84,7 +116,7 @@ protected:
 		auto plans = buffer->planes();
 		FrameBuffer::Plane plan = plans[0];
 		void *virtAddr = (void*)mmap(NULL, plan.length, PROT_READ | PROT_WRITE, MAP_SHARED, plan.fd.get(), plan.offset);
-		cout << "plan offset " << plan.offset << " length " << plan.length << " fd " << plan.fd.get() << " virt addr " << virtAddr << endl;
+	//	cout << "plan offset " << plan.offset << " length " << plan.length << " fd " << plan.fd.get() << " virt addr " << virtAddr << endl;
 
 		DumpData(virtAddr, plan.length);
 		munmap(virtAddr, plan.length);
@@ -92,7 +124,7 @@ protected:
 		if (plans.size() > 1) {
 			FrameBuffer::Plane plan2 = plans[1];
 			void *virtAddr2 = (void*)mmap(NULL, plan2.length, PROT_READ | PROT_WRITE, MAP_SHARED, plan2.fd.get(), plan2.offset);
-			cout << "plan2 offset " << plan2.offset << " length " << plan2.length << " fd " << plan2.fd.get() << " virt addr " << virtAddr2 << endl;
+		//	cout << "plan2 offset " << plan2.offset << " length " << plan2.length << " fd " << plan2.fd.get() << " virt addr " << virtAddr2 << endl;
 
 			DumpData(virtAddr2, plan2.length);
 			munmap(virtAddr2, plan2.length);
@@ -107,6 +139,8 @@ protected:
 
 		completeBuffersCount_++;
 		dumpBuffer(buffer);
+
+		fpsStat();
 	}
 
 	void requestComplete(Request *request)
