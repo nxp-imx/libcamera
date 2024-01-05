@@ -584,6 +584,11 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 #endif
 			       << " (" << format << ")";
 
+		// May remove after refine mali gralloc
+		stream->usage |= GRALLOC_USAGE_PRIVATE_3;
+		if (stream->usage & GRALLOC_USAGE_HW_TEXTURE)
+			stream->usage |= GRALLOC_USAGE_SW_READ_OFTEN;
+
     // ??? fix me
     stream->max_buffers = 4;
 
