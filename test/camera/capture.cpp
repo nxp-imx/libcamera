@@ -65,11 +65,6 @@ static void DumpData(void *buf, uint32_t bufSize)
 #define OV560_95_NAME "/base/soc@0/bus@42000000/i2c@42530000/ov5640_mipi@3c"
 #define AP1302_95_NAME "/base/soc/bus@42000000/i2c@42530000/ap1302_mipi@3c"
 
-#define CAP_FMT PixelFormat::fromString("YUYV")
-#define CAP_WIDTH 640 //1280
-#define CAP_HEIGHT 480 //720
-#define CAP_FRAME_SIZE (CAP_WIDTH * CAP_HEIGHT * 3 / 2)
-
 namespace {
 
 class Capture : public CameraTest, public Test
@@ -133,6 +128,14 @@ protected:
 	}
 
 
+#define CAP_FMT "cap_fmt"
+#define CAP_WIDTH "cap_width"
+#define CAP_HEIGHT "cap_height"
+
+	uint32_t cap_width = 1280;
+	uint32_t cap_height = 800;
+	char *cap_fmt = (char *)"YUYV";
+
 	int init() override
 	{
 		if (status_ != TestPass)
@@ -146,6 +149,21 @@ protected:
 
 		allocator_ = new FrameBufferAllocator(camera_);
 
+		/* get w/h/fmt */
+		char *str_width = getenv("CAP_WIDTH");
+		if (str_width)
+			cap_width = atoi(str_width);
+
+		char *str_height = getenv("CAP_HEIGHT");
+		if (str_height)
+			cap_height = atoi(str_height);
+
+		char *str_fmt = getenv("CAP_FMT");
+		if (str_fmt)
+			cap_fmt = str_fmt;
+
+		cout << "init(): cap_fmt " << cap_fmt << ", cap_width " << cap_width << ", cap_height " << cap_height << endl;
+
 		return TestPass;
 	}
 
@@ -158,10 +176,11 @@ protected:
 	{
 		StreamConfiguration &cfg = config_->at(0);
 
+		cout << "run(): cap_fmt " << cap_fmt << ", cap_width " << cap_width << ", cap_height " << cap_height << endl;
 #ifdef ANDROID
-		cfg.pixelFormat = CAP_FMT; 
-		cfg.size.width = CAP_WIDTH;
-		cfg.size.height = CAP_HEIGHT;
+		cfg.pixelFormat = PixelFormat::fromString(cap_fmt);
+		cfg.size.width = cap_width;
+		cfg.size.height = cap_height;
 #endif
 
 		if (camera_->acquire()) {
