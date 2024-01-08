@@ -25,6 +25,11 @@
 #include <libcamera/base/thread.h>
 #include <libcamera/base/utils.h>
 
+//#include <log/log.h>
+#include <android/log.h>
+#define LOG_TAG "LIBCAMERA"
+#define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+
 /**
  * \file base/log.h
  * \brief Logging infrastructure
@@ -275,15 +280,17 @@ void LogOutput::write(const std::string &str)
 	}
 }
 
-void LogOutput::writeSyslog(LogSeverity severity, const std::string &str)
+void LogOutput::writeSyslog(LogSeverity severity __unused, const std::string &str)
 {
-	syslog(log_severity_to_syslog(severity), "%s", str.c_str());
+	//syslog(log_severity_to_syslog(severity), "%s", str.c_str());
+  ALOGI("severity %d, info: %s", log_severity_to_syslog(severity), str.c_str());
 }
 
 void LogOutput::writeStream(const std::string &str)
 {
-	stream_->write(str.c_str(), str.size());
-	stream_->flush();
+//	stream_->write(str.c_str(), str.size());
+//	stream_->flush();
+  ALOGI("%s", str.c_str());
 }
 
 /**

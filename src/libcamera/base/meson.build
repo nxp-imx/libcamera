@@ -50,6 +50,7 @@ else
 libcamera_base_deps = [
     dependency('threads'),
     libatomic,
+    cc.find_library('liblog', dirs : meson.current_source_dir() / '..' / '..' / 'android' / 'ndk-lib'),
 ]
 
 endif
