@@ -219,7 +219,6 @@ FrameBuffer *CameraStream::getBuffer()
 
 	MutexLocker locker(*mutex_);
 
-#if 0
 	if (buffers_.empty()) {
 		/*
 		 * Use HAL_PIXEL_FORMAT_YCBCR_420_888 unconditionally.
@@ -238,27 +237,6 @@ FrameBuffer *CameraStream::getBuffer()
 		allocatedBuffers_.push_back(std::move(frameBuffer));
 		buffers_.emplace_back(allocatedBuffers_.back().get());
 	}
-#else
-
-  if (buffers_.empty()) {
-      std::vector<std::unique_ptr<FrameBuffer>> frameBuffers;
-      int ret = cameraDevice_->camera()->exportFrameBuffers(stream(), &frameBuffers);
-      LOG(HAL, Info) << "==== getBuffer(), exportFrameBuffers ret " << ret << ", size " << frameBuffers.size();
-
-      if (ret) {
-        LOG(HAL, Error) << "==== getBuffer(), exportFrameBuffers failed";
-        return NULL;
-      }
-
-      
-      for (size_t i = 0; i < frameBuffers.size(); i++) {
-		    allocatedBuffers_.push_back(std::move(frameBuffers[i]));
-		    buffers_.emplace_back(allocatedBuffers_.back().get());
-      }
-      
-  }
-
-#endif
 
 	FrameBuffer *buffer = buffers_.back();
 	buffers_.pop_back();
