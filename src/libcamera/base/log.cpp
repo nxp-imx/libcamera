@@ -813,7 +813,7 @@ LogCategory *LogCategory::create(const char *name)
  * \param[in] name The category name
  */
 LogCategory::LogCategory(const char *name)
-	: name_(name), severity_(LogSeverity::LogInfo)
+	: name_(name), severity_(LogSeverity::LogDebug)
 {
 }
 
