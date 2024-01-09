@@ -306,6 +306,7 @@ CameraConfiguration::~CameraConfiguration()
 void CameraConfiguration::addConfiguration(const StreamConfiguration &cfg)
 {
 	config_.push_back(cfg);
+  LOG(Camera, Info) << "==== this " << this << ", StreamConfiguration " << &config_.back();
 }
 
 /**
@@ -902,6 +903,8 @@ Camera::Camera(std::unique_ptr<Private> d, const std::string &id,
 	_d()->id_ = id;
 	_d()->streams_ = streams;
 	_d()->validator_ = std::make_unique<CameraControlValidator>(this);
+
+  LOG(Camera, Info) << "==== Camera ctor, streams_ " << &_d()->streams_ << ", size " << _d()->streams_.size();
 }
 
 Camera::~Camera()
@@ -933,15 +936,21 @@ int Camera::exportFrameBuffers(Stream *stream,
 {
 	Private *const d = _d();
 
+  LOG(Camera, Info) << "==== Camera::exportFrameBuffers() stream " << stream;
+
 	int ret = d->isAccessAllowed(Private::CameraConfigured);
 	if (ret < 0)
 		return ret;
 
-	if (streams().find(stream) == streams().end())
+	if (streams().find(stream) == streams().end()) {
+    LOG(Camera, Error) << "==== stream " << stream << " not found in streams()";
 		return -EINVAL;
+  }
 
-	if (d->activeStreams_.find(stream) == d->activeStreams_.end())
+	if (d->activeStreams_.find(stream) == d->activeStreams_.end()) {
+    LOG(Camera, Error) << "==== stream " << stream << " not found in activeStreams_";
 		return -EINVAL;
+  }
 
 	return d->pipe_->invokeMethod(&PipelineHandler::exportFrameBuffers,
 				      ConnectionTypeBlocking, this, stream,
@@ -1067,6 +1076,7 @@ const ControlList &Camera::properties() const
  */
 const std::set<Stream *> &Camera::streams() const
 {
+  LOG(Camera, Info) << "==== Camera::streams(), streams_ " << &_d()->streams_ << ", size " << _d()->streams_.size();
 	return _d()->streams_;
 }
 

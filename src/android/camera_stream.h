@@ -174,14 +174,17 @@ private:
 	const unsigned int index_;
 
 	std::unique_ptr<PlatformFrameBufferAllocator> allocator_;
-	std::vector<std::unique_ptr<libcamera::FrameBuffer>> allocatedBuffers_;
-	std::vector<libcamera::FrameBuffer *> buffers_ LIBCAMERA_TSA_GUARDED_BY(mutex_);
 	/*
 	 * The class has to be MoveConstructible as instances are stored in
 	 * an std::vector in CameraDevice.
 	 */
-	std::unique_ptr<libcamera::Mutex> mutex_;
 	std::unique_ptr<PostProcessor> postProcessor_;
 
 	std::unique_ptr<PostProcessorWorker> worker_;
+
+public:
+	std::unique_ptr<libcamera::Mutex> mutex_;
+	std::vector<std::unique_ptr<libcamera::FrameBuffer>> allocatedBuffers_;
+	std::vector<libcamera::FrameBuffer *> buffers_ LIBCAMERA_TSA_GUARDED_BY(mutex_);
+  
 };

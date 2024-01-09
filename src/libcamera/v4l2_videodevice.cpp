@@ -1251,7 +1251,7 @@ int V4L2VideoDevice::requestBuffers(unsigned int count,
 	struct v4l2_requestbuffers rb = {};
 	int ret;
 
-  LOG(V4L2, Debug) << "==== requestBuffers count " << count << ", bufferType_ " << bufferType_ << ", memoryType " << memoryType;
+  LOG(V4L2, Info) << "==== requestBuffers count " << count << ", bufferType_ " << bufferType_ << ", memoryType " << memoryType;
 
 	rb.count = count;
 	rb.type = bufferType_;
@@ -1272,7 +1272,7 @@ int V4L2VideoDevice::requestBuffers(unsigned int count,
 		return -ENOMEM;
 	}
 
-	LOG(V4L2, Debug) << rb.count << " buffers requested.";
+	LOG(V4L2, Info) << rb.count << " buffers requested.";
 
 	return 0;
 }
@@ -1374,9 +1374,13 @@ int V4L2VideoDevice::createBuffers(unsigned int count,
 		return -EINVAL;
 	}
 
+  LOG(V4L2, Info) << "==== V4L2VideoDevice::createBuffers " << count;   
+
 	int ret = requestBuffers(count, V4L2_MEMORY_MMAP);
-	if (ret < 0)
+	if (ret < 0) {
+    LOG(V4L2, Error) << "==== requestBuffers failed, ret " << ret;
 		return ret;
+  }
 
 	for (unsigned i = 0; i < count; ++i) {
 		std::unique_ptr<FrameBuffer> buffer = createBuffer(i);
@@ -1426,8 +1430,10 @@ std::unique_ptr<FrameBuffer> V4L2VideoDevice::createBuffer(unsigned int index)
 	std::vector<FrameBuffer::Plane> planes;
 	for (unsigned int nplane = 0; nplane < numPlanes; nplane++) {
 		UniqueFD fd = exportDmabufFd(buf.index, nplane);
-		if (!fd.isValid())
+		if (!fd.isValid()) {
+      LOG(V4L2, Error) << "==== fd invalid";
 			return nullptr;
+    }
 
 		FrameBuffer::Plane plane;
 		plane.fd = SharedFD(std::move(fd));

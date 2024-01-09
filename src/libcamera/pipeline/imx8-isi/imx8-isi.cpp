@@ -56,7 +56,7 @@ public:
 		 * \todo Assume 2 channels only for now, as that's the number of
 		 * available channels on i.MX8MP.
 		 */
-		streams_.resize(2);
+		streams_.resize(8);
 	}
 
 	PipelineHandlerISI *pipe();
@@ -527,6 +527,7 @@ ISICameraConfiguration::validateRaw(std::set<Stream *> &availableStreams,
 				    const Size &maxResolution)
 {
 	CameraConfiguration::Status status = Valid;
+  LOG(ISI, Info) << "==== validateRaw";
 
 	/*
 	 * Make sure the requested RAW format is supported by the
@@ -600,7 +601,7 @@ ISICameraConfiguration::validateYuv(std::set<Stream *> &availableStreams,
 	StreamConfiguration &yuvConfig = config_[0];
 	PixelFormat yuvPixelFormat = yuvConfig.pixelFormat;
 
-  LOG(ISI, Debug) << "==== validateYuv";
+  LOG(ISI, Info) << "==== validateYuv";
 	/*
 	 * Make sure the sensor can produce a compatible YUV/RGB media bus
 	 * format. If the sensor can only produce RAW Bayer we can only fail
@@ -649,7 +650,7 @@ ISICameraConfiguration::validateYuv(std::set<Stream *> &availableStreams,
 		/* Assign streams in the order they are presented. */
 		auto stream = availableStreams.extract(availableStreams.begin());
 		cfg.setStream(stream.value());
-    LOG(ISI, Debug) << "cfg " << &cfg << " set stream " << &stream << ", value " << stream.value();
+    LOG(ISI, Info) << "cfg " << &cfg << " set stream " << &stream << ", value " << stream.value();
 	}
 
 	return status;
@@ -663,6 +664,10 @@ CameraConfiguration::Status ISICameraConfiguration::validate()
 	std::transform(data_->streams_.begin(), data_->streams_.end(),
 		       std::inserter(availableStreams, availableStreams.end()),
 		       [](const Stream &s) { return const_cast<Stream *>(&s); });
+
+  for (auto myStream : availableStreams) {
+    LOG(ISI, Info) << "==== myStream " << myStream;
+  }
 
 	if (config_.empty())
 		return Invalid;

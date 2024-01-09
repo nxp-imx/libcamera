@@ -738,7 +738,9 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 
 	sortCamera3StreamConfigs(streamConfigs, jpegStream);
 	for (const auto &streamConfig : streamConfigs) {
+		LOG(HAL, Info) << "==== call config->addConfiguration, config " << config.get();
 		config->addConfiguration(streamConfig.config);
+
 
 		CameraStream *sourceStream = nullptr;
 		for (auto &stream : streamConfig.streams) {
@@ -780,6 +782,7 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 	 * Once the CameraConfiguration has been adjusted/validated
 	 * it can be applied to the camera.
 	 */
+
 	int ret = camera_->configure(config.get());
 	if (ret) {
 		LOG(HAL, Error) << "Failed to configure camera '"
@@ -801,6 +804,34 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 	}
 
 	config_ = std::move(config);
+
+#if 1
+	// import buffer for Internal streams
+	int streamIdx = 0;
+	for (auto &cameraStream : streams_) {
+			streamIdx++;
+			if (cameraStream.type() != CameraStream::Type::Internal)
+				continue;
+
+			std::vector<std::unique_ptr<FrameBuffer>> frameBuffers;
+			Stream *myStream = cameraStream.configuration().stream();
+			LOG(HAL, Info) << "==== configureStreams(), myStream " << myStream; 
+
+			ret = camera_->exportFrameBuffers(myStream, &frameBuffers);
+			LOG(HAL, Info) << "==== " << __func__ << " exportFrameBuffers ret " << ret << ", size " << frameBuffers.size() << ", streamIdx " << streamIdx;			
+			if (ret <= 0) {
+			  LOG(HAL, Error) << "==== " << __func__ << " exportFrameBuffers failed";
+			  return ret;
+			}
+			
+			MutexLocker locker(*cameraStream.mutex_);	
+			for (size_t i = 0; i < frameBuffers.size(); i++) {
+				cameraStream.allocatedBuffers_.push_back(std::move(frameBuffers[i]));
+				cameraStream.buffers_.emplace_back(cameraStream.allocatedBuffers_.back().get());
+			}
+	}
+#endif
+
 	return 0;
 }
 
