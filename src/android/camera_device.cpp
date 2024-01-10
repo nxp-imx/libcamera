@@ -805,8 +805,8 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 
 	config_ = std::move(config);
 
-#if 1
-	// import buffer for Internal streams
+#if 0
+	// export buffer for Internal streams
 	int streamIdx = 0;
 	for (auto &cameraStream : streams_) {
 			streamIdx++;
