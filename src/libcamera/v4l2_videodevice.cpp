@@ -990,6 +990,11 @@ int V4L2VideoDevice::trySetFormatMultiplane(V4L2DeviceFormat *format, bool set)
 		pix->plane_fmt[i].sizeimage = format->planes[i].size;
 	}
 
+	LOG(V4L2, Info) << "==== trySetFormatMultiplane, ioctl, VIDIOC_S_FMT/VIDIOC_TRY_FMT, set " << set << ", width " << pix->width <<
+		", height " << pix->height << ", pixelformat " << pix->pixelformat << ", num_planes " << pix->num_planes <<
+		", field " << pix->field << ", flags " << pix->flags <<
+		", colorspace " << pix->colorspace << ", xfer_func " << pix->xfer_func << ", ycbcr_enc " << pix->ycbcr_enc << ", quantization " << pix->quantization;
+ 
 	ret = ioctl(set ? VIDIOC_S_FMT : VIDIOC_TRY_FMT, &v4l2Format);
 	if (ret) {
 		LOG(V4L2, Error)
@@ -1059,6 +1064,11 @@ int V4L2VideoDevice::trySetFormatSingleplane(V4L2DeviceFormat *format, bool set)
 		if (caps_.isVideoCapture())
 			pix->flags |= V4L2_PIX_FMT_FLAG_SET_CSC;
 	}
+
+	LOG(V4L2, Info) << "==== trySetFormatSingleplane, ioctl, VIDIOC_S_FMT/VIDIOC_TRY_FMT, set " << set << ", width " << pix->width <<
+		", height " << pix->height << ", pixelformat " << pix->pixelformat <<
+		", field " << pix->field << ", flags " << pix->flags << 
+		", colorspace " << pix->colorspace << ", xfer_func " << pix->xfer_func << ", ycbcr_enc " << pix->ycbcr_enc << ", quantization " << pix->quantization;
 
 	ret = ioctl(set ? VIDIOC_S_FMT : VIDIOC_TRY_FMT, &v4l2Format);
 	if (ret) {
@@ -1230,6 +1240,9 @@ int V4L2VideoDevice::setSelection(unsigned int target, Rectangle *rect)
 	sel.r.width = rect->width;
 	sel.r.height = rect->height;
 
+	LOG(V4L2, Info) << "==== setSelection, ioctl, VIDIOC_S_SELECTION, type " << sel.type << ", target " << sel.target <<
+		", flags " << sel.flags << ", r.left " << sel.r.left << ", r.top " << sel.r.top << ", r.width " << sel.r.width << ", r.height " << sel.r.height;
+ 
 	int ret = ioctl(VIDIOC_S_SELECTION, &sel);
 	if (ret < 0) {
 		LOG(V4L2, Error) << "Unable to set rectangle " << target
@@ -1251,12 +1264,11 @@ int V4L2VideoDevice::requestBuffers(unsigned int count,
 	struct v4l2_requestbuffers rb = {};
 	int ret;
 
-  LOG(V4L2, Info) << "==== requestBuffers count " << count << ", bufferType_ " << bufferType_ << ", memoryType " << memoryType;
-
 	rb.count = count;
 	rb.type = bufferType_;
 	rb.memory = memoryType;
 
+  LOG(V4L2, Info) << "==== requestBuffers, ioctl, VIDIOC_REQBUFS, count " << count << ", bufferType_ " << bufferType_ << ", memoryType " << memoryType;
 	ret = ioctl(VIDIOC_REQBUFS, &rb);
 	if (ret < 0) {
 		LOG(V4L2, Error)
@@ -1409,7 +1421,7 @@ std::unique_ptr<FrameBuffer> V4L2VideoDevice::createBuffer(unsigned int index)
 	buf.length = std::size(v4l2Planes);
 	buf.m.planes = v4l2Planes;
 
-  LOG(V4L2, Info) << "==== VIDIOC_QUERYBUF, index " << buf.index << ", type " << bufferType_ << ", length " << buf.length;
+  LOG(V4L2, Info) << "==== createBuffer, VIDIOC_QUERYBUF, index " << buf.index << ", type " << bufferType_ << ", length " << buf.length;
 
 	int ret = ioctl(VIDIOC_QUERYBUF, &buf);
 	if (ret < 0) {
@@ -1502,6 +1514,8 @@ UniqueFD V4L2VideoDevice::exportDmabufFd(unsigned int index,
 	expbuf.plane = plane;
 	expbuf.flags = O_CLOEXEC | O_RDWR;
 
+	LOG(V4L2, Info) << "exportDmabufFd, ioctl, VIDIOC_EXPBUF, bufferType_ " << bufferType_;
+	
 	ret = ioctl(VIDIOC_EXPBUF, &expbuf);
 	if (ret < 0) {
 		LOG(V4L2, Error)
@@ -1946,6 +1960,7 @@ int V4L2VideoDevice::streamOn()
 
 	firstFrame_.reset();
 
+  LOG(V4L2, Info) << "streamOn, ioctl VIDIOC_STREAMON, bufferType_ " << bufferType_;
 	ret = ioctl(VIDIOC_STREAMON, &bufferType_);
 	if (ret < 0) {
 		LOG(V4L2, Error)
@@ -1976,6 +1991,8 @@ int V4L2VideoDevice::streamOn()
 int V4L2VideoDevice::streamOff()
 {
 	int ret;
+
+  LOG(V4L2, Info) << "streamOff, ioctl, VIDIOC_STREAMOFF, bufferType_ " << bufferType_;
 
 	if (state_ != State::Streaming && queuedBuffers_.empty())
 		return 0;
