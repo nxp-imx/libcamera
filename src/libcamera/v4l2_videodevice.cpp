@@ -1958,6 +1958,9 @@ int V4L2VideoDevice::streamOn()
 {
 	int ret;
 
+	if (state_ == State::Streaming)
+		return 0;
+
 	firstFrame_.reset();
 
   LOG(V4L2, Info) << "streamOn, ioctl VIDIOC_STREAMON, bufferType_ " << bufferType_;

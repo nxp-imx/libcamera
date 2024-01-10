@@ -1173,10 +1173,6 @@ int PipelineHandlerISI::start(Camera *camera,
 		int ret = pipe->capture->importBuffers(config.bufferCount);
 		if (ret)
 			return ret;
-
-		ret = pipe->capture->streamOn();
-		if (ret)
-			return ret;
 	}
 
 	return 0;
@@ -1200,7 +1196,11 @@ int PipelineHandlerISI::queueRequestDevice(Camera *camera, Request *request)
 		LOG(ISI, Debug) << "====xxxx queueRequestDevice, buffers " << request->buffers().size() << ", fd " << buffer->planes()[0].fd.get();  
 		Pipe *pipe = pipeFromStream(camera, stream);
 
-		int ret = pipe->capture->queueBuffer(buffer);
+		int ret = pipe->capture->streamOn();
+		if (ret)
+			return ret;
+
+		ret = pipe->capture->queueBuffer(buffer);
 		if (ret)
 			return ret;
 	}
