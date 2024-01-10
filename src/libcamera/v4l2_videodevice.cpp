@@ -991,9 +991,10 @@ int V4L2VideoDevice::trySetFormatMultiplane(V4L2DeviceFormat *format, bool set)
 	}
 
 	LOG(V4L2, Info) << "==== trySetFormatMultiplane, ioctl, VIDIOC_S_FMT/VIDIOC_TRY_FMT, set " << set << ", width " << pix->width <<
-		", height " << pix->height << ", pixelformat " << pix->pixelformat << ", num_planes " << pix->num_planes <<
-		", field " << pix->field << ", flags " << pix->flags <<
-		", colorspace " << pix->colorspace << ", xfer_func " << pix->xfer_func << ", ycbcr_enc " << pix->ycbcr_enc << ", quantization " << pix->quantization;
+		", height " << pix->height << ", pixelformat " << pix->pixelformat;
+
+	LOG(V4L2, Info) << "==== num_planes " << (int)pix->num_planes << ", field " << (int)pix->field << ", flags " << (int)pix->flags;
+	LOG(V4L2, Info) << "==== colorspace " << (int)pix->colorspace << ", xfer_func " << (int)pix->xfer_func << ", ycbcr_enc " << (int)pix->ycbcr_enc << ", quantization " << (int)pix->quantization;
  
 	ret = ioctl(set ? VIDIOC_S_FMT : VIDIOC_TRY_FMT, &v4l2Format);
 	if (ret) {
