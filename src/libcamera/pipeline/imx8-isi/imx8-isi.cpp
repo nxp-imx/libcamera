@@ -137,6 +137,7 @@ private:
 	struct Pipe {
 		std::unique_ptr<V4L2Subdevice> isi;
 		std::unique_ptr<V4L2VideoDevice> capture;
+	  V4L2DeviceFormat captureFmt;
 	};
 
 	ISICameraData *cameraData(Camera *camera)
@@ -1131,6 +1132,7 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 			return ret;
 		}
 
+#if 0
 		V4L2DeviceFormat captureFmt{};
 		captureFmt.fourcc = pipe->capture->toV4L2PixelFormat(config.pixelFormat);
 		captureFmt.size = config.size;
@@ -1142,6 +1144,12 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 			MYDBG;
 			return ret;
 		}
+
+#endif
+
+    memset(&pipe->captureFmt, 0, sizeof(pipe->captureFmt));
+		pipe->captureFmt.fourcc = pipe->capture->toV4L2PixelFormat(config.pixelFormat);
+		pipe->captureFmt.size = config.size;
 
     config.bufferCount = 4;
 		/* Store the list of enabled streams for later use. */
@@ -1160,20 +1168,19 @@ int PipelineHandlerISI::exportFrameBuffers(Camera *camera, Stream *stream,
 	return pipe->capture->exportBuffers(count, buffers);
 }
 
-int PipelineHandlerISI::start(Camera *camera,
+int PipelineHandlerISI::start([[maybe_unused]] Camera *camera,
 			      [[maybe_unused]] const ControlList *controls)
 {
+#if 0
 	ISICameraData *data = cameraData(camera);
+
 
 	for (const auto &stream : data->enabledStreams_) {
 		Pipe *pipe = pipeFromStream(camera, stream);
 		const StreamConfiguration &config = stream->configuration();
 
-    LOG(ISI, Info) << "==== start(), stream " << stream;
-		int ret = pipe->capture->importBuffers(config.bufferCount);
-		if (ret)
-			return ret;
 	}
+#endif
 
 	return 0;
 }
@@ -1192,13 +1199,29 @@ void PipelineHandlerISI::stopDevice(Camera *camera)
 
 int PipelineHandlerISI::queueRequestDevice(Camera *camera, Request *request)
 {
+	int ret = 0;
 	for (auto &[stream, buffer] : request->buffers()) {
 		LOG(ISI, Debug) << "====xxxx queueRequestDevice, buffers " << request->buffers().size() << ", fd " << buffer->planes()[0].fd.get();  
 		Pipe *pipe = pipeFromStream(camera, stream);
 
-		int ret = pipe->capture->streamOn();
-		if (ret)
-			return ret;
+    if (pipe->capture->state_ != V4L2VideoDevice::State::Streaming) {
+		  LOG(ISI, Info) << "====xxxx capture->setFormat " << pipe->captureFmt.toString();
+		  /* \todo Set stride and format. */
+		  ret = pipe->capture->setFormat(&pipe->captureFmt);
+		  if (ret) {
+		  	MYDBG;
+		  	return ret;
+		  }
+
+			ret = pipe->capture->importBuffers(4);
+			if (ret)
+				return ret;
+
+      LOG(ISI, Info) << "==== start(), stream " << stream;
+			ret = pipe->capture->streamOn();
+			if (ret)
+				return ret;
+  	}
 
 		ret = pipe->capture->queueBuffer(buffer);
 		if (ret)
@@ -1273,8 +1296,10 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 			return ret;
     }
 
+    V4L2DeviceFormat captureFmt{};
+
 		LOG(ISI, Info) << "==== add pipes " << entityName;
-		pipes_.push_back({ std::move(isi), std::move(capture) });
+		pipes_.push_back({ std::move(isi), std::move(capture), std::move(captureFmt) });
 	}
 
 	LOG(ISI, Info) << "==== pipes size " << std::to_string(pipes_.size());
