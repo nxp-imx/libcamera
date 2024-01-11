@@ -1996,7 +1996,6 @@ int V4L2VideoDevice::streamOff()
 {
 	int ret;
 
-  LOG(V4L2, Info) << "streamOff, ioctl, VIDIOC_STREAMOFF, bufferType_ " << bufferType_;
 
 	if (state_ != State::Streaming && queuedBuffers_.empty())
 		return 0;
@@ -2004,6 +2003,7 @@ int V4L2VideoDevice::streamOff()
 	if (watchdogDuration_.count())
 		watchdog_.stop();
 
+  LOG(V4L2, Info) << "streamOff, ioctl, VIDIOC_STREAMOFF, bufferType_ " << bufferType_;
 	ret = ioctl(VIDIOC_STREAMOFF, &bufferType_);
 	if (ret < 0) {
 		LOG(V4L2, Error)
