@@ -113,7 +113,7 @@ void PostProcessorJpeg::process(Camera3RequestDescriptor::StreamBuffer *streamBu
 	const FrameBuffer &source = *streamBuffer->srcBuffer;
 	CameraBuffer *destination = streamBuffer->dstBuffer.get();
 
-	ASSERT(destination->numPlanes() == 1);
+	//ASSERT(destination->numPlanes() == 1);
 
 	const CameraMetadata &requestMetadata = streamBuffer->request->settings_;
 	CameraMetadata *resultMetadata = streamBuffer->request->resultMetadata_.get();

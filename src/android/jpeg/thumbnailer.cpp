@@ -27,15 +27,12 @@ void Thumbnailer::configure(const Size &sourceSize, PixelFormat pixelFormat)
 	sourceSize_ = sourceSize;
 	pixelFormat_ = pixelFormat;
 
-/* YUYV is not supported by soft jpeg encoder, will fix later */
-#ifndef ANDROID
 	if (pixelFormat_ != formats::NV12) {
 		LOG(Thumbnailer, Error)
 			<< "Failed to configure: Pixel Format "
 			<< pixelFormat_ << " unsupported.";
 		return;
 	}
-#endif
 
 	valid_ = true;
 }
