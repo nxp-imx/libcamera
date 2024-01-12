@@ -146,7 +146,6 @@ private:
 	}
 
 	Pipe *pipeFromStream(Camera *camera, const Stream *stream);
-	unsigned int pipeIndexFromStream(Camera *camera, const Stream *stream);
 
 	StreamConfiguration generateYUVConfiguration(Camera *camera,
 						     const Size &size);
@@ -1202,8 +1201,7 @@ int PipelineHandlerISI::queueRequestDevice(Camera *camera, Request *request)
 {
 	int ret = 0;
 	for (auto &[stream, buffer] : request->buffers()) {
-		unsigned int pipeIndex = pipeIndexFromStream(camera, stream);	
-		LOG(ISI, Debug) << "====xxxx queueRequestDevice, buffers " << request->buffers().size() << ", fd " << buffer->planes()[0].fd.get() << ", pipeIndex " << pipeIndex; 
+		LOG(ISI, Debug) << "====xxxx queueRequestDevice, buffers " << request->buffers().size() << ", fd " << buffer->planes()[0].fd.get();  
 		Pipe *pipe = pipeFromStream(camera, stream);
 
     if (pipe->capture->state_ != V4L2VideoDevice::State::Streaming) {
@@ -1225,19 +1223,9 @@ int PipelineHandlerISI::queueRequestDevice(Camera *camera, Request *request)
 				return ret;
   	}
 
-		if (pipeIndex == 2) {
-			for (int i = 0; i < 4; i++) {
-				LOG(ISI, Info) << "==== queueBuffer loop " << i;
-				ret = pipe->capture->queueBuffer(buffer);
-				if (ret)
-					return ret;
-			}
-		} else {
-			ret = pipe->capture->queueBuffer(buffer);
-			if (ret)
-				return ret;
-		}
-
+		ret = pipe->capture->queueBuffer(buffer);
+		if (ret)
+			return ret;
 	}
 
 	return 0;
@@ -1409,15 +1397,6 @@ PipelineHandlerISI::Pipe *PipelineHandlerISI::pipeFromStream(Camera *camera,
 	ASSERT(pipeIndex < pipes_.size());
 
 	return &pipes_[pipeIndex];
-}
-
-unsigned int PipelineHandlerISI::pipeIndexFromStream(Camera *camera,
-							     const Stream *stream)
-{
-	ISICameraData *data = cameraData(camera);
-	unsigned int pipeIndex = data->pipeIndex(stream);
-
-	return pipeIndex;
 }
 
 static int dumpCount = 0;
