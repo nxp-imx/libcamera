@@ -1746,29 +1746,14 @@ int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer)
 	}
 
 	LOG(V4L2, Debug) << "Queueing buffer " << buf.index << ", this " << this;
-  LOG(V4L2, Debug) << "==== driverName " << driverName() << ", deviceName " << deviceName() << ", busName " << busName() << ", node " << deviceNode(); 
 
-  if (deviceNode().compare("/dev/video4") == 0) { 
-    for (int i = 0; i < 4; i++) {
-      LOG(V4L2, Debug) << "==== qubf loop " << i;
-			buf.index = i;	
-	    ret = ioctl(VIDIOC_QBUF, &buf);
-	    if (ret < 0) {
-	    	LOG(V4L2, Error)
-	    		<< "Failed to queue buffer " << buf.index << ": "
-	    		<< strerror(-ret);
-	    	return ret;
-	    }
-    }
-  } else {
-	  ret = ioctl(VIDIOC_QBUF, &buf);
-	  if (ret < 0) {
-	  	LOG(V4L2, Error)
-	  		<< "Failed to queue buffer " << buf.index << ": "
-	  		<< strerror(-ret);
-	  	return ret;
-	  }
-  }
+	ret = ioctl(VIDIOC_QBUF, &buf);
+	if (ret < 0) {
+		LOG(V4L2, Error)
+			<< "Failed to queue buffer " << buf.index << ": "
+			<< strerror(-ret);
+		return ret;
+	}
 
 	if (queuedBuffers_.empty()) {
 		fdBufferNotifier_->setEnabled(true);
