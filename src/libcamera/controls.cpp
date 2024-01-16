@@ -1066,7 +1066,7 @@ const ControlValue *ControlList::find(unsigned int id) const
 ControlValue *ControlList::find(unsigned int id)
 {
 	if (validator_ && !validator_->validate(id)) {
-		LOG(Controls, Error)
+		LOG(Controls, Debug)
 			<< "Control " << utils::hex(id)
 			<< " is not valid for " << validator_->name();
 		return nullptr;
