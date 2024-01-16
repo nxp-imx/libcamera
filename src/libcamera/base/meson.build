@@ -51,6 +51,7 @@ libcamera_base_deps = [
     dependency('threads'),
     libatomic,
     cc.find_library('liblog', dirs : meson.current_source_dir() / '..' / '..' / 'android' / 'ndk-lib'),
+    cc.find_library('libcutils', dirs : meson.current_source_dir() / '..' / '..' / 'android' / 'ndk-lib')
 ]
 
 endif
@@ -59,6 +60,7 @@ endif
 # the use of headers which must not be exposed to the libcamera public api.
 libcamera_base_args = [ '-DLIBCAMERA_BASE_PRIVATE' ]
 
+if get_option('android_root')=='auto'
 libcamera_base_lib = shared_library('libcamera-base',
                                     [libcamera_base_sources, libcamera_base_headers],
                                     name_prefix : '',
@@ -66,6 +68,19 @@ libcamera_base_lib = shared_library('libcamera-base',
                                     cpp_args : libcamera_base_args,
                                     include_directories : libcamera_includes,
                                     dependencies : libcamera_base_deps)
+else
+libcamera_base_lib = shared_library('libcamera-base',
+                                    [libcamera_base_sources, libcamera_base_headers],
+                                    name_prefix : '',
+                                    install : true,
+                                    cpp_args : libcamera_base_args,
+                                    include_directories : [
+                                        libcamera_includes,
+                                        androir_root / 'system/core/libcutils/include',
+                                    ],
+                                    dependencies : libcamera_base_deps)
+
+endif
 
 libcamera_base = declare_dependency(sources : [
                                         libcamera_base_headers,

@@ -25,11 +25,12 @@
 #include <libcamera/base/thread.h>
 #include <libcamera/base/utils.h>
 
-//#include <log/log.h>
+#ifdef ANDROID
 #include <android/log.h>
+#include <cutils/properties.h>
 #define LOG_TAG "LIBCAMERA"
 #define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
-
+#endif
 /**
  * \file base/log.h
  * \brief Logging infrastructure
@@ -280,17 +281,19 @@ void LogOutput::write(const std::string &str)
 	}
 }
 
-void LogOutput::writeSyslog(LogSeverity severity __unused, const std::string &str)
+void LogOutput::writeSyslog(LogSeverity severity, const std::string &str)
 {
-	//syslog(log_severity_to_syslog(severity), "%s", str.c_str());
-  ALOGI("severity %d, info: %s", log_severity_to_syslog(severity), str.c_str());
+	syslog(log_severity_to_syslog(severity), "%s", str.c_str());
 }
 
 void LogOutput::writeStream(const std::string &str)
 {
-//	stream_->write(str.c_str(), str.size());
-//	stream_->flush();
+#ifdef ANDROID
   ALOGI("%s", str.c_str());
+#else
+	stream_->write(str.c_str(), str.size());
+	stream_->flush();
+#endif
 }
 
 /**
@@ -813,9 +816,17 @@ LogCategory *LogCategory::create(const char *name)
  * \param[in] name The category name
  */
 LogCategory::LogCategory(const char *name)
-	: name_(name), severity_(LogSeverity::LogDebug)
+	: name_(name), severity_(LogSeverity::LogInfo)
 {
+#ifdef ANDROID
+	char value[PROPERTY_VALUE_MAX];
+	property_get("vendor.rw.camera.test", value, "");
+
+	if (strcmp(value, "debug") == 0)
+		severity_ = LogSeverity::LogDebug;
+#endif
 }
+
 
 /**
  * \fn LogCategory::name()
