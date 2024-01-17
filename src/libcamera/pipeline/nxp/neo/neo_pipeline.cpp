@@ -1952,7 +1952,29 @@ void NxpNeoCameraData::frameStart(uint32_t sequence)
 	if (processingRequests_.empty())
 		return;
 
+	/*
+	 * Handle controls to be set immediately on the next frame.
+	 * This currently only handle the TestPatternMode control.
+	 *
+	 * \todo Synchronize with the sequence number
+	 */
+	Request *request = processingRequests_.front();
 	processingRequests_.pop();
+
+	const auto &testPatternMode = request->controls().get(controls::draft::TestPatternMode);
+	if (!testPatternMode)
+		return;
+
+	int ret = sensor_->setTestPatternMode(
+		static_cast<controls::draft::TestPatternModeEnum>(*testPatternMode));
+	if (ret) {
+		LOG(NxpNeo, Error)
+			<< "Failed to set test pattern mode: " << ret;
+		return;
+	}
+
+	request->metadata().set(controls::draft::TestPatternMode,
+				*testPatternMode);
 }
 
 REGISTER_PIPELINE_HANDLER(PipelineHandlerNxpNeo)
