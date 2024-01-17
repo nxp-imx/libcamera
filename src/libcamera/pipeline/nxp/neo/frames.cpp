@@ -121,7 +121,7 @@ NxpNeoFrames::Info *NxpNeoFrames::find(unsigned int id)
 	if (itInfo != frameInfo_.end())
 		return itInfo->second.get();
 
-	LOG(NxpNeo, Fatal) << "Can't find tracking information for frame " << id;
+	LOG(NxpNeo, Info) << "Can't find tracking information for frame " << id;
 
 	return nullptr;
 }
@@ -141,7 +141,7 @@ NxpNeoFrames::Info *NxpNeoFrames::find(FrameBuffer *buffer)
 			return info;
 	}
 
-	LOG(NxpNeo, Fatal) << "Can't find tracking information from buffer";
+	LOG(NxpNeo, Info) << "Can't find tracking information from buffer";
 
 	return nullptr;
 }

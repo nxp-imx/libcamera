@@ -59,7 +59,7 @@ class NxpNeoCameraData : public Camera::Private
 {
 public:
 	NxpNeoCameraData(PipelineHandler *pipe)
-		: Camera::Private(pipe), pipe_(pipe) {};
+		: Camera::Private(pipe) {};
 
 	int loadIPA();
 
@@ -94,11 +94,13 @@ public:
 		V4L2DeviceFormat *vdFormatDcg, V4L2DeviceFormat *vdFormatVs,
 		V4L2DeviceFormat *vdFormatEd);
 
+	bool screenCancelledBuffer(FrameBuffer *buffer, NxpNeoFrames::Info *info);
+
 private:
 	friend class PipelineHandlerNxpNeo;
 	friend class NxpNeoCameraConfiguration;
 
-	PipelineHandlerNxpNeo *pipe() const;
+	PipelineHandlerNxpNeo *pipe();
 
 	NxpNeoSensorProperties sensorProperties_;
 	std::vector<MediaLink *> graphLinks_;
@@ -121,7 +123,6 @@ private:
 
 	ControlInfoMap ipaControls_;
 
-	PipelineHandler *pipe_;
 	std::unique_ptr<CameraSensor> sensor_;
 
 	std::shared_ptr<ISIPipe> pipeDcg_;
@@ -202,9 +203,10 @@ private:
 	int configureRoutes();
 };
 
-PipelineHandlerNxpNeo *NxpNeoCameraData::pipe() const
+PipelineHandlerNxpNeo *NxpNeoCameraData::pipe()
 {
-	return static_cast<PipelineHandlerNxpNeo *>(pipe_);
+	PipelineHandler *pipe = Camera::Private::pipe();
+	return static_cast<PipelineHandlerNxpNeo *>(pipe);
 }
 
 NxpNeoCameraConfiguration::NxpNeoCameraConfiguration(NxpNeoCameraData *data)
@@ -1701,6 +1703,39 @@ void NxpNeoCameraData::ipaMetadataReady(unsigned int id, const ControlList &meta
  */
 
 /**
+ * \brief Handle receipt of cancelled video buffer
+ * \param[in] buffer The buffer received on capture node
+ * \param[in] info Frame info associated to the buffer
+ *
+ * When camera is stopped, video devices involved in the pipeline are stopped
+ * using stopDevice() method. Buffers queued on those video nodes are released
+ * through bufferReady() signal with a status set to FrameCancelled.
+ * Such buffers shall be detected so that every other buffer bundled to
+ * the same frame can be marked as cancelled and completed.
+ */
+bool NxpNeoCameraData::screenCancelledBuffer(FrameBuffer *buffer,
+					     NxpNeoFrames::Info *info)
+{
+	Request *request = info->request;
+
+	/* If the buffer is cancelled force a complete of the whole request. */
+	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
+		for (auto it : request->buffers()) {
+			FrameBuffer *b = it.second;
+			b->_d()->cancel();
+			pipe()->completeBuffer(request, b);
+		}
+
+		frameInfos_.remove(info);
+		pipe()->completeRequest(request);
+
+		return true;
+	}
+
+	return false;
+}
+
+/**
  * \brief Handle buffers completion at the NEO output
  * \param[in] buffer The completed buffer
  *
@@ -1711,6 +1746,9 @@ void NxpNeoCameraData::neoOutputBufferReady(FrameBuffer *buffer)
 {
 	NxpNeoFrames::Info *info = frameInfos_.find(buffer);
 	if (!info)
+		return;
+
+	if (screenCancelledBuffer(buffer, info))
 		return;
 
 	Request *request = info->request;
@@ -1735,6 +1773,11 @@ void NxpNeoCameraData::isiDcgBufferReady(FrameBuffer *buffer)
 	if (!info)
 		return;
 
+	if (screenCancelledBuffer(buffer, info))
+		return;
+
+	Request *request = info->request;
+
 	unsigned int seq = buffer->metadata().sequence;
 	if (seq != sequence_)
 		LOG(NxpNeo, Warning)
@@ -1742,7 +1785,6 @@ void NxpNeoCameraData::isiDcgBufferReady(FrameBuffer *buffer)
 			<< " received " << seq;
 	sequence_ = seq + 1;
 
-	Request *request = info->request;
 	/*
 	 * Record the sensor's timestamp in the request metadata.
 	 *
@@ -1782,6 +1824,9 @@ void NxpNeoCameraData::isiVsBufferReady(FrameBuffer *buffer)
 	if (!info)
 		return;
 
+	if (screenCancelledBuffer(buffer, info))
+		return;
+
 	Request *request = info->request;
 	(void)request;
 
@@ -1804,6 +1849,9 @@ void NxpNeoCameraData::isiEdBufferReady(FrameBuffer *buffer)
 {
 	NxpNeoFrames::Info *info = frameInfos_.find(buffer);
 	if (!info)
+		return;
+
+	if (screenCancelledBuffer(buffer, info))
 		return;
 
 	Request *request = info->request;
@@ -1879,20 +1927,8 @@ void NxpNeoCameraData::neoStatsBufferReady(FrameBuffer *buffer)
 	if (!info)
 		return;
 
-	Request *request = info->request;
-
-	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
-		info->metadataProcessed = true;
-
-		/*
-		 * tryComplete() will delete info if it completes the NxpNeoFrame.
-		 * In that event, we must have obtained the Request before hand.
-		 */
-		if (frameInfos_.tryComplete(info))
-			pipe()->completeRequest(request);
-
+	if (screenCancelledBuffer(buffer, info))
 		return;
-	}
 
 	ipa_->processStatsBuffer(info->id, info->statsBuffer->cookie(),
 				 info->effectiveSensorControls);
@@ -1904,10 +1940,19 @@ void NxpNeoCameraData::neoStatsBufferReady(FrameBuffer *buffer)
  *
  * Inspect the list of pending requests waiting for a RAW frame to be
  * produced and apply controls for the 'next' one.
+ *
+ * Some controls need to be applied immediately, such as the
+ * TestPatternMode one. Other controls are handled through the delayed
+ * controls class.
  */
 void NxpNeoCameraData::frameStart(uint32_t sequence)
 {
 	delayedCtrls_->applyControls(sequence);
+
+	if (processingRequests_.empty())
+		return;
+
+	processingRequests_.pop();
 }
 
 REGISTER_PIPELINE_HANDLER(PipelineHandlerNxpNeo)
