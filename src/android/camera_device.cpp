@@ -644,6 +644,8 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 		 */
 		stream->usage |= GRALLOC_USAGE_HW_CAMERA_WRITE;
 
+
+#if 0 // Since ISI support multi-channels, no need set stream as Mapped.
 		/*
 		 * If a CameraStream with the same size and format as the
 		 * current stream has already been requested, associate the two.
@@ -662,6 +664,7 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
       LOG(HAL, Info) << "==== configure, type Mapped " << ", camera3_stream_t " << stream;  
 			continue;
 		}
+#endif
 
 		Camera3StreamConfig streamConfig;
 		streamConfig.streams = { { stream, CameraStream::Type::Direct } };
@@ -677,7 +680,7 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 		CameraStream::Type type = CameraStream::Type::Internal;
 		int index = -1;
 
-#if 1
+#if 0
 		/* Search for a compatible stream in the non-JPEG ones. */
 		for (size_t i = 0; i < streamConfigs.size(); ++i) {
 			Camera3StreamConfig &streamConfig = streamConfigs[i];
