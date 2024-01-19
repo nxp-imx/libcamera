@@ -1512,7 +1512,7 @@ PixelFormat CameraCapabilities::toPixelFormat(int format, uint32_t usage) const
 
 		for (uint32_t i = 0; i < size; i++) {
 			LOG(HAL,Info) << "==== check usage " <<  usages[i];
-			if (usage == usages[i]) {
+			if (usage & usages[i]) {
 				LOG(HAL,Info) << "==== usage match, return " << libcameraFormats[i]; 
 				return libcameraFormats[i];
 			}
