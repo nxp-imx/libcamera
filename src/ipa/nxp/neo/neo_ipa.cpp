@@ -101,6 +101,7 @@ namespace {
 const ControlInfoMap::Map nxpneoControls{
 	{ &controls::AeEnable, ControlInfo(false, true) },
 	{ &controls::AwbEnable, ControlInfo(false, true) },
+	{ &controls::ColourGains, ControlInfo(0.0f, 32.0f) },
 };
 
 } /* namespace */
