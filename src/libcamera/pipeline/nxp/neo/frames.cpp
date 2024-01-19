@@ -77,7 +77,7 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly)
 	info->id = id;
 	info->request = request;
 	info->rawBuffer = nullptr;
-	info->vsBuffer = nullptr;
+	info->input1Buffer = nullptr;
 	info->edBuffer = nullptr;
 	info->paramsBuffer = paramsBuffer;
 	info->statsBuffer = statsBuffer;
@@ -147,7 +147,7 @@ NxpNeoFrames::Info *NxpNeoFrames::find(FrameBuffer *buffer)
 
 		if (info->rawBuffer == buffer || info->paramsBuffer == buffer ||
 		    info->statsBuffer == buffer ||
-		    info->vsBuffer == buffer || info->edBuffer == buffer)
+		    info->input1Buffer == buffer || info->edBuffer == buffer)
 			return info;
 	}
 

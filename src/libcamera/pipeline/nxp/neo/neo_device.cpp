@@ -57,17 +57,17 @@ int NeoDevice::init(MediaDevice *media)
 		return ret;
 	}
 
-	dcg_ = V4L2VideoDevice::fromEntityName(media, kVDevDcgEntityName());
-	ret = dcg_->open();
+	input0_ = V4L2VideoDevice::fromEntityName(media, kVDevInput0EntityName());
+	ret = input0_->open();
 	if (ret) {
-		LOG(NeoDev, Error) << logPrefix() << "Failed to open NEO dcg";
+		LOG(NeoDev, Error) << logPrefix() << "Failed to open NEO input0";
 		return ret;
 	}
 
-	vs_ = V4L2VideoDevice::fromEntityName(media, kVDevVsEntityName());
-	ret = vs_->open();
+	input1_ = V4L2VideoDevice::fromEntityName(media, kVDevInput1EntityName());
+	ret = input1_->open();
 	if (ret) {
-		LOG(NeoDev, Error) << logPrefix() << "Failed to open NEO vs";
+		LOG(NeoDev, Error) << logPrefix() << "Failed to open NEO input1";
 		return ret;
 	}
 
@@ -107,7 +107,7 @@ int NeoDevice::init(MediaDevice *media)
  * \param[in] bufferCount The number of buffers to allocate
  *
  * Function handles buffer allocation for every pad of NEO.
- * Buffers queued onto DCG and VS pads come from the
+ * Buffers queued onto INPUT0 and INPUT1 pads come from the
  * pipeline and are imported.
  * Params and stats buffer are allocated on respective device
  * nodes.
@@ -120,19 +120,19 @@ int NeoDevice::allocateBuffers(unsigned int bufferCount)
 {
 	int ret;
 
-	/* Share buffers between ISI outputs and NEO dcg/vs inputs. */
-	ret = dcg_->importBuffers(bufferCount);
+	/* Share buffers between ISI outputs and NEO input0/input1 inputs. */
+	ret = input0_->importBuffers(bufferCount);
 	if (ret) {
 		LOG(NeoDev, Error) << logPrefix()
-			<< "Failed to import NEO dcg input buffers";
+			<< "Failed to import NEO input0 input buffers";
 		return ret;
 	}
 
-	if (padActiveVs()) {
-		ret = vs_->importBuffers(bufferCount);
+	if (padActiveInput1()) {
+		ret = input1_->importBuffers(bufferCount);
 		if (ret) {
 			LOG(NeoDev, Error) << logPrefix()
-				<< "Failed to import NEO vs input buffers";
+				<< "Failed to import NEO input1 input buffers";
 			return ret;
 		}
 	}
@@ -189,16 +189,16 @@ void NeoDevice::freeBuffers()
 	paramsBuffers_.clear();
 	statsBuffers_.clear();
 
-	ret = dcg_->releaseBuffers();
+	ret = input0_->releaseBuffers();
 	if (ret)
 		LOG(NeoDev, Error)  << logPrefix()
-			<< "Failed to release NEO dcg buffers";
+			<< "Failed to release NEO input0 buffers";
 
-	if (padActiveVs()) {
-		ret = vs_->releaseBuffers();
+	if (padActiveInput1()) {
+		ret = input1_->releaseBuffers();
 		if (ret)
 			LOG(NeoDev, Error) << logPrefix()
-				<< "Failed to release NEO vs buffers";
+				<< "Failed to release NEO input1 buffers";
 	}
 
 	ret = params_->releaseBuffers();
@@ -269,18 +269,18 @@ int NeoDevice::start()
 	}
 
 	/* Start the NEO input video devices. */
-	ret = dcg_->streamOn();
+	ret = input0_->streamOn();
 	if (ret) {
 		LOG(NeoDev, Error) << logPrefix()
-			<< "Failed to start NEO dcg";
+			<< "Failed to start NEO input0";
 		return ret;
 	}
 
-	if (padActiveVs()) {
-		ret = vs_->streamOn();
+	if (padActiveInput1()) {
+		ret = input1_->streamOn();
 		if (ret) {
 			LOG(NeoDev, Error) << logPrefix()
-				<< "Failed to start NEO vs";
+				<< "Failed to start NEO input1";
 			return ret;
 		}
 	}
@@ -310,9 +310,9 @@ int NeoDevice::stop()
 		ret |= ir_->streamOff();
 	ret |= params_->streamOff();
 	ret |= stats_->streamOff();
-	ret |= dcg_->streamOff();
-	if (padActiveVs())
-		ret |= vs_->streamOff();
+	ret |= input0_->streamOff();
+	if (padActiveInput1())
+		ret |= input1_->streamOff();
 
 	if (ret)
 		LOG(NeoDev, Error) << logPrefix() << "Failed to stop";
@@ -364,14 +364,14 @@ int NeoDevice::enableLinks(bool enable)
 {
 	int ret;
 
-	ret = linkSetup(kVDevDcgEntityName(), 0,
-			kSDevNeoEntityName(), PAD_DCG, enable);
+	ret = linkSetup(kVDevInput0EntityName(), 0,
+			kSDevNeoEntityName(), PAD_INPUT0, enable);
 	if (ret)
 		return ret;
 
-	if (padActiveVs() || !enable) {
-		ret = linkSetup(kVDevVsEntityName(), 0,
-				kSDevNeoEntityName(), PAD_VS, enable);
+	if (padActiveInput1() || !enable) {
+		ret = linkSetup(kVDevInput1EntityName(), 0,
+				kSDevNeoEntityName(), PAD_INPUT1, enable);
 		if (ret)
 			return ret;
 	}
@@ -463,15 +463,15 @@ int NeoDevice::configureVideoDeviceMeta(V4L2VideoDevice *dev,
 
 /**
  * \brief Configure NEO video devices according to their formats
- * \param[in] formatDcg DCG video device format
- * \param[in] formatVs VS video device format
- * \param[in] formatDcg FRAME device node format
- * \param[in] formatDcg IR video device format
+ * \param[in] formatInput0 INPUT0 video device format
+ * \param[in] formatInput1 INPUT1 video device format
+ * \param[in] formatFrame FRAME device node format
+ * \param[in] formatIr IR video device format
  *
  * \return 0 on success or a negative error code otherwise
  */
-int NeoDevice::configure(V4L2DeviceFormat &formatDcg,
-			 V4L2DeviceFormat &formatVs,
+int NeoDevice::configure(V4L2DeviceFormat &formatInput0,
+			 V4L2DeviceFormat &formatInput1,
 			 V4L2DeviceFormat &formatFrame,
 			 V4L2DeviceFormat &formatIr)
 {
@@ -483,14 +483,14 @@ int NeoDevice::configure(V4L2DeviceFormat &formatDcg,
 	#define V4L2_META_FMT_NEO_ISP_STATS	v4l2_fourcc('N', 'N', 'I', 'S')
 #endif
 
-	configVs_ = formatVs.fourcc.isValid();
+	configInput1_ = formatInput1.fourcc.isValid();
 	configFrame_ = formatFrame.fourcc.isValid();
 	configIr_ = formatIr.fourcc.isValid();
 
 	/*
 	 * \todo NEO driver currently defines immutable links.
 	 * When that is changed, dynamically enable relevant links to match
-	 * configuration and optional usage of VS, DCG and IR.
+	 * configuration and optional usage of INPUT1, INPUT0 and IR.
 	 */
 
 	/*
@@ -498,12 +498,12 @@ int NeoDevice::configure(V4L2DeviceFormat &formatDcg,
 	enableLinks(true);
 	*/
 
-	ret = configureVideoDevice(dcg_.get(), PAD_DCG, formatDcg);
+	ret = configureVideoDevice(input0_.get(), PAD_INPUT0, formatInput0);
 	if (ret)
 		return ret;
 
-	if (padActiveVs()) {
-		ret = configureVideoDevice(vs_.get(), PAD_VS, formatVs);
+	if (padActiveInput1()) {
+		ret = configureVideoDevice(input1_.get(), PAD_INPUT1, formatInput1);
 		if (ret)
 			return ret;
 	}
@@ -558,7 +558,7 @@ const std::vector<V4L2PixelFormat> &NeoDevice::irFormats()
 	return formats;
 }
 
-const std::vector<V4L2PixelFormat> &NeoDevice::dcgFormats()
+const std::vector<V4L2PixelFormat> &NeoDevice::input0Formats()
 {
 	/* \todo update per actual driver capability */
 	static const std::vector<V4L2PixelFormat> formats = {
@@ -587,7 +587,7 @@ const std::vector<V4L2PixelFormat> &NeoDevice::dcgFormats()
 	return formats;
 }
 
-const std::vector<V4L2PixelFormat> &NeoDevice::vsFormats()
+const std::vector<V4L2PixelFormat> &NeoDevice::input1Formats()
 {
 	/* \todo update per actual driver capability */
 	static const std::vector<V4L2PixelFormat> formats = {

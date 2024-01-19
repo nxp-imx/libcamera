@@ -38,7 +38,7 @@ public:
 		FrameBuffer *rawBuffer;
 		FrameBuffer *paramsBuffer;
 		FrameBuffer *statsBuffer;
-		FrameBuffer *vsBuffer;
+		FrameBuffer *input1Buffer;
 		FrameBuffer *edBuffer;
 
 		ControlList effectiveSensorControls;

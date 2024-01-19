@@ -24,8 +24,8 @@ struct NxpNeoSensorChannel {
 	std::string toString() const;
 };
 
-struct NxpNeoSensorChannelDcg : NxpNeoSensorChannel {
-	NxpNeoSensorChannelDcg()
+struct NxpNeoSensorChannelInput0 : NxpNeoSensorChannel {
+	NxpNeoSensorChannelInput0()
 		: NxpNeoSensorChannel(true, kIsiXbarPadDefault, 0),
 		  skipTopLines(0) {}
 
@@ -33,8 +33,8 @@ struct NxpNeoSensorChannelDcg : NxpNeoSensorChannel {
 	unsigned int skipTopLines;
 };
 
-struct NxpNeoSensorChannelVs : NxpNeoSensorChannel {
-	NxpNeoSensorChannelVs()
+struct NxpNeoSensorChannelInput1 : NxpNeoSensorChannel {
+	NxpNeoSensorChannelInput1()
 		: NxpNeoSensorChannel(false, kIsiXbarPadDefault, 0),
 		  mbusFormat(0) {}
 
@@ -55,11 +55,11 @@ struct NxpNeoSensorChannelEd : NxpNeoSensorChannel {
 struct NxpNeoSensorProperties {
 	NxpNeoSensorProperties() {}
 
-	bool hasVs() { return vsChannel_.valid_; }
+	bool hasInput1() { return input1Channel_.valid_; }
 	bool hasEmbedded() { return edChannel_.valid_; }
 
-	NxpNeoSensorChannelDcg dcgChannel_;
-	NxpNeoSensorChannelVs vsChannel_;
+	NxpNeoSensorChannelInput0 input0Channel_;
+	NxpNeoSensorChannelInput1 input1Channel_;
 	NxpNeoSensorChannelEd edChannel_;
 };
 

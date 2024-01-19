@@ -64,11 +64,11 @@ public:
 	int loadIPA();
 
 	void neoOutputBufferReady(FrameBuffer *buffer);
-	void isiDcgBufferReady(FrameBuffer *buffer);
-	void isiVsBufferReady(FrameBuffer *buffer);
+	void isiInput0BufferReady(FrameBuffer *buffer);
+	void isiInput1BufferReady(FrameBuffer *buffer);
 	void isiEdBufferReady(FrameBuffer *buffer);
-	void neoDcgBufferConsumed(FrameBuffer *buffer);
-	void neoVsBufferConsumed(FrameBuffer *buffer);
+	void neoInput0BufferConsumed(FrameBuffer *buffer);
+	void neoInput1BufferConsumed(FrameBuffer *buffer);
 
 	void neoParamsBufferReady(FrameBuffer *buffer);
 	void neoStatsBufferReady(FrameBuffer *buffer);
@@ -89,9 +89,9 @@ public:
 	int setupCameraConfigureGraph(std::vector<MediaLink *> &links,
 				      V4L2SubdeviceFormat &sdFormat);
 	int setupCameraConfigureIsi(
-		V4L2SubdeviceFormat &sdFormatDcg, V4L2SubdeviceFormat &sdFormatVs,
+		V4L2SubdeviceFormat &sdFormatInput0, V4L2SubdeviceFormat &sdFormatInput1,
 		V4L2SubdeviceFormat &sdFormatEd,
-		V4L2DeviceFormat *vdFormatDcg, V4L2DeviceFormat *vdFormatVs,
+		V4L2DeviceFormat *vdFormatInput0, V4L2DeviceFormat *vdFormatInput1,
 		V4L2DeviceFormat *vdFormatEd);
 
 	bool screenCancelledBuffer(FrameBuffer *buffer, NxpNeoFrames::Info *info);
@@ -125,8 +125,8 @@ private:
 
 	std::unique_ptr<CameraSensor> sensor_;
 
-	std::shared_ptr<ISIPipe> pipeDcg_;
-	std::shared_ptr<ISIPipe> pipeVs_;
+	std::shared_ptr<ISIPipe> pipeInput0_;
+	std::shared_ptr<ISIPipe> pipeInput1_;
 	std::shared_ptr<ISIPipe> pipeEd_;
 
 	std::vector<IPABuffer> ipaBuffers_;
@@ -476,17 +476,17 @@ int PipelineHandlerNxpNeo::configure(Camera *camera, CameraConfiguration *c)
 	 */
 
 	NxpNeoSensorProperties *sensorProps = &data->sensorProperties_;
-	V4L2SubdeviceFormat sdFormatDcg = {}, sdFormatVs = {},  sdFormatEd = {};
-	V4L2DeviceFormat vdFormatDcg = {}, vdFormatVs = {}, vdFormatEd = {};
+	V4L2SubdeviceFormat sdFormatInput0 = {}, sdFormatInput1 = {},  sdFormatEd = {};
+	V4L2DeviceFormat vdFormatInput0 = {}, vdFormatInput1 = {}, vdFormatEd = {};
 
 	/* All streams share the same size */
 	Size size = (*config)[0].size;
-	sdFormatDcg.mbus_code = data->mbusCode_;
-	sdFormatDcg.size = size;
+	sdFormatInput0.mbus_code = data->mbusCode_;
+	sdFormatInput0.size = size;
 
-	if (sensorProps->hasVs()) {
-		sdFormatVs.mbus_code = sensorProps->vsChannel_.mbusFormat;
-		sdFormatVs.size = size;
+	if (sensorProps->hasInput1()) {
+		sdFormatInput1.mbus_code = sensorProps->input1Channel_.mbusFormat;
+		sdFormatInput1.size = size;
 	}
 
 	if (sensorProps->hasEmbedded()) {
@@ -496,12 +496,12 @@ int PipelineHandlerNxpNeo::configure(Camera *camera, CameraConfiguration *c)
 	}
 
 	ret = data->setupCameraConfigureIsi(
-			sdFormatDcg, sdFormatVs, sdFormatEd,
-			&vdFormatDcg, &vdFormatVs, &vdFormatEd);
+			sdFormatInput0, sdFormatInput1, sdFormatEd,
+			&vdFormatInput0, &vdFormatInput1, &vdFormatEd);
 	if (ret)
 		return ret;
 
-	ret = data->setupCameraConfigureGraph(data->graphLinks_, sdFormatDcg);
+	ret = data->setupCameraConfigureGraph(data->graphLinks_, sdFormatInput0);
 	if (ret)
 		return ret;
 
@@ -532,7 +532,7 @@ int PipelineHandlerNxpNeo::configure(Camera *camera, CameraConfiguration *c)
 			}
 		}
 
-		ret = data->neo_->configure(vdFormatDcg, vdFormatVs,
+		ret = data->neo_->configure(vdFormatInput0, vdFormatInput1,
 					    devFormatFrame, devFormatIr);
 		if (ret)
 			return ret;
@@ -545,7 +545,7 @@ int PipelineHandlerNxpNeo::configure(Camera *camera, CameraConfiguration *c)
 	if (ret)
 		return ret;
 
-	ret = sensor->setFormat(&sdFormatDcg, config->combinedTransform_);
+	ret = sensor->setFormat(&sdFormatInput0, config->combinedTransform_);
 	if (ret)
 		return ret;
 
@@ -587,7 +587,7 @@ int PipelineHandlerNxpNeo::exportFrameBuffers(Camera *camera, Stream *stream,
 	} else if (stream == &data->streamIr_) {
 		return data->neo_->ir_->exportBuffers(count, buffers);
 	} else if (stream == &data->streamRaw_) {
-		return data->pipeDcg_->exportBuffers(count, buffers);
+		return data->pipeInput0_->exportBuffers(count, buffers);
 	}
 
 	return -EINVAL;
@@ -671,15 +671,15 @@ int PipelineHandlerNxpNeo::start(Camera *camera, [[maybe_unused]] const ControlL
 	/*
 	 * Start the Neo and ISI video devices, buffers will be queued to the
 	 * Neo frame and IR outputs when requests will be queued.
-	 * DCG ISI stream is mandatory, VS and Embedded Data are optional
+	 * INPUT0 ISI stream is mandatory, INPUT1 and Embedded Data are optional
 	 */
 
 	ret = neo->start();
 	if (ret)
 		goto error;
 
-	if (sensorProps->hasVs()) {
-		ret = data->pipeVs_->start();
+	if (sensorProps->hasInput1()) {
+		ret = data->pipeInput1_->start();
 		if (ret)
 			goto error;
 	}
@@ -690,7 +690,7 @@ int PipelineHandlerNxpNeo::start(Camera *camera, [[maybe_unused]] const ControlL
 			goto error;
 	}
 
-	ret = data->pipeDcg_->start();
+	ret = data->pipeInput0_->start();
 	if (ret)
 		goto error;
 
@@ -699,9 +699,9 @@ int PipelineHandlerNxpNeo::start(Camera *camera, [[maybe_unused]] const ControlL
 error:
 	neo->stop();
 
-	data->pipeDcg_->stop();
-	if (sensorProps->hasVs())
-		data->pipeVs_->stop();
+	data->pipeInput0_->stop();
+	if (sensorProps->hasInput1())
+		data->pipeInput1_->stop();
 	if (sensorProps->hasEmbedded())
 		data->pipeEd_->stop();
 
@@ -724,9 +724,9 @@ void PipelineHandlerNxpNeo::stopDevice(Camera *camera)
 
 	data->ipa_->stop();
 
-	ret |= data->pipeDcg_->stop();
-	if (sensorProps->hasVs())
-		ret |= data->pipeVs_->stop();
+	ret |= data->pipeInput0_->stop();
+	if (sensorProps->hasInput1())
+		ret |= data->pipeInput1_->stop();
 	if (sensorProps->hasEmbedded())
 		ret |= data->pipeEd_->stop();
 
@@ -760,7 +760,7 @@ void NxpNeoCameraData::queuePendingRequests()
 {
 	FrameBuffer *reqRawBuffer;
 	FrameBuffer *rawBuffer;
-	FrameBuffer *vsBuffer;
+	FrameBuffer *input1Buffer;
 	FrameBuffer *edBuffer;
 	NxpNeoFrames::Info *info;
 	int ret;
@@ -773,17 +773,17 @@ void NxpNeoCameraData::queuePendingRequests()
 			break;
 
 		rawBuffer = nullptr;
-		vsBuffer = nullptr;
+		input1Buffer = nullptr;
 		edBuffer = nullptr;
 
 		/*
-		 * Queue a DCG buffer on the ISI, using the raw stream buffer
+		 * Queue a INPUT0 buffer on the ISI, using the raw stream buffer
 		 * provided in the request, if any, or a ISI internal buffer
 		 * otherwise.
 		 */
 		reqRawBuffer = request->findBuffer(&streamRaw_);
 		if (!reqRawBuffer) {
-			rawBuffer = pipeDcg_->popAvailableBuffer();
+			rawBuffer = pipeInput0_->popAvailableBuffer();
 			if (!rawBuffer)
 				goto error;
 			rawBuffer->_d()->setRequest(request);
@@ -791,12 +791,12 @@ void NxpNeoCameraData::queuePendingRequests()
 			rawBuffer = reqRawBuffer;
 		}
 
-		/* Queue optional VS buffer to ISI channel */
-		if (sensorProperties_.hasVs()) {
-			vsBuffer = pipeVs_->popAvailableBuffer();
-			if (!vsBuffer)
+		/* Queue optional INPUT1 buffer to ISI channel */
+		if (sensorProperties_.hasInput1()) {
+			input1Buffer = pipeInput1_->popAvailableBuffer();
+			if (!input1Buffer)
 				goto error;
-			vsBuffer->_d()->setRequest(request);
+			input1Buffer->_d()->setRequest(request);
 		}
 
 		/* Queue optional Embedded Data buffer to ISI channel */
@@ -807,11 +807,11 @@ void NxpNeoCameraData::queuePendingRequests()
 			edBuffer->_d()->setRequest(request);
 		}
 
-		ret = pipeDcg_->queueBuffer(rawBuffer);
+		ret = pipeInput0_->queueBuffer(rawBuffer);
 		if (ret)
 			goto error;
-		if (sensorProperties_.hasVs())
-			ret = pipeVs_->queueBuffer(vsBuffer);
+		if (sensorProperties_.hasInput1())
+			ret = pipeInput1_->queueBuffer(input1Buffer);
 		if (sensorProperties_.hasEmbedded())
 			ret |= pipeEd_->queueBuffer(edBuffer);
 
@@ -821,7 +821,7 @@ void NxpNeoCameraData::queuePendingRequests()
 		}
 
 		info->rawBuffer = rawBuffer;
-		info->vsBuffer = vsBuffer;
+		info->input1Buffer = input1Buffer;
 		info->edBuffer = edBuffer;
 
 		ipa_->queueRequest(info->id, request->controls());
@@ -835,9 +835,9 @@ error:
 	LOG(NxpNeo, Warning) << "queuePendingRequests error ";
 
 	if (edBuffer)
-		pipeDcg_->tryReturnBuffer(edBuffer);
-	if (vsBuffer)
-		pipeVs_->tryReturnBuffer(vsBuffer);
+		pipeInput0_->tryReturnBuffer(edBuffer);
+	if (input1Buffer)
+		pipeInput1_->tryReturnBuffer(input1Buffer);
 	if (!reqRawBuffer && rawBuffer)
 		pipeEd_->tryReturnBuffer(rawBuffer);
 
@@ -878,7 +878,7 @@ unsigned int NxpNeoCameraData::getRawMediaBusFormat(PixelFormat *pixelFormat) co
 	const std::map<uint32_t, V4L2PixelFormat> &isiFormats =
 		ISIDevice::mediaBusToPixelFormats();
 	const std::vector<V4L2PixelFormat> &neoPixelFormats =
-		NeoDevice::dcgFormats();
+		NeoDevice::input0Formats();
 
 	/*
 	 * Make sure the requested PixelFormat is supported by sensor, ISI and
@@ -991,8 +991,8 @@ int PipelineHandlerNxpNeo::loadSensorProperties(const CameraSensor *sensor,
 		<< " Sensor properties entity " << sensor->entity()->name()
 		<< " id " << sensor->id()
 		<< " model " << sensor->model() << std::endl
-		<< " dcg " << sensorProps->dcgChannel_.toString() << std::endl
-		<< " vs " << sensorProps->vsChannel_.toString() << std::endl
+		<< " input0 " << sensorProps->input0Channel_.toString() << std::endl
+		<< " input1 " << sensorProps->input1Channel_.toString() << std::endl
 		<< " ed " << sensorProps->edChannel_.toString();
 
 	return 0;
@@ -1108,33 +1108,33 @@ int NxpNeoCameraData::setupCameraIsiReserve()
 
 	auto isiPipeDeleter = [=](ISIPipe *ipipe) { isi->freePipe(ipipe); };
 
-	pipeDcg_ = std::shared_ptr<ISIPipe>(isi->allocPipe(), isiPipeDeleter);
-	if (!pipeDcg_.get())
+	pipeInput0_ = std::shared_ptr<ISIPipe>(isi->allocPipe(), isiPipeDeleter);
+	if (!pipeInput0_.get())
 		return -ENODEV;
 
 	sinkPad = static_cast<uint32_t>
-			(sensorProps->dcgChannel_.xbarPad_);
+			(sensorProps->input0Channel_.xbarPad_);
 	sinkStream = static_cast<uint32_t>
-			(sensorProps->dcgChannel_.xbarPadStream_);
+			(sensorProps->input0Channel_.xbarPadStream_);
 	sourcePad = static_cast<uint32_t>
-			(isiPipePadBase + pipeDcg_->index());
+			(isiPipePadBase + pipeInput0_->index());
 	sourceStream = 0;
 
 	channelRecordRoute(sinkPad, sinkStream, sourcePad, sourceStream);
 
 
-	if (sensorProps->hasVs()) {
-		pipeVs_ = std::shared_ptr<ISIPipe>
+	if (sensorProps->hasInput1()) {
+		pipeInput1_ = std::shared_ptr<ISIPipe>
 				(isi->allocPipe(), isiPipeDeleter);
-		if (!pipeVs_.get())
+		if (!pipeInput1_.get())
 			return -ENODEV;
 
 		sinkPad = static_cast<uint32_t>
-				(sensorProps->vsChannel_.xbarPad_);
+				(sensorProps->input1Channel_.xbarPad_);
 		sinkStream = static_cast<uint32_t>
-				(sensorProps->vsChannel_.xbarPadStream_);
+				(sensorProps->input1Channel_.xbarPadStream_);
 		sourcePad = static_cast<uint32_t>
-				(isiPipePadBase + pipeVs_->index());
+				(isiPipePadBase + pipeInput1_->index());
 		sourceStream = 0;
 
 		channelRecordRoute(sinkPad, sinkStream, sourcePad, sourceStream);
@@ -1170,26 +1170,26 @@ int NxpNeoCameraData::setupCameraIsiReserve()
 
 /**
  * \brief Configure camera ISI pipes subdevices and nodes formats
- * \param[in] sdFormatDcg subdevice format for dcg channel
- * \param[in] sdFormatVs subdevice format for vs channel
+ * \param[in] sdFormatInput0 subdevice format for input0 channel
+ * \param[in] sdFormatInput1 subdevice format for input1 channel
  * \param[in] sdFormatEd subdevice format for embedded data channel
- * \param[out] vdFormatDcg video device format for dcg channel
- * \param[out] vdFormatVs video device format for vs channel
+ * \param[out] vdFormatInput0 video device format for input0 channel
+ * \param[out] vdFormatInput1 video device format for input1 channel
  * \param[out] vdFormatEd video device format for embedded data channel
  *
  * \return 0 in case of success or a negative error code.
  */
 int NxpNeoCameraData::setupCameraConfigureIsi(
-	V4L2SubdeviceFormat &sdFormatDcg, V4L2SubdeviceFormat &sdFormatVs,
+	V4L2SubdeviceFormat &sdFormatInput0, V4L2SubdeviceFormat &sdFormatInput1,
 	V4L2SubdeviceFormat &sdFormatEd,
-	V4L2DeviceFormat *vdFormatDcg, V4L2DeviceFormat *vdFormatVs,
+	V4L2DeviceFormat *vdFormatInput0, V4L2DeviceFormat *vdFormatInput1,
 	V4L2DeviceFormat *vdFormatEd)
 {
 	NxpNeoSensorProperties *sensorProps = &sensorProperties_;
 
-	int ret = pipeDcg_->configure(sdFormatDcg, vdFormatDcg);
-	if (sensorProps->hasVs())
-		ret|= pipeVs_->configure(sdFormatVs, vdFormatVs);
+	int ret = pipeInput0_->configure(sdFormatInput0, vdFormatInput0);
+	if (sensorProps->hasInput1())
+		ret|= pipeInput1_->configure(sdFormatInput1, vdFormatInput1);
 	if (sensorProps->hasEmbedded())
 		ret|= pipeEd_->configure(sdFormatEd, vdFormatEd);
 
@@ -1205,7 +1205,7 @@ int NxpNeoCameraData::setupCameraConfigureIsi(
  * The media links involved in the sensor media graph are enabled.
  * Pads involved in the links are individually configured with the sensor
  * output format.
- * \todo add stream support to pads configuration to cater for VS and embedded
+ * \todo add stream support to pads configuration to cater for INPUT1 and embedded
  * data channels.
  *
  * \return 0 in case of success or a negative error code.
@@ -1395,14 +1395,14 @@ int PipelineHandlerNxpNeo::createCamera(MediaEntity *sensorEntity,
 	 */
 	NxpNeoSensorProperties *sensorProps = &data->sensorProperties_;
 
-	data->pipeDcg_->bufferReady().connect(data.get(),
-			&NxpNeoCameraData::isiDcgBufferReady);
-	data->pipeDcg_->bufferAvailable.connect(data.get(),
+	data->pipeInput0_->bufferReady().connect(data.get(),
+			&NxpNeoCameraData::isiInput0BufferReady);
+	data->pipeInput0_->bufferAvailable.connect(data.get(),
 			&NxpNeoCameraData::queuePendingRequests);
-	if (sensorProps->hasVs()) {
-		data->pipeVs_->bufferReady().connect(data.get(),
-				&NxpNeoCameraData::isiVsBufferReady);
-		data->pipeVs_->bufferAvailable.connect(data.get(),
+	if (sensorProps->hasInput1()) {
+		data->pipeInput1_->bufferReady().connect(data.get(),
+				&NxpNeoCameraData::isiInput1BufferReady);
+		data->pipeInput1_->bufferAvailable.connect(data.get(),
 				&NxpNeoCameraData::queuePendingRequests);
 	}
 	if (sensorProps->hasEmbedded()) {
@@ -1410,9 +1410,9 @@ int PipelineHandlerNxpNeo::createCamera(MediaEntity *sensorEntity,
 				&NxpNeoCameraData::isiEdBufferReady);
 	}
 
-	data->neo_->dcg_->bufferReady.connect(data->pipeDcg_.get(),
+	data->neo_->input0_->bufferReady.connect(data->pipeInput0_.get(),
 			&ISIPipe::tryReturnBuffer);
-	data->neo_->vs_->bufferReady.connect(data->pipeVs_.get(),
+	data->neo_->input1_->bufferReady.connect(data->pipeInput1_.get(),
 			&ISIPipe::tryReturnBuffer);
 	data->neo_->frame_->bufferReady.connect(data.get(),
 			&NxpNeoCameraData::neoOutputBufferReady);
@@ -1490,8 +1490,8 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 	MediaDevice *neoDev;
 	DeviceMatch isp(NeoDevice::kDriverName());
 	isp.add(NeoDevice::kSDevNeoEntityName());
-	isp.add(NeoDevice::kVDevDcgEntityName());
-	isp.add(NeoDevice::kVDevVsEntityName());
+	isp.add(NeoDevice::kVDevInput0EntityName());
+	isp.add(NeoDevice::kVDevInput1EntityName());
 	isp.add(NeoDevice::kVDevEntityParamsName());
 	isp.add(NeoDevice::kVDevEntityFrameName());
 	isp.add(NeoDevice::kVDevEntityIrName());
@@ -1679,9 +1679,9 @@ void NxpNeoCameraData::ipaParamsBufferReady(unsigned int id)
 		sizeof(struct neoisp_meta_params_s);
 	neo_->params_->queueBuffer(info->paramsBuffer);
 	neo_->stats_->queueBuffer(info->statsBuffer);
-	neo_->dcg_->queueBuffer(info->rawBuffer);
-	if (sensorProperties_.hasVs())
-		neo_->vs_->queueBuffer(info->vsBuffer);
+	neo_->input0_->queueBuffer(info->rawBuffer);
+	if (sensorProperties_.hasInput1())
+		neo_->input1_->queueBuffer(info->input1Buffer);
 }
 
 void NxpNeoCameraData::ipaMetadataReady(unsigned int id, const ControlList &metadata)
@@ -1760,14 +1760,14 @@ void NxpNeoCameraData::neoOutputBufferReady(FrameBuffer *buffer)
 }
 
 /**
- * \brief Handle DCG buffers availability at the ISI output
+ * \brief Handle INPUT0 buffers availability at the ISI output
  * \param[in] buffer The completed buffer
  *
  * Once params buffer for ISP has been produced by 3A, input buffers are
  * queued to NEO for further processing.
  * Buffers will be returned after being processed by ISP.
  */
-void NxpNeoCameraData::isiDcgBufferReady(FrameBuffer *buffer)
+void NxpNeoCameraData::isiInput0BufferReady(FrameBuffer *buffer)
 {
 	NxpNeoFrames::Info *info = frameInfos_.find(buffer);
 	if (!info)
@@ -1781,7 +1781,7 @@ void NxpNeoCameraData::isiDcgBufferReady(FrameBuffer *buffer)
 	unsigned int seq = buffer->metadata().sequence;
 	if (seq != sequence_)
 		LOG(NxpNeo, Warning)
-			<< "Dcg frame loss! expected " << sequence_
+			<< "Input0 frame loss! expected " << sequence_
 			<< " received " << seq;
 	sequence_ = seq + 1;
 
@@ -1802,9 +1802,9 @@ void NxpNeoCameraData::isiDcgBufferReady(FrameBuffer *buffer)
 
 	if (!rawStreamOnly_) {
 		/*
-		 * DCG frame will be queue into ISP once params buffer for the frame
+		 * INPUT0 frame will be queue into ISP once params buffer for the frame
 		 * have been produced by IPA.
-		 * \todo: in case of ISP operation with DCG + VS inputs, wait for both
+		 * \todo: in case of ISP operation with INPUT0 + INPUT1 inputs, wait for both
 		 * frames to be available before invoking ipa_->fillParamsBuffer()
 		 */
 
@@ -1816,14 +1816,14 @@ void NxpNeoCameraData::isiDcgBufferReady(FrameBuffer *buffer)
 }
 
 /**
- * \brief Handle VS buffers availability at the ISI output
+ * \brief Handle INPUT1 buffers availability at the ISI output
  * \param[in] buffer The completed buffer
  *
  * Once params buffer for ISP has been produced by 3A, input buffers are
  * queue to NEO for further processing.
  * Buffer will be returned after being ingested by ISP.
  */
-void NxpNeoCameraData::isiVsBufferReady(FrameBuffer *buffer)
+void NxpNeoCameraData::isiInput1BufferReady(FrameBuffer *buffer)
 {
 	NxpNeoFrames::Info *info = frameInfos_.find(buffer);
 	if (!info)
@@ -1836,11 +1836,11 @@ void NxpNeoCameraData::isiVsBufferReady(FrameBuffer *buffer)
 	(void)request;
 
 	/*
-	 * \todo: in case of ISP operation with DCG + VS inputs, wait for both
+	 * \todo: in case of ISP operation with INPUT0 + INPUT1 inputs, wait for both
 	 * frames to be available before invoking ipa_->fillParamsBuffer()
 	 */
 
-	ASSERT(pipeVs_);
+	ASSERT(pipeInput1_);
 }
 
 /**
@@ -1870,12 +1870,12 @@ void NxpNeoCameraData::isiEdBufferReady(FrameBuffer *buffer)
 }
 
 /**
- * \brief Handle DCG buffers consumed by ISP
+ * \brief Handle INPUT0 buffers consumed by ISP
  * \param[in] buffer The completed buffer
  *
  * Once buffer has been consumed by ISP it may be recycled to pipe buffer pool
  */
-void NxpNeoCameraData::neoDcgBufferConsumed(FrameBuffer *buffer)
+void NxpNeoCameraData::neoInput0BufferConsumed(FrameBuffer *buffer)
 {
 	NxpNeoFrames::Info *info = frameInfos_.find(buffer);
 	if (!info)
@@ -1884,16 +1884,16 @@ void NxpNeoCameraData::neoDcgBufferConsumed(FrameBuffer *buffer)
 	Request *request = info->request;
 
 	pipe()->completeBuffer(request, buffer);
-	pipeDcg_->tryReturnBuffer(buffer);
+	pipeInput0_->tryReturnBuffer(buffer);
 }
 
 /**
- * \brief Handle VS buffers consumed by ISP
+ * \brief Handle INPUT1 buffers consumed by ISP
  * \param[in] buffer The completed buffer
  *
  * Once buffer has been consumed by ISP it may be recycled to pipe buffer pool
  */
-void NxpNeoCameraData::neoVsBufferConsumed(FrameBuffer *buffer)
+void NxpNeoCameraData::neoInput1BufferConsumed(FrameBuffer *buffer)
 {
 	NxpNeoFrames::Info *info = frameInfos_.find(buffer);
 	if (!info)
@@ -1902,8 +1902,8 @@ void NxpNeoCameraData::neoVsBufferConsumed(FrameBuffer *buffer)
 	Request *request = info->request;
 
 	pipe()->completeBuffer(request, buffer);
-	ASSERT(pipeVs_);
-	pipeVs_->tryReturnBuffer(buffer);
+	ASSERT(pipeInput1_);
+	pipeInput1_->tryReturnBuffer(buffer);
 }
 
 void NxpNeoCameraData::neoParamsBufferReady(FrameBuffer *buffer)

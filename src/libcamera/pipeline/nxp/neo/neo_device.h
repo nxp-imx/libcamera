@@ -34,8 +34,8 @@ public:
 	int allocateBuffers(unsigned int bufferCount);
 	void freeBuffers();
 
-	int configure(V4L2DeviceFormat &formatDcg,
-		      V4L2DeviceFormat &formatVs,
+	int configure(V4L2DeviceFormat &formatInput0,
+		      V4L2DeviceFormat &formatInput1,
 		      V4L2DeviceFormat &formatFrame,
 		      V4L2DeviceFormat &formatIr);
 
@@ -45,8 +45,8 @@ public:
 	int enableLinks(bool enable);
 
 	std::unique_ptr<V4L2Subdevice> isp_;
-	std::unique_ptr<V4L2VideoDevice> dcg_;
-	std::unique_ptr<V4L2VideoDevice> vs_;
+	std::unique_ptr<V4L2VideoDevice> input0_;
+	std::unique_ptr<V4L2VideoDevice> input1_;
 	std::unique_ptr<V4L2VideoDevice> params_;
 	std::unique_ptr<V4L2VideoDevice> frame_;
 	std::unique_ptr<V4L2VideoDevice> ir_;
@@ -59,10 +59,10 @@ public:
 		{ return "neoisp"; }
 	static std::string kSDevNeoEntityName()
 		{ return "neoisp"; }
-	static std::string kVDevDcgEntityName()
-		{ return "neoisp-dcg"; }
-	static std::string kVDevVsEntityName()
-		{ return "neoisp-vs"; }
+	static std::string kVDevInput0EntityName()
+		{ return "neoisp-input0"; }
+	static std::string kVDevInput1EntityName()
+		{ return "neoisp-input1"; }
 	static std::string kVDevEntityParamsName()
 		{ return "neoisp-params"; }
 	static std::string kVDevEntityFrameName()
@@ -77,15 +77,15 @@ public:
 
 	static const std::vector<V4L2PixelFormat> &frameFormats();
 	static const std::vector<V4L2PixelFormat> &irFormats();
-	static const std::vector<V4L2PixelFormat> &dcgFormats();
-	static const std::vector<V4L2PixelFormat> &vsFormats();
+	static const std::vector<V4L2PixelFormat> &input0Formats();
+	static const std::vector<V4L2PixelFormat> &input1Formats();
 
 	const MediaDevice *media() const
 		{ return media_; }
 private:
 	enum {
-		PAD_DCG = 0,
-		PAD_VS = 1,
+		PAD_INPUT0 = 0,
+		PAD_INPUT1 = 1,
 		PAD_PARAMS = 2,
 		PAD_FRAME = 3,
 		PAD_IR = 4,
@@ -100,8 +100,8 @@ private:
 	int configureVideoDeviceMeta(V4L2VideoDevice *dev,
 				     unsigned int pad, uint32_t fourcc);
 
-	bool padActiveVs() const
-		{ return configVs_; }
+	bool padActiveInput1() const
+		{ return configInput1_; }
 	bool padActiveFrame() const
 		{ return configFrame_; }
 	bool padActiveIr() const
@@ -110,7 +110,7 @@ private:
 	unsigned int index_;
 	MediaDevice *media_ = nullptr;
 
-	bool configVs_ = false;
+	bool configInput1_ = false;
 	bool configFrame_ = false;
 	bool configIr_ = false;
 };

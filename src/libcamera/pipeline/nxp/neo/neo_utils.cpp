@@ -23,7 +23,7 @@ std::string NxpNeoSensorChannel::toString() const
 	return ss.str();
 }
 
-std::string NxpNeoSensorChannelDcg::toString() const
+std::string NxpNeoSensorChannelInput0::toString() const
 {
 	std::stringstream ss;
 	ss << NxpNeoSensorChannel::toString()
@@ -32,7 +32,7 @@ std::string NxpNeoSensorChannelDcg::toString() const
 	return ss.str();
 }
 
-std::string NxpNeoSensorChannelVs::toString() const
+std::string NxpNeoSensorChannelInput1::toString() const
 {
 	std::stringstream ss;
 	ss << NxpNeoSensorChannel::toString()
