@@ -45,6 +45,7 @@ public:
 
 		bool paramDequeued;
 		bool metadataProcessed;
+		bool isRawOnly;
 	};
 
 	NxpNeoFrames();
@@ -53,7 +54,7 @@ public:
 		  const std::vector<std::unique_ptr<FrameBuffer>> &statsBuffers);
 	void clear();
 
-	Info *create(Request *request);
+	Info *create(Request *request, bool rawOnly);
 	void remove(Info *info);
 	bool tryComplete(Info *info);
 

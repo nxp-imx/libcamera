@@ -133,6 +133,7 @@ private:
 
 	unsigned int mbusCode_ = 0;
 	unsigned int sequence_ = 0;
+	bool rawStreamOnly_ = false;
 	PixelFormat rawPixelFormat_;
 };
 
@@ -504,37 +505,38 @@ int PipelineHandlerNxpNeo::configure(Camera *camera, CameraConfiguration *c)
 	if (ret)
 		return ret;
 
+
+	/* Bypass ISP configuration in raw-only mode of operation */
 	V4L2DeviceFormat devFormatFrame = {};
 	V4L2DeviceFormat devFormatIr = {};
 
+	data->rawStreamOnly_ = ((config->size() == 1) &&
+				((*config)[0].stream() == &data->streamRaw_));
+	if (!data->rawStreamOnly_) {
+		for (unsigned int i = 0; i < config->size(); ++i) {
+			StreamConfiguration &cfg = (*config)[i];
+			Stream *stream = cfg.stream();
 
-	for (unsigned int i = 0; i < config->size(); ++i) {
-		StreamConfiguration &cfg = (*config)[i];
-		Stream *stream = cfg.stream();
+			const auto fmts =
+				V4L2PixelFormat::fromPixelFormat(cfg.pixelFormat);
+			V4L2PixelFormat fmt;
+			if (fmts.size())
+				fmt = fmts[0];
 
-		const auto fmts =
-			V4L2PixelFormat::fromPixelFormat(cfg.pixelFormat);
-		V4L2PixelFormat fmt;
-		if (fmts.size())
-			fmt = fmts[0];
-
-		if (stream == &data->streamFrame_) {
-			devFormatFrame.size = cfg.size;
-			devFormatFrame.fourcc = fmt;
-		} else if (stream == &data->streamIr_) {
-			devFormatIr.size = cfg.size;
-			devFormatIr.fourcc = fmt;
-		} else {
-			LOG(NxpNeo, Error) << "Unknown stream!";
-			return -EINVAL;
+			if (stream == &data->streamFrame_) {
+				devFormatFrame.size = cfg.size;
+				devFormatFrame.fourcc = fmt;
+			} else if (stream == &data->streamIr_) {
+				devFormatIr.size = cfg.size;
+				devFormatIr.fourcc = fmt;
+			}
 		}
+
+		ret = data->neo_->configure(vdFormatDcg, vdFormatVs,
+					    devFormatFrame, devFormatIr);
+		if (ret)
+			return ret;
 	}
-
-	ret = data->neo_->configure(vdFormatDcg, vdFormatVs,
-				    devFormatFrame, devFormatIr);
-	if (ret)
-		return ret;
-
 
 	CameraSensor *sensor = data->sensor_.get();
 
@@ -766,7 +768,7 @@ void NxpNeoCameraData::queuePendingRequests()
 	while (!pendingRequests_.empty()) {
 		Request *request = pendingRequests_.front();
 
-		info = frameInfos_.create(request);
+		info = frameInfos_.create(request, rawStreamOnly_);
 		if (!info)
 			break;
 
@@ -1671,8 +1673,6 @@ void NxpNeoCameraData::ipaParamsBufferReady(unsigned int id)
 			neo_->frame_->queueBuffer(outbuffer);
 		else if (stream == &streamIr_)
 			neo_->ir_->queueBuffer(outbuffer);
-		else
-			LOG(NxpNeo, Error) << "Request stream unknown";
 	}
 
 	info->paramsBuffer->_d()->metadata().planes()[0].bytesused =
@@ -1800,14 +1800,19 @@ void NxpNeoCameraData::isiDcgBufferReady(FrameBuffer *buffer)
 	if (request->findBuffer(&streamRaw_))
 		pipe()->completeBuffer(request, buffer);
 
-	/*
-	 * DCG frame will be queue into ISP once params buffer for the frame
-	 * have been produced by IPA.
-	 * \todo: in case of ISP operation with DCG + VS inputs, wait for both
-	 * frames to be available before invoking ipa_->fillParamsBuffer()
-	 */
+	if (!rawStreamOnly_) {
+		/*
+		 * DCG frame will be queue into ISP once params buffer for the frame
+		 * have been produced by IPA.
+		 * \todo: in case of ISP operation with DCG + VS inputs, wait for both
+		 * frames to be available before invoking ipa_->fillParamsBuffer()
+		 */
 
-	ipa_->fillParamsBuffer(info->id, info->paramsBuffer->cookie());
+		ipa_->fillParamsBuffer(info->id, info->paramsBuffer->cookie());
+	} else {
+		if (frameInfos_.tryComplete(info))
+			pipe()->completeRequest(request);
+	}
 }
 
 /**

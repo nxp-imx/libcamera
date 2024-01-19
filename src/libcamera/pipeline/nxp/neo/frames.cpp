@@ -43,28 +43,33 @@ void NxpNeoFrames::clear()
 	availableStatsBuffers_ = {};
 }
 
-NxpNeoFrames::Info *NxpNeoFrames::create(Request *request)
+NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly)
 {
 	unsigned int id = request->sequence();
 
-	if (availableParamsBuffers_.empty()) {
-		LOG(NxpNeo, Debug) << "Parameters buffer underrun";
-		return nullptr;
+	FrameBuffer *paramsBuffer = nullptr;
+	FrameBuffer *statsBuffer = nullptr;
+
+	if (!rawOnly) {
+		if (availableParamsBuffers_.empty()) {
+			LOG(NxpNeo, Debug) << "Parameters buffer underrun";
+			return nullptr;
+		}
+
+		if (availableStatsBuffers_.empty()) {
+			LOG(NxpNeo, Debug) << "Statistics buffer underrun";
+			return nullptr;
+		}
+
+		paramsBuffer = availableParamsBuffers_.front();
+		statsBuffer = availableStatsBuffers_.front();
+
+		paramsBuffer->_d()->setRequest(request);
+		statsBuffer->_d()->setRequest(request);
+
+		availableParamsBuffers_.pop();
+		availableStatsBuffers_.pop();
 	}
-
-	if (availableStatsBuffers_.empty()) {
-		LOG(NxpNeo, Debug) << "Statistics buffer underrun";
-		return nullptr;
-	}
-
-	FrameBuffer *paramsBuffer = availableParamsBuffers_.front();
-	FrameBuffer *statsBuffer = availableStatsBuffers_.front();
-
-	paramsBuffer->_d()->setRequest(request);
-	statsBuffer->_d()->setRequest(request);
-
-	availableParamsBuffers_.pop();
-	availableStatsBuffers_.pop();
 
 	/* \todo Remove the dynamic allocation of Info */
 	std::unique_ptr<Info> info = std::make_unique<Info>();
@@ -78,6 +83,7 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request)
 	info->statsBuffer = statsBuffer;
 	info->paramDequeued = false;
 	info->metadataProcessed = false;
+	info->isRawOnly = rawOnly;
 
 	frameInfo_[id] = std::move(info);
 
@@ -86,9 +92,11 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request)
 
 void NxpNeoFrames::remove(NxpNeoFrames::Info *info)
 {
-	/* Return params and stat buffer for reuse. */
-	availableParamsBuffers_.push(info->paramsBuffer);
-	availableStatsBuffers_.push(info->statsBuffer);
+	if (!info->isRawOnly) {
+		/* Return params and stats buffer for reuse. */
+		availableParamsBuffers_.push(info->paramsBuffer);
+		availableStatsBuffers_.push(info->statsBuffer);
+	}
 
 	/* Delete the extended frame information. */
 	frameInfo_.erase(info->id);
@@ -101,11 +109,13 @@ bool NxpNeoFrames::tryComplete(NxpNeoFrames::Info *info)
 	if (request->hasPendingBuffers())
 		return false;
 
-	if (!info->metadataProcessed)
-		return false;
+	if (!info->isRawOnly) {
+		if (!info->metadataProcessed)
+			return false;
 
-	if (!info->paramDequeued)
-		return false;
+		if (!info->paramDequeued)
+			return false;
+	}
 
 	remove(info);
 
