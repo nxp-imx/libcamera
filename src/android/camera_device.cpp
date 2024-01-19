@@ -610,15 +610,15 @@ int CameraDevice::configureStreams(camera3_stream_configuration_t *stream_list)
 #define HAL_PIXEL_FORMAT_YCbCr_420_SP 0x103
 // use yuyv for preview
 #ifdef ANDROID
-    // must align with camera3FormatsMap, or v4l2 format diffs with allocated format
+    // Align HAL pixel format(used in allocation) with v4l2 format(used in driver).
 		if (stream->format == HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED) {
-      if (stream->usage & GRALLOC_USAGE_HW_VIDEO_ENCODER)
-			  stream->format = HAL_PIXEL_FORMAT_YCbCr_420_SP;
-      else
-			  stream->format = HAL_PIXEL_FORMAT_YCbCr_422_I;
-    }
+			if (format == formats::NV12)
+				stream->format = HAL_PIXEL_FORMAT_YCbCr_420_SP;
+			else
+				stream->format = HAL_PIXEL_FORMAT_YCbCr_422_I;
+		}
 
-    LOG(HAL, Info) << "==== set format to " << utils::hex(stream->format) << ", usage " << utils::hex(stream->usage);
+		LOG(HAL, Info) << "==== set format to " << utils::hex(stream->format) << ", usage " << utils::hex(stream->usage);
 #endif
 
 		/* Defer handling of MJPEG streams until all others are known. */
