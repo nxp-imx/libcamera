@@ -1641,6 +1641,17 @@ std::unique_ptr<CameraMetadata> CameraCapabilities::requestTemplatePreview() con
 	requestTemplate->addEntry(ANDROID_CONTROL_CAPTURE_INTENT,
 				  captureIntent);
 
+	bool bSuc = false;
+	int32_t cropRegion[4] = {0, 0, 0, 0};
+	bSuc = requestTemplate->addEntry(ANDROID_SCALER_CROP_REGION, cropRegion, 4);
+	LOG(HAL, Info) << "==== addEntry ANDROID_SCALER_CROP_REGION, bSuc " << bSuc;
+
+	uint8_t pipelineDepth = 8;
+	requestTemplate->addEntry(ANDROID_REQUEST_PIPELINE_DEPTH, pipelineDepth);
+
+	bSuc = requestTemplate->getEntry(ANDROID_SCALER_CROP_REGION, &entry);
+	LOG(HAL, Info) << "==== getEntry ANDROID_SCALER_CROP_REGION, bSuc " << bSuc << ", " << entry.data.i32[0] << ", " << entry.data.i32[1] << ", " << entry.data.i32[2] << ", " << entry.data.i32[3];
+
 	return requestTemplate;
 }
 
