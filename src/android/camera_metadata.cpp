@@ -28,6 +28,7 @@ CameraMetadata::CameraMetadata(size_t entryCapacity, size_t dataCapacity)
 CameraMetadata::CameraMetadata(const camera_metadata_t *metadata)
 	: resized_(false)
 {
+  LOG(CameraMetadata, Info) << "==xx==, CameraMetadata::CameraMetadata(const camera_metadata_t *metadata)";
 	metadata_ = clone_camera_metadata(metadata);
 	valid_ = metadata_ != nullptr;
 }
@@ -45,12 +46,16 @@ CameraMetadata::~CameraMetadata()
 
 CameraMetadata &CameraMetadata::operator=(const CameraMetadata &other)
 {
-	if (this == &other)
+  LOG(CameraMetadata, Info) << "==xx==, operator=";
+	if (this == &other) {
+    LOG(CameraMetadata, Info) << "==xx==, this same as other";
 		return *this;
+  }
 
 	if (metadata_)
 		free_camera_metadata(metadata_);
 
+  LOG(CameraMetadata, Info) << "==xx==, clone_camera_metadata";
 	metadata_ = clone_camera_metadata(other.getMetadata());
 	valid_ = metadata_ != nullptr;
 
