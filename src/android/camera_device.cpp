@@ -1022,8 +1022,8 @@ int CameraDevice::processCaptureRequest(camera3_capture_request_t *camera3Reques
 	 */
 	if (camera3Request->settings)
 		lastSettings_ = camera3Request->settings;
-	else
-		descriptor->settings_ = lastSettings_;
+
+	descriptor->settings_ = lastSettings_;
 
 	LOG(HAL, Debug) << "====xx Queueing request " << descriptor->request_->cookie()
 			<< " with " << descriptor->buffers_.size() << " streams, " << " frame_number " << camera3Request->frame_number;
