@@ -1013,21 +1013,15 @@ int CameraDevice::processCaptureRequest(camera3_capture_request_t *camera3Reques
 
   const native_handle_t *hnd = *camera3Request->output_buffers[0].buffer;
   //LOG(HAL, Debug) << "====xxxx processCaptureRequest fd " << hnd->data[0] << ", unic_id " <<  hnd->data[38] << ", descriptor " << descriptor.get();
-  LOG(HAL, Info) << "====xxxx processCaptureRequest() fd " << hnd->data[0] << ", descriptor " << descriptor.get() << ", frameNumber_ " << descriptor->frameNumber_;
-
-	
+  LOG(HAL, Debug) << "====xxxx processCaptureRequest fd " << hnd->data[0] << ", descriptor " << descriptor.get();
 	/*
 	 * \todo The Android request model is incremental, settings passed in
 	 * previous requests are to be effective until overridden explicitly in
 	 * a new request. Do we need to cache settings incrementally here, or is
 	 * it handled by the Android camera service ?
 	 */
-	if (camera3Request->settings) {
+	if (camera3Request->settings)
 		lastSettings_ = camera3Request->settings;
-		camera_metadata_ro_entry_t entry;
-    bool bSuc = lastSettings_.getEntry(ANDROID_SCALER_CROP_REGION, &entry);
-    LOG(HAL, Info) << "==== processCaptureRequest(), getEntry ANDROID_SCALER_CROP_REGION, bSuc " << bSuc << ", " << entry.data.i32[0] << ", " << entry.data.i32[1] << ", " << entry.data.i32[2] << ", " << entry.data.i32[3];
-	}
 
 	descriptor->settings_ = lastSettings_;
 
@@ -1380,15 +1374,9 @@ void CameraDevice::sendCaptureResults()
 
 		captureResult.frame_number = descriptor->frameNumber_;
 
-		LOG(HAL, Info) << "==== sendCaptureResults(), descriptor " << descriptor.get() << ", frameNumber_ " << descriptor->frameNumber_;
-		if (descriptor->resultMetadata_) {
+		if (descriptor->resultMetadata_)
 			captureResult.result =
 				descriptor->resultMetadata_->getMetadata();
-
-			camera_metadata_ro_entry_t entry;
-      bool bSuc = descriptor->resultMetadata_->getEntry(ANDROID_SCALER_CROP_REGION, &entry);
-			LOG(HAL, Info) << "==== sendCaptureResults(), getEntry ANDROID_SCALER_CROP_REGION, bSuc " << bSuc << ", " << entry.data.i32[0] << ", " << entry.data.i32[1] << ", " << entry.data.i32[2] << ", " << entry.data.i32[3];
-		}
 
 		std::vector<camera3_stream_buffer_t> resultBuffers;
 		resultBuffers.reserve(descriptor->buffers_.size());
