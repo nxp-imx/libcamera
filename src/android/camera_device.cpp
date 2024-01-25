@@ -1524,12 +1524,16 @@ CameraDevice::getResultMetadata(const Camera3RequestDescriptor &descriptor) cons
 	 * ANDROID_JPEG_THUMBNAIL_SIZE (int32 x 2) = 8 bytes
 	 * Total bytes for JPEG metadata: 82
 	 */
-	std::unique_ptr<CameraMetadata> resultMetadata =
-		std::make_unique<CameraMetadata>(88, 166);
+/*	std::unique_ptr<CameraMetadata> resultMetadata =
+		std::make_unique<CameraMetadata>(88, 166);*/
+
+	// clone from request
+	std::unique_ptr<CameraMetadata> resultMetadata = std::make_unique<CameraMetadata>(settings);
 	if (!resultMetadata->isValid()) {
 		LOG(HAL, Error) << "Failed to allocate result metadata";
 		return nullptr;
 	}
+
 
 	/*
 	 * \todo The value of the results metadata copied from the settings
