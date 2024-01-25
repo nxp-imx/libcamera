@@ -708,7 +708,7 @@ int CameraCapabilities::initializeStreamConfigurations()
 			 * control to be specified for each Request. Defer this
 			 * to the in-development configuration API rework.
 			 */
-			int64_t minFrameDurationCap = 1e9 / 30.0;
+			int64_t minFrameDurationCap = 1e9 / 60.0;
 			if (minFrameDuration < minFrameDurationCap) {
 				float tolerance =
 					(minFrameDurationCap - minFrameDuration) * 100.0 / minFrameDurationCap;
@@ -1336,7 +1336,7 @@ int CameraCapabilities::initializeStaticMetadata()
 		unsigned int fps =
 			static_cast<unsigned int>(floor(1e9 / entry.minFrameDurationNsec));
 
-		if (entry.androidFormat != HAL_PIXEL_FORMAT_BLOB && fps < 30)
+		if (entry.androidFormat != HAL_PIXEL_FORMAT_BLOB && fps < 60)
 			continue;
 
 		/*
@@ -1384,10 +1384,12 @@ int CameraCapabilities::initializeStaticMetadata()
 	int32_t minFps = std::ceil(1e9 / maxFrameDuration_);
 	if (minFps > maxYUVFps) {
 			LOG(HAL, Info) << "==== minFps " + std::to_string(minFps) + " > maxYUVFps " + std::to_string(maxYUVFps);
-			minFps = maxYUVFps/2;
+			minFps = maxYUVFps;
 	}
 	
 
+	//LOG(HAL, Info) << "==== minFps " + std::to_string(minFps) + ", maxYUVFps " + std::to_string(maxYUVFps);
+	LOG(HAL, Info) << "==== minFps " << minFps << ", maxYUVFps " << maxYUVFps;
 	int32_t availableAeFpsTarget[] = {
 		minFps, maxYUVFps, maxYUVFps, maxYUVFps,
 	};
@@ -1572,6 +1574,8 @@ std::unique_ptr<CameraMetadata> CameraCapabilities::requestTemplatePreview() con
 	requestTemplate->addEntry(ANDROID_CONTROL_AE_TARGET_FPS_RANGE,
 				  entry.data.i32, 2);
 
+  LOG(HAL, Info) << "==== requestTemplatePreview, fps1 " << entry.data.i32[0] << ", fps2 " << entry.data.i32[1];
+
 	/*
 	 * Get thumbnail sizes from static metadata and add the first non-zero
 	 * size to the template.
@@ -1684,6 +1688,10 @@ std::unique_ptr<CameraMetadata> CameraCapabilities::requestTemplateVideo() const
 	 */
 	previewTemplate->updateEntry(ANDROID_CONTROL_AE_TARGET_FPS_RANGE,
 				     entry.data.i32 + 2, 2);
+
+  int32_t fps1 = *(entry.data.i32 + 2);
+  int32_t fps2 = *(entry.data.i32 + 3);
+  LOG(HAL, Info) << "==== requestTemplateVideo, fps1 " << fps1 << ", fps2 " << fps2;
 
 	return previewTemplate;
 }

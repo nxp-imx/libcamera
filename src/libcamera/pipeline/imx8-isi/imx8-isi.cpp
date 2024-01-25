@@ -199,8 +199,8 @@ int ISICameraData::init(V4L2VideoDevice *video)
 	// us
 	ControlInfo durationInfo = ControlInfo{
 			{ (int64_t)16666 },
-			{ (int64_t)33333 },
-			{ (int64_t)33333 }
+			{ (int64_t)16666 },
+			{ (int64_t)16666 }
 	};
 
 	ctrls.emplace(&controls::FrameDurationLimits, durationInfo);
