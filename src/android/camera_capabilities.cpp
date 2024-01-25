@@ -1646,7 +1646,7 @@ std::unique_ptr<CameraMetadata> CameraCapabilities::requestTemplatePreview() con
 	bSuc = requestTemplate->addEntry(ANDROID_SCALER_CROP_REGION, cropRegion, 4);
 	LOG(HAL, Info) << "==== addEntry ANDROID_SCALER_CROP_REGION, bSuc " << bSuc;
 
-	uint8_t pipelineDepth = 8;
+	uint8_t pipelineDepth = 2;
 	requestTemplate->addEntry(ANDROID_REQUEST_PIPELINE_DEPTH, pipelineDepth);
 
 	bSuc = requestTemplate->getEntry(ANDROID_SCALER_CROP_REGION, &entry);
