@@ -1326,6 +1326,7 @@ void CameraDevice::requestComplete(Request *request)
 		}
 	}
 
+  LOG(HAL, Debug) << "==== pendingStreamsToProcess_.size " << descriptor->pendingStreamsToProcess_.size();
 	if (descriptor->pendingStreamsToProcess_.empty()) {
 		locker.unlock();
 		completeDescriptor(descriptor);
@@ -1345,6 +1346,7 @@ void CameraDevice::requestComplete(Request *request)
  */
 void CameraDevice::completeDescriptor(Camera3RequestDescriptor *descriptor)
 {
+  LOG(HAL, Debug) << "==== enter completeDescriptor " << descriptor;
 	MutexLocker lock(descriptorsMutex_);
 	descriptor->complete_ = true;
 
@@ -1366,6 +1368,7 @@ void CameraDevice::completeDescriptor(Camera3RequestDescriptor *descriptor)
  */
 void CameraDevice::sendCaptureResults()
 {
+  LOG(HAL, Debug) << "==== enter sendCaptureResults";
 	while (!descriptors_.empty() && !descriptors_.front()->isPending()) {
 		auto descriptor = std::move(descriptors_.front());
 		descriptors_.pop();
