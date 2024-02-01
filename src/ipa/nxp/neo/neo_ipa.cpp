@@ -33,7 +33,7 @@
 #include "libcamera/internal/yaml_parser.h"
 
 #include "algorithms/algorithm.h"
-#include "libipa/camera_sensor_helper.h"
+#include "nxp/cam_helper/camera_helper.h"
 
 #include "ipa_context.h"
 
@@ -42,6 +42,7 @@ namespace libcamera {
 LOG_DEFINE_CATEGORY(IPANxpNeo)
 
 using namespace std::literals::chrono_literals;
+using namespace libcamera::nxp;
 
 namespace ipa::nxpneo {
 
@@ -56,7 +57,8 @@ public:
 	int init(const IPASettings &settings, unsigned int hwRevision,
 		 const IPACameraSensorInfo &sensorInfo,
 		 const ControlInfoMap &sensorControls,
-		 ControlInfoMap *ipaControls) override;
+		 ControlInfoMap *ipaControls,
+		 SensorConfig *sensorConfig) override;
 	int start() override;
 	void stop() override;
 
@@ -89,7 +91,7 @@ private:
 	uint32_t hwRevision_;
 
 	/* Interface to the Camera Helper */
-	std::unique_ptr<CameraSensorHelper> camHelper_;
+	std::unique_ptr<CameraHelper> camHelper_;
 
 	/* Local parameter storage */
 	struct IPAContext context_;
@@ -119,11 +121,12 @@ std::string IPANxpNeo::logPrefix() const
 int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 		    const IPACameraSensorInfo &sensorInfo,
 		    const ControlInfoMap &sensorControls,
-		    ControlInfoMap *ipaControls)
+		    ControlInfoMap *ipaControls,
+		    SensorConfig *sensorConfig)
 {
 	LOG(IPANxpNeo, Debug) << "Hardware revision is " << hwRevision;
 
-	camHelper_ = CameraSensorHelperFactoryBase::create(settings.sensorModel);
+	camHelper_ = CameraHelperFactoryBase::create(settings.sensorModel);
 	if (!camHelper_) {
 		LOG(IPANxpNeo, Error)
 			<< "Failed to create camera sensor helper for "
@@ -168,6 +171,19 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 	/* Initialize controls. */
 	updateControls(sensorInfo, sensorControls, ipaControls);
 
+	/* Initialize DelayedContols parameters */
+	std::map<int32_t, std::pair<uint32_t, bool>> camHelperDelayParams =
+		camHelper_->delayedControlParams();
+	std::map<int32_t, ipa::nxpneo::DelayedControlsParams> &ipaDelayParams =
+		sensorConfig->delayedControlsParams;
+	for (const auto &kv : camHelperDelayParams) {
+		auto k = kv.first;
+		auto v = kv.second;
+		ipaDelayParams.emplace(std::piecewise_construct,
+			std::forward_as_tuple(k),
+			std::forward_as_tuple(v.first, v.second));
+	}
+
 	return 0;
 }
 
@@ -189,22 +205,16 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 {
 	sensorControls_ = ipaConfig.sensorControls;
 
-	/*
-	 * \todo Some camera including OX03C10 do not support standard controls
-	 * to setup exposure and gains - add camHelper support to handle sensor
-	 * specifics here.
-	 */
-	const auto itExp = sensorControls_.find(V4L2_CID_EXPOSURE);
-	int32_t minExposure = itExp->second.min().get<int32_t>();
-	int32_t maxExposure = itExp->second.max().get<int32_t>();
-
-	const auto itGain = sensorControls_.find(V4L2_CID_ANALOGUE_GAIN);
-	int32_t minGain = itGain->second.min().get<int32_t>();
-	int32_t maxGain = itGain->second.max().get<int32_t>();
+	uint32_t minExposure, maxExposure;
+	camHelper_->controlInfoMapGetExposureRange(&sensorControls_,
+						   &minExposure, &maxExposure);
+	uint32_t minGainCode, maxGainCode;
+	camHelper_->controlInfoMapGetGainRange(&sensorControls_,
+					       &minGainCode, &maxGainCode);
 
 	LOG(IPANxpNeo, Debug)
 		<< "Exposure: [" << minExposure << ", " << maxExposure
-		<< "], gain: [" << minGain << ", " << maxGain << "]";
+		<< "], gain: [" << minGainCode << ", " << maxGainCode << "]";
 
 	/* Clear the IPA context before the streaming session. */
 	context_.configuration = {};
@@ -234,8 +244,9 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 		minExposure * context_.configuration.sensor.lineDuration;
 	context_.configuration.sensor.maxShutterSpeed =
 		maxExposure * context_.configuration.sensor.lineDuration;
-	context_.configuration.sensor.minAnalogueGain = camHelper_->gain(minGain);
-	context_.configuration.sensor.maxAnalogueGain = camHelper_->gain(maxGain);
+
+	context_.configuration.sensor.minAnalogueGain = camHelper_->gain(minGainCode);
+	context_.configuration.sensor.maxAnalogueGain = camHelper_->gain(maxGainCode);
 
 	context_.configuration.raw = std::any_of(streamConfig.begin(), streamConfig.end(),
 		[](auto &cfg) -> bool {
@@ -334,41 +345,13 @@ void IPANxpNeo::processStatsBuffer(const uint32_t frame, const uint32_t bufferId
 		stats = reinterpret_cast<neoisp_meta_stats_s *>(
 			mappedBuffers_.at(bufferId).planes()[0].data());
 
-	/*
-	 * \todo Some camera including OX03C10 do not support standard controls
-	 * to setup exposure and gains - add camHelper support to handle sensor
-	 * specifics here.
-	 */
-
-	/*
-	 * \todo Spurious frame loss at stream start() induces invalid
-	 * control values reported by pipeline's DelayedControl object.
-	 * Occurence is logged by pipeline, workaround the issue to avoid
-	 * later assert condition failure.
-	 */
-
-	bool invalidControl = false;
-	uint32_t exposure = 0;
-	const ControlValue &exposureValue
-			= sensorControls.get(V4L2_CID_EXPOSURE);
-	if (exposureValue.type() != ControlTypeNone)
-		exposure = camHelper_->gain(exposureValue.get<int32_t>());
-	else
-		invalidControl = true;
-
-	uint32_t gain = 0;
-	const ControlValue &gainValue
-			= sensorControls.get(V4L2_CID_ANALOGUE_GAIN);
-	if (gainValue.type() != ControlTypeNone)
-		gain = camHelper_->gain(gainValue.get<int32_t>());
-	else
-		invalidControl = true;
-
-	if (invalidControl)
-		LOG(IPANxpNeo, Debug) << "Invalid sensor controls " << frame;
-
+	uint32_t exposure;
+	exposure = camHelper_->controlListGetExposure(&sensorControls);
 	frameContext.sensor.exposure = exposure;
-	frameContext.sensor.gain = camHelper_->gain(gain);
+
+	uint32_t gainCode;
+	gainCode = camHelper_->controlListGetGain(&sensorControls);
+	frameContext.sensor.gain = camHelper_->gain(gainCode);;
 
 	ControlList metadata(controls::controls);
 
@@ -391,29 +374,31 @@ void IPANxpNeo::updateControls(const IPACameraSensorInfo &sensorInfo,
 	ControlInfoMap::Map ctrlMap = nxpneoControls;
 
 	/*
-	 * \todo Some camera including OX03C10 do not support standard controls
-	 * to setup exposure and gains - add camHelper support to handle sensor
-	 * specifics here.
-	 */
-
-	/*
-	 * Compute exposure time limits from the V4L2_CID_EXPOSURE control
-	 * limits and the line duration.
+	 * Compute exposure time limits from the exposure control limits and
+	 * the line duration.
 	 */
 	double lineDuration = context_.configuration.sensor.lineDuration.get<std::micro>();
-	const ControlInfo &v4l2Exposure = sensorControls.find(V4L2_CID_EXPOSURE)->second;
-	int32_t minExposure = v4l2Exposure.min().get<int32_t>() * lineDuration;
-	int32_t maxExposure = v4l2Exposure.max().get<int32_t>() * lineDuration;
-	int32_t defExposure = v4l2Exposure.def().get<int32_t>() * lineDuration;
+	uint32_t minExposure, maxExposure, defExposure;
+	camHelper_->controlInfoMapGetExposureRange(&sensorControls,
+			&minExposure, &maxExposure, &defExposure);
+	minExposure *= lineDuration;
+	maxExposure *= lineDuration;
+	defExposure *= lineDuration;
 	ctrlMap.emplace(std::piecewise_construct,
 			std::forward_as_tuple(&controls::ExposureTime),
-			std::forward_as_tuple(minExposure, maxExposure, defExposure));
+			std::forward_as_tuple(
+				static_cast<int32_t>(minExposure),
+				static_cast<int32_t>(maxExposure),
+				static_cast<int32_t>(defExposure)));
 
 	/* Compute the analogue gain limits. */
-	const ControlInfo &v4l2Gain = sensorControls.find(V4L2_CID_ANALOGUE_GAIN)->second;
-	float minGain = camHelper_->gain(v4l2Gain.min().get<int32_t>());
-	float maxGain = camHelper_->gain(v4l2Gain.max().get<int32_t>());
-	float defGain = camHelper_->gain(v4l2Gain.def().get<int32_t>());
+	uint32_t minGainCode, maxGainCode, defGainCode;
+	camHelper_->controlInfoMapGetGainRange(&sensorControls,
+			&minGainCode, &maxGainCode, &defGainCode);
+
+	float minGain = camHelper_->gain(minGainCode);
+	float maxGain = camHelper_->gain(maxGainCode);
+	float defGain = camHelper_->gain(defGainCode);
 	ctrlMap.emplace(std::piecewise_construct,
 			std::forward_as_tuple(&controls::AnalogueGain),
 			std::forward_as_tuple(minGain, maxGain, defGain));
@@ -456,18 +441,14 @@ void IPANxpNeo::setControls(unsigned int frame)
 	 */
 
 	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
-	uint32_t exposure = frameContext.agc.exposure;
-	uint32_t gain = camHelper_->gainCode(frameContext.agc.gain);
-
-	/*
-	 * \todo Some camera including OX03C10 do not support standard controls
-	 * to setup exposure and gains - add camHelper support to handle sensor
-	 * specifics here.
-	 */
 
 	ControlList ctrls(sensorControls_);
-	ctrls.set(V4L2_CID_EXPOSURE, static_cast<int32_t>(exposure));
-	ctrls.set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gain));
+
+	uint32_t exposure = frameContext.agc.exposure;
+	camHelper_->controlListSetExposure(&ctrls, exposure);
+
+	uint32_t gainCode = camHelper_->gainCode(frameContext.agc.gain);
+	camHelper_->controlListSetGain(&ctrls, gainCode);
 
 	setSensorControls.emit(frame, ctrls);
 }

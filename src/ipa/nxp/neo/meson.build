@@ -5,6 +5,10 @@ subdir('data')
 
 ipa_name = 'ipa_nxp_neo'
 
+neo_ipa_libs = [
+    nxp_ipa_cam_helper_lib,
+]
+
 neo_ipa_sources = files([
     'ipa_context.cpp',
     'neo_ipa.cpp',
@@ -18,6 +22,7 @@ mod = shared_module(ipa_name,
                     include_directories : [ipa_includes, libipa_includes],
                     dependencies : libcamera_private,
                     link_with : libipa,
+                    link_whole : neo_ipa_libs,
                     install : true,
                     install_dir : ipa_install_dir)
 
