@@ -17,12 +17,23 @@ struct IPAConfigInfo {
 	libcamera.ControlInfoMap sensorControls;
 };
 
+struct DelayedControlsParams {
+	uint32 delay;
+	bool priorityWrite;
+};
+
+struct SensorConfig {
+	map<int32, DelayedControlsParams> delayedControlsParams;
+};
+
 interface IPANxpNeoInterface {
 	init(libcamera.IPASettings settings,
 	     uint32 hwRevision,
 	     libcamera.IPACameraSensorInfo sensorInfo,
 	     libcamera.ControlInfoMap sensorControls)
-		=> (int32 ret, libcamera.ControlInfoMap ipaControls);
+		=> (int32 ret,
+		    libcamera.ControlInfoMap ipaControls,
+		    SensorConfig sensorConfig);
 	start() => (int32 ret);
 	stop();
 
