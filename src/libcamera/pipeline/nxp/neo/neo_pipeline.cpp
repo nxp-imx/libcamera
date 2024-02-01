@@ -53,6 +53,8 @@ namespace libcamera {
 
 LOG_DEFINE_CATEGORY(NxpNeo)
 
+using namespace libcamera::nxpneo;
+
 class PipelineHandlerNxpNeo;
 
 class NxpNeoCameraData : public Camera::Private
@@ -102,7 +104,7 @@ private:
 
 	PipelineHandlerNxpNeo *pipe();
 
-	NxpNeoSensorProperties sensorProperties_;
+	SensorProperties sensorProperties_;
 	std::vector<MediaLink *> graphLinks_;
 
 	std::unique_ptr<NeoDevice> neo_;
@@ -182,7 +184,7 @@ public:
 	bool match(DeviceEnumerator *enumerator) override;
 
 	int loadSensorProperties(const CameraSensor *sensor,
-				 NxpNeoSensorProperties *sensorProperties);
+				 SensorProperties *sensorProperties);
 
 	std::unique_ptr<ISIDevice> isi_;
 	MediaDevice *isiMedia_ = nullptr;
@@ -477,7 +479,7 @@ int PipelineHandlerNxpNeo::configure(Camera *camera, CameraConfiguration *c)
 	 * directly.
 	 */
 
-	NxpNeoSensorProperties *sensorProps = &data->sensorProperties_;
+	SensorProperties *sensorProps = &data->sensorProperties_;
 	V4L2SubdeviceFormat sdFormatInput0 = {}, sdFormatInput1 = {},  sdFormatEd = {};
 	V4L2DeviceFormat vdFormatInput0 = {}, vdFormatInput1 = {}, vdFormatEd = {};
 
@@ -656,7 +658,7 @@ int PipelineHandlerNxpNeo::start(Camera *camera, [[maybe_unused]] const ControlL
 {
 	NxpNeoCameraData *data = cameraData(camera);
 	NeoDevice *neo = data->neo_.get();
-	NxpNeoSensorProperties *sensorProps = &data->sensorProperties_;
+	SensorProperties *sensorProps = &data->sensorProperties_;
 	int ret;
 
 	/* Allocate buffers for internal pipeline usage. */
@@ -718,7 +720,7 @@ void PipelineHandlerNxpNeo::stopDevice(Camera *camera)
 {
 	NxpNeoCameraData *data = cameraData(camera);
 	NeoDevice *neo = data->neo_.get();
-	NxpNeoSensorProperties *sensorProps = &data->sensorProperties_;
+	SensorProperties *sensorProps = &data->sensorProperties_;
 
 	int ret = 0;
 
@@ -985,9 +987,9 @@ unsigned int NxpNeoCameraData::getRawMediaBusFormat(PixelFormat *pixelFormat) co
  * \return 0 in case of success or a negative error code.
  */
 int PipelineHandlerNxpNeo::loadSensorProperties(const CameraSensor *sensor,
-						NxpNeoSensorProperties *sensorProps)
+						SensorProperties *sensorProps)
 {
-	*sensorProps = NxpNeoSensorProperties();
+	*sensorProps = SensorProperties();
 
 	LOG(NxpNeo, Debug)
 		<< " Sensor properties entity " << sensor->entity()->name()
@@ -1081,7 +1083,7 @@ int NxpNeoCameraData::setupCameraDiscoverLinks(std::vector<MediaLink *> *links)
  */
 int NxpNeoCameraData::setupCameraIsiReserve()
 {
-	NxpNeoSensorProperties *sensorProps = &sensorProperties_;
+	SensorProperties *sensorProps = &sensorProperties_;
 
 	ISIDevice *isi = pipe()->isi_.get();
 
@@ -1187,7 +1189,7 @@ int NxpNeoCameraData::setupCameraConfigureIsi(
 	V4L2DeviceFormat *vdFormatInput0, V4L2DeviceFormat *vdFormatInput1,
 	V4L2DeviceFormat *vdFormatEd)
 {
-	NxpNeoSensorProperties *sensorProps = &sensorProperties_;
+	SensorProperties *sensorProps = &sensorProperties_;
 
 	int ret = pipeInput0_->configure(sdFormatInput0, vdFormatInput0);
 	if (sensorProps->hasInput1())
@@ -1371,7 +1373,6 @@ int PipelineHandlerNxpNeo::createCamera(MediaEntity *sensorEntity,
 	data->delayedCtrls_ =
 		std::make_unique<DelayedControls>(sensor->device(),
 						  data->delayedControlsParams_);
-
 	data->neo_->isp_->frameStart.connect(data.get(),
 					     &NxpNeoCameraData::frameStart);
 
@@ -1391,7 +1392,7 @@ int PipelineHandlerNxpNeo::createCamera(MediaEntity *sensorEntity,
 	 * associated NEO inputs where they get processed and
 	 * returned through the NEO main and IR outputs.
 	 */
-	NxpNeoSensorProperties *sensorProps = &data->sensorProperties_;
+	SensorProperties *sensorProps = &data->sensorProperties_;
 
 	data->pipeInput0_->bufferReady().connect(data.get(),
 			&NxpNeoCameraData::isiInput0BufferReady);

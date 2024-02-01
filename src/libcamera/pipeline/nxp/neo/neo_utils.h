@@ -8,11 +8,13 @@
 
 namespace libcamera {
 
+namespace nxpneo {
+
 /* i.MX95 CSI-2/0 mapped to ISI crossbar pad 2, CSI-2/1 to ISI crossbar pad 3 */
 constexpr unsigned int kIsiXbarPadDefault = 2;
 
-struct NxpNeoSensorChannel {
-	NxpNeoSensorChannel(bool valid, unsigned int xbarPad,
+struct SensorChannel {
+	SensorChannel(bool valid, unsigned int xbarPad,
 			    unsigned int xbarPadStream)
 		: valid_(valid), xbarPad_(xbarPad),
 		  xbarPadStream_(xbarPadStream) {}
@@ -24,27 +26,27 @@ struct NxpNeoSensorChannel {
 	std::string toString() const;
 };
 
-struct NxpNeoSensorChannelInput0 : NxpNeoSensorChannel {
-	NxpNeoSensorChannelInput0()
-		: NxpNeoSensorChannel(true, kIsiXbarPadDefault, 0),
+struct SensorChannelInput0 : SensorChannel {
+	SensorChannelInput0()
+		: SensorChannel(true, kIsiXbarPadDefault, 0),
 		  skipTopLines(0) {}
 
 	std::string toString() const;
 	unsigned int skipTopLines;
 };
 
-struct NxpNeoSensorChannelInput1 : NxpNeoSensorChannel {
-	NxpNeoSensorChannelInput1()
-		: NxpNeoSensorChannel(false, kIsiXbarPadDefault, 0),
+struct SensorChannelInput1 : SensorChannel {
+	SensorChannelInput1()
+		: SensorChannel(false, kIsiXbarPadDefault, 0),
 		  mbusFormat(0) {}
 
 	std::string toString() const;
 	unsigned int mbusFormat;
 };
 
-struct NxpNeoSensorChannelEd : NxpNeoSensorChannel {
-	NxpNeoSensorChannelEd()
-		: NxpNeoSensorChannel(false, kIsiXbarPadDefault, 0),
+struct SensorChannelEd : SensorChannel {
+	SensorChannelEd()
+		: SensorChannel(false, kIsiXbarPadDefault, 0),
 		  lines(0), mbusFormat(0) {}
 
 	std::string toString() const;
@@ -52,15 +54,17 @@ struct NxpNeoSensorChannelEd : NxpNeoSensorChannel {
 	unsigned int mbusFormat;
 };
 
-struct NxpNeoSensorProperties {
-	NxpNeoSensorProperties() {}
+struct SensorProperties {
+	SensorProperties() {}
 
 	bool hasInput1() { return input1Channel_.valid_; }
 	bool hasEmbedded() { return edChannel_.valid_; }
 
-	NxpNeoSensorChannelInput0 input0Channel_;
-	NxpNeoSensorChannelInput1 input1Channel_;
-	NxpNeoSensorChannelEd edChannel_;
+	SensorChannelInput0 input0Channel_;
+	SensorChannelInput1 input1Channel_;
+	SensorChannelEd edChannel_;
 };
+
+} // namespace nxpneo
 
 } // namespace libcamera

@@ -12,8 +12,9 @@
 
 namespace libcamera {
 
+namespace nxpneo {
 
-std::string NxpNeoSensorChannel::toString() const
+std::string SensorChannel::toString() const
 {
 	std::stringstream ss;
 	ss << "valid " << valid_
@@ -23,31 +24,33 @@ std::string NxpNeoSensorChannel::toString() const
 	return ss.str();
 }
 
-std::string NxpNeoSensorChannelInput0::toString() const
+std::string SensorChannelInput0::toString() const
 {
 	std::stringstream ss;
-	ss << NxpNeoSensorChannel::toString()
+	ss << SensorChannel::toString()
 	   << " skipTopLines " << skipTopLines;
 
 	return ss.str();
 }
 
-std::string NxpNeoSensorChannelInput1::toString() const
+std::string SensorChannelInput1::toString() const
 {
 	std::stringstream ss;
-	ss << NxpNeoSensorChannel::toString()
+	ss << SensorChannel::toString()
 	   << " mbusFormat " << mbusFormat;
 
 	return ss.str();
 }
 
-std::string NxpNeoSensorChannelEd::toString() const
+std::string SensorChannelEd::toString() const
 {
 	std::stringstream ss;
-	ss << NxpNeoSensorChannel::toString()
+	ss << SensorChannel::toString()
 	   << " mbusFormat " << mbusFormat << " lines " << lines;
 
 	return ss.str();
 }
+
+} // namespace nxpneo
 
 } // namespace libcamera
