@@ -849,6 +849,7 @@ CameraDevice::createFrameBuffer(const buffer_handle_t camera3buffer,
 		return nullptr;
 	}
 
+  LOG(HAL, Debug) << "==== createFrameBuffer " << pixelFormat.toString() << ", size " << size << ", buf.numPlanes() " << buf.numPlanes();
 	std::vector<FrameBuffer::Plane> planes(buf.numPlanes());
 	for (size_t i = 0; i < buf.numPlanes(); ++i) {
 		SharedFD fd{ camera3buffer->data[i] };
@@ -860,6 +861,8 @@ CameraDevice::createFrameBuffer(const buffer_handle_t camera3buffer,
 		planes[i].fd = fd;
 		planes[i].offset = buf.offset(i);
 		planes[i].length = buf.size(i);
+
+    LOG(HAL, Debug) << "==== fd " << fd.get() << ", offset " << buf.offset(i) << ", length " << buf.size(i);
 	}
 
 	return std::make_unique<HALFrameBuffer>(planes, camera3buffer);
