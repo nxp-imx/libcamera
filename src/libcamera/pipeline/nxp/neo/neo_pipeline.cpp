@@ -122,6 +122,8 @@ private:
 	std::queue<Request *> processingRequests_;
 
 	ControlInfoMap ipaControls_;
+	std::unordered_map<uint32_t, DelayedControls::ControlParams>
+		delayedControlsParams_;
 
 	std::unique_ptr<CameraSensor> sensor_;
 
@@ -1364,16 +1366,12 @@ int PipelineHandlerNxpNeo::createCamera(MediaEntity *sensorEntity,
 		return ret;
 
 	/*
-	 * \todo Read delay values from the sensor itself or from a
-	 * a sensor database. For now use generic values taken from
-	 * the Raspberry Pi and listed as 'generic values'.
+	 * DelayedControls parameters come from prior IPA init().
 	 */
-	std::unordered_map<uint32_t, DelayedControls::ControlParams> params = {
-		{ V4L2_CID_ANALOGUE_GAIN, { 1, false } },
-		{ V4L2_CID_EXPOSURE, { 2, false } },
-	};
 	data->delayedCtrls_ =
-		std::make_unique<DelayedControls>(sensor->device(), params);
+		std::make_unique<DelayedControls>(sensor->device(),
+						  data->delayedControlsParams_);
+
 	data->neo_->isp_->frameStart.connect(data.get(),
 					     &NxpNeoCameraData::frameStart);
 
@@ -1641,12 +1639,26 @@ int NxpNeoCameraData::loadIPA()
 		ipaTuningFile = ipa_->configurationFile("uncalibrated.yaml");
 
 	uint32_t hwRevision = 0;
+	ipa::nxpneo::SensorConfig sensorConfig;
 	ret = ipa_->init(IPASettings{ ipaTuningFile, sensor->model() },
 			 hwRevision,
-			 sensorInfo, sensor->controls(), &ipaControls_);
+			 sensorInfo, sensor->controls(),
+			 &ipaControls_,
+			 &sensorConfig);
+
 	if (ret) {
 		LOG(NxpNeo, Error) << "Failed to initialise the NxpNeo IPA";
 		return ret;
+	}
+
+	std::map<int32_t, ipa::nxpneo::DelayedControlsParams> &ipaDelayParams =
+		sensorConfig.delayedControlsParams;
+	for (const auto &kv : ipaDelayParams) {
+		auto k = kv.first;
+		auto v = kv.second;
+		DelayedControls::ControlParams params =
+			{ v.delay, v.priorityWrite };
+		delayedControlsParams_.emplace(k, params);
 	}
 
 	return 0;
