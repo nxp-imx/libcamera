@@ -11,4 +11,4 @@ cp -f $PRODUCT_PATH/vendor/lib64/libfsldisplay.so $NDK_LIB_PATH
 cp -f $PRODUCT_PATH/system/lib64/libcutils.so $NDK_LIB_PATH
 cp -f $PRODUCT_PATH/vendor/lib64/hw/android.hardware.graphics.allocator-V2-arm.so $NDK_LIB_PATH
 
-~/.local/bin/meson build --cross-file android-meson.cross --sysconfdir /vendor/etc/configs -Dpipelines=imx8-isi -Dandroid=enabled -Dandroid_root=$ANDROID_ROOT -Dtest=true
+~/.local/bin/meson build --cross-file android-meson.cross --sysconfdir /vendor/etc/configs -Dpipelines=imx8-isi -Dandroid=enabled -Dandroid_root=$ANDROID_ROOT -Dtest=true -Dudev=disabled -Dcam=disabled -Dqcam=disabled -Dlc-compliance=disabled
