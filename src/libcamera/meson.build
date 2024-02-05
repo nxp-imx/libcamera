@@ -84,23 +84,28 @@ else
     libyaml = cc.find_library('libyaml', dirs : meson.current_source_dir() / '..' / 'android' / 'ndk-lib')
 endif
 
-# Use one of gnutls or libcrypto (provided by OpenSSL), trying gnutls first.
-libcrypto = dependency('gnutls', required : false)
-if libcrypto.found()
-    config_h.set('HAVE_GNUTLS', 1)
-else
-    libcrypto = dependency('libcrypto', required : false)
+if get_option('android_root')=='auto'
+    # Use one of gnutls or libcrypto (provided by OpenSSL), trying gnutls first.
+    libcrypto = dependency('gnutls', required : false)
     if libcrypto.found()
-        config_h.set('HAVE_CRYPTO', 1)
+        config_h.set('HAVE_GNUTLS', 1)
+    else
+        libcrypto = dependency('libcrypto', required : false)
+        if libcrypto.found()
+            config_h.set('HAVE_CRYPTO', 1)
+        endif
     endif
-endif
 
-if not libcrypto.found()
-    warning('Neither gnutls nor libcrypto found, all IPA modules will be isolated')
+    if not libcrypto.found()
+        warning('Neither gnutls nor libcrypto found, all IPA modules will be isolated')
+        summary({'IPA modules signed with': 'None (modules will run isolated)'},
+                section : 'Configuration')
+    else
+        summary({'IPA modules signed with' : libcrypto.name()}, section : 'Configuration')
+    endif
+else
     summary({'IPA modules signed with': 'None (modules will run isolated)'},
             section : 'Configuration')
-else
-    summary({'IPA modules signed with' : libcrypto.name()}, section : 'Configuration')
 endif
 
 if liblttng.found()
@@ -161,6 +166,7 @@ if ipa_sign_module
     libcamera_sources += ipa_pub_key_cpp
 endif
 
+if get_option('android_root')=='auto'
 libcamera_deps += [
     libatomic,
     libcamera_base,
@@ -171,6 +177,18 @@ libcamera_deps += [
     libudev,
     libyaml,
 ]
+# move libcrypto for android
+else
+libcamera_deps += [
+    libatomic,
+    libcamera_base,
+    libcamera_base_private,
+    libdl,
+    liblttng,
+    libudev,
+    libyaml,
+]
+endif
 
 # We add '/' to the build_rpath as a 'safe' path to act as a boolean flag.
 # The build_rpath is stripped at install time by meson, so we determine at
