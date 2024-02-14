@@ -204,7 +204,7 @@ void IPANxpNeo::stop()
 }
 
 int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
-			 const std::map<uint32_t, IPAStream> &streamConfig,
+			 [[maybe_unused]] const std::map<uint32_t, IPAStream> &streamConfig,
 			 ControlInfoMap *ipaControls)
 {
 	sensorControls_ = ipaConfig.sensorControls;
@@ -252,18 +252,9 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	context_.configuration.sensor.minAnalogueGain = camHelper_->gain(minGainCode);
 	context_.configuration.sensor.maxAnalogueGain = camHelper_->gain(maxGainCode);
 
-	context_.configuration.raw = std::any_of(streamConfig.begin(), streamConfig.end(),
-		[](auto &cfg) -> bool {
-			PixelFormat pixelFormat{ cfg.second.pixelFormat };
-			const PixelFormatInfo &format = PixelFormatInfo::info(pixelFormat);
-			return format.colourEncoding == PixelFormatInfo::ColourEncodingRAW;
-		});
-
 	for (auto const &a : algorithms()) {
 		Algorithm *algo = static_cast<Algorithm *>(a.get());
 
-		/* Disable algorithms that don't support raw formats. */
-		algo->disabled_ = context_.configuration.raw && !algo->supportsRaw_;
 		if (algo->disabled_)
 			continue;
 
@@ -340,13 +331,8 @@ void IPANxpNeo::processStatsBuffer(const uint32_t frame, const uint32_t bufferId
 {
 	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
 
-	/*
-	 * In raw capture mode, the ISP is bypassed and no statistics buffer is
-	 * provided.
-	 */
-	const neoisp_meta_stats_s *stats = nullptr;
-	if (!context_.configuration.raw)
-		stats = reinterpret_cast<neoisp_meta_stats_s *>(
+	const neoisp_meta_stats_s *stats;
+	stats = reinterpret_cast<neoisp_meta_stats_s *>(
 			mappedBuffers_.at(bufferId).planes()[0].data());
 
 	uint32_t exposure;

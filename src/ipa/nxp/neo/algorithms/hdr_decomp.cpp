@@ -37,7 +37,6 @@ LOG_DEFINE_CATEGORY(NxpNeoHdrDecomp)
 HdrDecomp::HdrDecomp() :
 	input0_({}), input1_({})
 {
-	supportsRaw_ = true;
 }
 
 

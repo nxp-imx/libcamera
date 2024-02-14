@@ -27,7 +27,6 @@ public:
 	}
 
 	bool disabled_;
-	bool supportsRaw_;
 };
 
 } /* namespace ipa::nxpneo */

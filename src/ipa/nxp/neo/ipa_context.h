@@ -46,8 +46,6 @@ struct IPASessionConfiguration {
 	struct {
 		uint32_t revision;
 	} hw;
-
-	bool raw;
 };
 
 struct IPAActiveState {

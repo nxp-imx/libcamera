@@ -50,7 +50,6 @@ static constexpr uint32_t kNumStartupFrames = 10;
 
 Agc::Agc()
 {
-	supportsRaw_ = true;
 }
 
 /**
@@ -70,7 +69,7 @@ int Agc::configure(IPAContext &context, const IPACameraSensorInfo &configInfo)
 		10ms / context.configuration.sensor.lineDuration;
 	context.activeState.agc.manual.gain = context.activeState.agc.automatic.gain;
 	context.activeState.agc.manual.exposure = context.activeState.agc.automatic.exposure;
-	context.activeState.agc.autoEnabled = !context.configuration.raw;
+	context.activeState.agc.autoEnabled = true;
 
 	context.configuration.agc.enabled = true;
 
@@ -87,15 +86,13 @@ void Agc::queueRequest(IPAContext &context,
 {
 	auto &agc = context.activeState.agc;
 
-	if (!context.configuration.raw) {
-		const auto &agcEnable = controls.get(controls::AeEnable);
-		if (agcEnable && *agcEnable != agc.autoEnabled) {
-			agc.autoEnabled = *agcEnable;
+	const auto &agcEnable = controls.get(controls::AeEnable);
+	if (agcEnable && *agcEnable != agc.autoEnabled) {
+		agc.autoEnabled = *agcEnable;
 
-			LOG(NxpNeoAgc, Debug)
-				<< (agc.autoEnabled ? "Enabling" : "Disabling")
-				<< " AGC";
-		}
+		LOG(NxpNeoAgc, Debug)
+			<< (agc.autoEnabled ? "Enabling" : "Disabling")
+			<< " AGC";
 	}
 
 	const auto &exposure = controls.get(controls::ExposureTime);
