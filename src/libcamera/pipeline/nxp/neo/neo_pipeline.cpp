@@ -1526,15 +1526,19 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 		}
 	}
 
+	if (numCameras < 1)
+		return false;
+
 	/*
 	 * Cameras have been probed and configured, so global routing
 	 * configuration can be applied now.
 	 */
 	ret = configureRoutes();
+
 	if (ret)
 		return ret;
 
-	return numCameras > 0;
+	return true;
 }
 
 /**
