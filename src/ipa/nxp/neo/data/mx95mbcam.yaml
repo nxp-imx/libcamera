@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: CC0-1.0
+%YAML 1.1
+---
+version: 1
+algorithms:
+  - Agc:
+  - Awb:
+  - HdrDecomp:
+      input0:
+        # KNEE_POINT[1-4] u16
+        points: [ 32767, 49151, 57343, 65535 ]
+        # KNEE_OFFSET[0-4] u16
+        offsets: [ 0, 16384, 40959, 56172, 56172 ]
+        # KNEE_NPOINT[0-4] u20
+        newpoints: [ 0, 0, 0, 0, 31 ]
+        # KNEE_RATIO[0-4] u12
+        ratios: [ 32, 64, 256, 3584, 3584 ]
+...

@@ -2,6 +2,7 @@
 
 conf_files = files([
     'ov5640.yaml',
+    'mx95mbcam.yaml',
     'uncalibrated.yaml',
 ])
 
