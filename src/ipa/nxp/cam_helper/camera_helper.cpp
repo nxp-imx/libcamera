@@ -63,13 +63,19 @@ namespace nxp {
  */
 uint32_t CameraHelper::controlListGetExposure(const ControlList *ctrls) const
 {
+	uint32_t exposure = 0;
+	if (!ctrls->contains(V4L2_CID_EXPOSURE)) {
+		LOG(NxpCameraHelper, Error)
+			<< "V4L2_CID_EXPOSURE cannot be got";
+		return exposure;
+	}
+
 	/*
 	 * \todo Spurious frame loss at stream start() induces invalid
 	 * control values reported by pipeline's DelayedControl object.
 	 * Occurence is logged by pipeline, workaround the issue to avoid
 	 * later assert condition failure.
 	 */
-	uint32_t exposure = 0;
 	const ControlValue &exposureValue = ctrls->get(V4L2_CID_EXPOSURE);
 
 	if (exposureValue.type() != ControlTypeNone)
@@ -92,13 +98,20 @@ uint32_t CameraHelper::controlListGetExposure(const ControlList *ctrls) const
  */
 uint32_t CameraHelper::controlListGetGain(const ControlList *ctrls) const
 {
+
+	uint32_t gain = 0;
+	if (!ctrls->contains(V4L2_CID_ANALOGUE_GAIN)) {
+		LOG(NxpCameraHelper, Error)
+			<< "V4L2_CID_ANALOGUE_GAIN cannot be got";
+		return gain;
+	}
+
 	/*
 	 * \todo Spurious frame loss at stream start() induces invalid
 	 * control values reported by pipeline's DelayedControl object.
 	 * Occurence is logged by pipeline, workaround the issue to avoid
 	 * later assert condition failure.
 	 */
-	uint32_t gain = 0;
 	const ControlValue &gainValue = ctrls->get(V4L2_CID_ANALOGUE_GAIN);
 
 	if (gainValue.type() != ControlTypeNone)
@@ -121,6 +134,12 @@ uint32_t CameraHelper::controlListGetGain(const ControlList *ctrls) const
 void CameraHelper::controlListSetExposure(
 	ControlList *ctrls, uint32_t exposure) const
 {
+	if (!controlListHasId(ctrls, V4L2_CID_EXPOSURE)) {
+		LOG(NxpCameraHelper, Error)
+			<< "V4L2_CID_EXPOSURE cannot be set";
+		return;
+	}
+
 	ctrls->set(V4L2_CID_EXPOSURE, static_cast<int32_t>(exposure));
 }
 
@@ -135,6 +154,12 @@ void CameraHelper::controlListSetExposure(
 void CameraHelper::controlListSetGain(
 	ControlList *ctrls, uint32_t gainCode) const
 {
+	if (!controlListHasId(ctrls, V4L2_CID_ANALOGUE_GAIN)) {
+		LOG(NxpCameraHelper, Error)
+			<< "V4L2_CID_ANALOGUE_GAIN cannot be set";
+		return;
+	}
+
 	ctrls->set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gainCode));
 }
 
@@ -150,22 +175,33 @@ void CameraHelper::controlListSetGain(
  */
 void CameraHelper::controlInfoMapGetExposureRange(
 		const ControlInfoMap *ctrls, uint32_t *minExposure,
-		uint32_t *maxExposure, uint32_t *defExposure)
+		uint32_t *maxExposure, uint32_t *defExposure) const
 {
+	uint32_t min, max, def;
 	const auto it = ctrls->find(V4L2_CID_EXPOSURE);
+
+	if (it != ctrls->end()) {
+		min = it->second.min().get<int32_t>();
+		max = it->second.max().get<int32_t>();
+		def = it->second.def().get<int32_t>();
+	} else {
+		min = 0;
+		max = 0;
+		def = 0;
+		LOG(NxpCameraHelper, Error)
+			<< "V4L2_CID_EXPOSURE not supported";
+	}
+
 	if (minExposure)
-		*minExposure = static_cast<uint32_t>
-				(it->second.min().get<int32_t>());
+		*minExposure = min;
 	if (maxExposure)
-		*maxExposure = static_cast<uint32_t>
-				(it->second.max().get<int32_t>());
+		*maxExposure = max;
 	if (defExposure)
-		*defExposure = static_cast<uint32_t>
-				(it->second.def().get<int32_t>());
+		*defExposure = def;
 }
 
 /**
- * \brief Retrieve exposure range from sensor control info map
+ * \brief Retrieve gain range from sensor control info map
  * \param[in] ctrls The control list to be updated
  * \param[out] minGainCode The minimum gain code in sensor format
  * \param[out] maxGainCode The maximum gain code in sensor format
@@ -176,15 +212,29 @@ void CameraHelper::controlInfoMapGetExposureRange(
  */
 void CameraHelper::controlInfoMapGetGainRange(
 		const ControlInfoMap *ctrls, uint32_t *minGainCode,
-		uint32_t *maxGainCode, uint32_t *defGainCode)
+		uint32_t *maxGainCode, uint32_t *defGainCode) const
 {
+	uint32_t min, max, def;
 	const auto it = ctrls->find(V4L2_CID_ANALOGUE_GAIN);
+
+	if (it != ctrls->end()) {
+		min = it->second.min().get<int32_t>();
+		max = it->second.max().get<int32_t>();
+		def = it->second.def().get<int32_t>();
+	} else {
+		min = 0;
+		max = 0;
+		def = 0;
+		LOG(NxpCameraHelper, Error)
+			<< "V4L2_CID_ANALOGUE_GAIN not supported";
+	}
+
 	if (minGainCode)
-		*minGainCode = it->second.min().get<int32_t>();
+		*minGainCode = min;
 	if (maxGainCode)
-		*maxGainCode = it->second.max().get<int32_t>();
+		*maxGainCode = max;
 	if (defGainCode)
-		*defGainCode = it->second.def().get<int32_t>();
+		*defGainCode = def;
 }
 
 /**
@@ -201,7 +251,8 @@ void CameraHelper::controlInfoMapGetGainRange(
  *
  * \return The map of (delay, priority) pairs
  */
-std::map<int32_t, std::pair<uint32_t, bool>> CameraHelper::delayedControlParams()
+std::map<int32_t, std::pair<uint32_t, bool>>
+CameraHelper::delayedControlParams() const
 {
 	/* Common default values used in libcamera code base */
 	static const std::map<int32_t, std::pair<uint32_t, bool>> params = {
@@ -210,6 +261,26 @@ std::map<int32_t, std::pair<uint32_t, bool>> CameraHelper::delayedControlParams(
 	};
 
 	return params;
+}
+
+/**
+ * \brief Helper to check if a ControlId is handled by a ControlList
+ *
+ * This function checks if a ControlList has been constructed with support for
+ * a gived ControlId defined by its id.
+ * If the ControlId is supported, the ControlList may not have a ControlValue
+ * assigned yet, but ControlId will be at least present in the ControlIdMap of
+ * the ControlList.
+ *
+ * \param[in] ctrls The control list
+ * \param[in] id The id of the ControlId
+ *
+ * \return True if the ControlId is handled by the ControlList
+ */
+bool CameraHelper::controlListHasId(const ControlList *ctrls, unsigned int id) const
+{
+	auto idMap = ctrls->idMap();
+	return (idMap->find(id) != idMap->end());
 }
 
 

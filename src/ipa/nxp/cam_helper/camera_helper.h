@@ -43,13 +43,16 @@ public:
 
 	virtual void controlInfoMapGetExposureRange(
 		const ControlInfoMap *ctrls, uint32_t *minExposure,
-		uint32_t *maxExposure, uint32_t *defExposure = nullptr);
+		uint32_t *maxExposure, uint32_t *defExposure = nullptr) const;
 
 	virtual void controlInfoMapGetGainRange(
 		const ControlInfoMap *ctrls, uint32_t *minGainCode,
-		uint32_t *maxGainCode, uint32_t *defGainCode = nullptr);
+		uint32_t *maxGainCode, uint32_t *defGainCode = nullptr) const;
 
-	virtual std::map<int32_t, std::pair<uint32_t, bool>> delayedControlParams();
+	virtual std::map<int32_t, std::pair<uint32_t, bool>> delayedControlParams() const;
+
+protected:
+	virtual bool controlListHasId(const ControlList *ctrls, unsigned int id) const;
 
 private:
 	LIBCAMERA_DISABLE_COPY_AND_MOVE(CameraHelper)
