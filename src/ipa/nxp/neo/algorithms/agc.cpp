@@ -301,6 +301,24 @@ void Agc::process(IPAContext &context, [[maybe_unused]] const uint32_t frame,
 	frameCount_++;
 
 	fillMetadata(context, frameContext, metadata);
+
+	/*
+	 * XXX: override exposure and gains with reasonable default values until
+	 * functional AGC algorithm is available
+	 * \todo remove when dynamically computed values are available
+	 */
+	IPASessionConfiguration &configuration = context.configuration;
+	IPAActiveState &activeState = context.activeState;
+
+	static constexpr float alpha = 0.5;
+	utils::Duration _shutterTime =
+		alpha * configuration.sensor.minShutterSpeed +
+		(1 - alpha) * configuration.sensor.maxShutterSpeed;
+	activeState.agc.automatic.exposure =
+		_shutterTime / configuration.sensor.lineDuration;
+	activeState.agc.automatic.gain =
+		alpha * configuration.sensor.minAnalogueGain +
+		(1 - alpha) * configuration.sensor.maxAnalogueGain;
 }
 
 REGISTER_IPA_ALGORITHM(Agc, "Agc")
