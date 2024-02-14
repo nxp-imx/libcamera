@@ -3,4 +3,5 @@
 neo_ipa_algorithms = files([
     'agc.cpp',
     'awb.cpp',
+    'hdr_decomp.cpp',
 ])
