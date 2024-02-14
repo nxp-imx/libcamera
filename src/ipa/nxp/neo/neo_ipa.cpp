@@ -148,8 +148,10 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 	}
 
 	std::unique_ptr<libcamera::YamlObject> data = YamlParser::parse(file);
-	if (!data)
+	if (!data) {
+		LOG(IPANxpNeo, Error) << "Failed to parse configuration file";
 		return -EINVAL;
+	}
 
 	unsigned int version = (*data)["version"].get<uint32_t>(0);
 	if (version != 1) {
@@ -165,8 +167,10 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 	}
 
 	int ret = createAlgorithms(context_, (*data)["algorithms"]);
-	if (ret)
+	if (ret) {
+		LOG(IPANxpNeo, Error) << "Failed to create algorithms";
 		return ret;
+	}
 
 	/* Initialize controls. */
 	updateControls(sensorInfo, sensorControls, ipaControls);
