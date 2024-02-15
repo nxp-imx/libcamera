@@ -64,17 +64,13 @@ int Awb::configure(IPAContext &context,
 	context.activeState.awb.autoEnabled = true;
 
 	/*
-	 * Configuration for CTEMP Block Statistics
-	 * Limitation: ROI is defined as a centered rectangle
-	 * covering 3/4 of the image width and height.
-	 * When defining ROI as the full frame, ISP is providing 0 values
-	 * from Block Statistics.
-	 * \todo: recover to full frame definition if issue gets to be fixed
+	 * Configuration for CTEMP Block Statistics.
+	 * ROI is defined as the full image size.
 	 */
-	context.configuration.awb.roi.xpos = configInfo.outputSize.width / 8;
-	context.configuration.awb.roi.ypos = configInfo.outputSize.height / 8;
-	context.configuration.awb.roi.width = 3 * configInfo.outputSize.width / 4;
-	context.configuration.awb.roi.height = 3 * configInfo.outputSize.height / 4;
+	context.configuration.awb.roi.xpos = 0;
+	context.configuration.awb.roi.ypos = 0;
+	context.configuration.awb.roi.width = configInfo.outputSize.width;
+	context.configuration.awb.roi.height = configInfo.outputSize.height;
 
 	return 0;
 }
