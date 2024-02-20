@@ -111,7 +111,7 @@ const ControlInfoMap::Map nxpneoControls{
 } /* namespace */
 
 IPANxpNeo::IPANxpNeo()
-	: context_({ {}, {}, { kMaxFrameContexts } })
+	: context_({ {}, {}, { kMaxFrameContexts }, {} })
 {
 }
 
@@ -488,6 +488,7 @@ void IPANxpNeo::updateControls(const IPACameraSensorInfo &sensorInfo,
 							      frameDurations[1],
 							      frameDurations[2]);
 
+	ctrlMap.merge(context_.ctrlMap);
 	*ipaControls = ControlInfoMap(std::move(ctrlMap), controls::controls);
 }
 

@@ -16,18 +16,22 @@
 
 #include <libcamera/geometry.h>
 
+#include "libipa/agc_mean_luminance.h"
+#include "libipa/histogram.h"
+
 #include "algorithm.h"
 
 namespace libcamera {
 
 namespace ipa::nxpneo::algorithms {
 
-class Agc : public Algorithm
+class Agc : public Algorithm, public AgcMeanLuminance
 {
 public:
 	Agc();
 	~Agc() = default;
 
+	int init(IPAContext &context, const YamlObject &tuningData) override;
 	int configure(IPAContext &context, const IPACameraSensorInfo &configInfo) override;
 	void queueRequest(IPAContext &context,
 			  const uint32_t frame,
@@ -42,14 +46,15 @@ public:
 		     ControlList &metadata) override;
 
 private:
-	void computeExposure(IPAContext &Context, IPAFrameContext &frameContext,
-			     double yGain, double iqMeanGain);
-	utils::Duration filterExposure(utils::Duration exposureValue);
+	double estimateLuminance(double gain) const override;
 	void fillMetadata(IPAContext &context, IPAFrameContext &frameContext,
 			  ControlList &metadata);
+	Histogram parseStatistics(const neoisp_meta_stats_s *stats);
 
-	uint64_t frameCount_;
-	utils::Duration filteredExposure_;
+	double rGain_;
+	double gGain_;
+	double bGain_;
+	std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> rgbTriples_;
 };
 
 } /* namespace ipa::nxpneo::algorithms */

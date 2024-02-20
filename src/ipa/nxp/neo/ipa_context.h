@@ -28,7 +28,8 @@ namespace ipa::nxpneo {
 
 struct IPASessionConfiguration {
 	struct {
-		bool enabled;
+		/* ROI for statistics measurements */
+		struct neoisp_roi_cfg_s roi;
 	} agc;
 
 	struct {
@@ -67,6 +68,8 @@ struct IPAActiveState {
 			double gain;
 		} automatic;
 
+		uint32_t constraintMode;
+		uint32_t exposureMode;
 		bool autoEnabled;
 	} agc;
 
@@ -119,6 +122,8 @@ struct IPAContext {
 	IPAActiveState activeState;
 
 	FCQueue<IPAFrameContext> frameContexts;
+
+	ControlInfoMap::Map ctrlMap;
 };
 
 } /* namespace ipa::nxpneo */
