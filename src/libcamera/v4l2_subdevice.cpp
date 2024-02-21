@@ -567,6 +567,7 @@ int V4L2Subdevice::getFormat(unsigned int pad, V4L2SubdeviceFormat *format,
 /**
  * \brief Set an image format on one of the V4L2 subdevice pads
  * \param[in] pad The 0-indexed pad number the format is to be applied to
+ * \param[in] stream The 0-indexed stream number the format is to be applied to
  * \param[inout] format The image bus format to apply to the subdevice's pad
  * \param[in] whence The format to set, \ref V4L2Subdevice::ActiveFormat
  * "ActiveFormat" or \ref V4L2Subdevice::TryFormat "TryFormat"
@@ -576,12 +577,13 @@ int V4L2Subdevice::getFormat(unsigned int pad, V4L2SubdeviceFormat *format,
  *
  * \return 0 on success or a negative error code otherwise
  */
-int V4L2Subdevice::setFormat(unsigned int pad, V4L2SubdeviceFormat *format,
-			     Whence whence)
+int V4L2Subdevice::setFormat(unsigned int pad, unsigned int stream,
+			     V4L2SubdeviceFormat *format, Whence whence)
 {
 	struct v4l2_subdev_format subdevFmt = {};
 	subdevFmt.which = whence;
 	subdevFmt.pad = pad;
+	subdevFmt.stream = stream;
 	subdevFmt.format.width = format->size.width;
 	subdevFmt.format.height = format->size.height;
 	subdevFmt.format.code = format->mbus_code;
@@ -608,6 +610,24 @@ int V4L2Subdevice::setFormat(unsigned int pad, V4L2SubdeviceFormat *format,
 	format->colorSpace = toColorSpace(subdevFmt.format);
 
 	return 0;
+}
+
+/**
+ * \brief Set an image format on one of the V4L2 subdevice pads
+ * \param[in] pad The 0-indexed pad number the format is to be applied to
+ * \param[inout] format The image bus format to apply to the subdevice's pad
+ * \param[in] whence The format to set, \ref V4L2Subdevice::ActiveFormat
+ * "ActiveFormat" or \ref V4L2Subdevice::TryFormat "TryFormat"
+ *
+ * Apply the requested image format to the desired media pad and return the
+ * actually applied format parameters, as getFormat() would do.
+ *
+ * \return 0 on success or a negative error code otherwise
+ */
+int V4L2Subdevice::setFormat(unsigned int pad, V4L2SubdeviceFormat *format,
+			     Whence whence)
+{
+	return setFormat(pad, 0, format, whence);
 }
 
 /**

@@ -85,6 +85,9 @@ public:
 		      Whence whence = ActiveFormat);
 	int setFormat(unsigned int pad, V4L2SubdeviceFormat *format,
 		      Whence whence = ActiveFormat);
+	int setFormat(unsigned int pad, unsigned int stream,
+		      V4L2SubdeviceFormat *format,
+		      Whence whence = ActiveFormat);
 
 	int getRouting(Routing *routing, Whence whence = ActiveFormat);
 	int setRouting(Routing *routing, Whence whence = ActiveFormat);
