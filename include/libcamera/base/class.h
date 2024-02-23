@@ -7,12 +7,12 @@
 
 #pragma once
 
-//ifdef ANDROID_BP
-#if 1
-//#include </opt/android-ndk-r25c/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/c++/v1/memory>
-#else
+#include <android-base/file.h>
+#include <android-base/logging.h>
+#include <android-base/stringprintf.h>
+#include <android-base/strings.h>
+#include <cutils/properties.h>
 #include <memory>
-#endif
 
 namespace libcamera {
 

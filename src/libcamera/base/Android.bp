@@ -31,6 +31,8 @@ cc_defaults {
     include_dirs: [
         "external/libcamera/include",
         "external/libcamera/build/include",
+        "system/libbase/include",  
+        "system/core/libcutils/include",
     ],
 }
 
