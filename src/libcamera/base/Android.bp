@@ -1,0 +1,52 @@
+cc_library_headers {
+    name: "libcamera_base_includes",
+    vendor_available: true,
+    export_include_dirs: [
+//        "../../../include/libcamera/base/",
+        "include",
+    ],
+}
+
+cc_defaults {
+    name: "libcamera_base_default_flags",
+    rtti: true,
+    cflags: [
+        "-g3",
+        "-Werror",
+        "-Wshadow",
+        "-Wno-c99-designator",
+        "-D_FORTIFY_SOURCE=2",
+    ],
+    cpp_std: "c++17",
+    cppflags: [
+        "-g3",
+        "-Werror",
+        "-DHAVE_LOCALE_T",
+        "-Wshadow",
+        "-Wno-c99-designator",
+        "-D_FORTIFY_SOURCE=2",
+        "-Wextra-semi",
+        "-Wno-implicit-fallthrough",
+    ],
+    include_dirs: [
+        "external/libcamera/include",
+        "external/libcamera/build/include",
+    ],
+}
+
+cc_library_shared {
+    name: "libcamera-base",
+    vendor: true,
+    defaults: [
+        "libcamera_base_default_flags",
+    ],
+    srcs: [
+        "*.cpp",
+    ],
+    header_libs: [
+        "libcamera_base_includes",
+    ],
+    shared_libs: [
+        "libdl",
+    ],
+}
