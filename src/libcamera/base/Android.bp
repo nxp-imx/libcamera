@@ -15,6 +15,7 @@
  */
 cc_library_shared {
     name: "libcamera-base",
+    rtti: true,
     proprietary: true,
 /*    recovery_available: true,
 
@@ -27,6 +28,8 @@ cc_library_shared {
     cflags: [
         "-Wall",
         "-Werror",
+        "-DLIBCAMERA_BASE_PRIVATE",
+        "-DHAVE_LOCALE_T=1",
     ],
 
     static_libs: [
@@ -36,8 +39,10 @@ cc_library_shared {
         "libbase",
         "libcutils",
         "libutils",
+        "liblog",
     ],
     include_dirs: [
+        "system/core/libcutils/include",
         "vendor/nxp-opensource/imx/libcamera/include",
         "vendor/nxp-opensource/imx/libcamera/build/include",
     ],
