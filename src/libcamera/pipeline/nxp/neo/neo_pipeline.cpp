@@ -24,6 +24,7 @@
 #include <libcamera/base/utils.h>
 
 #include <libcamera/camera.h>
+#include <libcamera/camera_manager.h>
 #include <libcamera/control_ids.h>
 #include <libcamera/formats.h>
 #include <libcamera/property_ids.h>
@@ -85,18 +86,28 @@ public:
 	void ipaSetSensorControls(unsigned int id, const ControlList &sensorControls);
 
 	unsigned int getRawMediaBusFormat(PixelFormat *pixelFormat) const;
-	int setupCamera();
-	int setupCameraDiscoverLinks(std::vector<MediaLink *> *links);
+	int setupCameraFormat();
 	int setupCameraIsiReserve();
-	int setupCameraConfigureGraph(std::vector<MediaLink *> &links,
-				      V4L2SubdeviceFormat &sdFormat);
+	int setupCameraStream(const std::vector<StreamLink> &streamLinks,
+			      V4L2SubdeviceFormat &sdFormat);
+	int setupCameraStreams(unsigned int mbusCodeInput0,
+		Size sizeInput0,
+		V4L2SubdeviceFormat *sdFormatInput0,
+		V4L2SubdeviceFormat *sdFormatInput1,
+		V4L2SubdeviceFormat *sdFormatEd);
+	int setupCameraEnableLinks() const;
 	int setupCameraConfigureIsi(
-		V4L2SubdeviceFormat &sdFormatInput0, V4L2SubdeviceFormat &sdFormatInput1,
-		V4L2SubdeviceFormat &sdFormatEd,
-		V4L2DeviceFormat *vdFormatInput0, V4L2DeviceFormat *vdFormatInput1,
+		const V4L2SubdeviceFormat &sdFormatInput0,
+		const V4L2SubdeviceFormat &sdFormatInput1,
+		const V4L2SubdeviceFormat &sdFormatEd,
+		V4L2DeviceFormat *vdFormatInput0,
+		V4L2DeviceFormat *vdFormatInput1,
 		V4L2DeviceFormat *vdFormatEd);
 
 	bool screenCancelledBuffer(FrameBuffer *buffer, NxpNeoFrames::Info *info);
+
+	std::string cameraName() const
+		{ return sensor_.get()->entity()->name(); }
 
 private:
 	friend class PipelineHandlerNxpNeo;
@@ -104,8 +115,7 @@ private:
 
 	PipelineHandlerNxpNeo *pipe();
 
-	SensorProperties sensorProperties_;
-	std::vector<MediaLink *> graphLinks_;
+	const CameraInfo *cameraInfo_;
 
 	std::unique_ptr<NeoDevice> neo_;
 
@@ -131,7 +141,7 @@ private:
 
 	std::shared_ptr<ISIPipe> pipeInput0_;
 	std::shared_ptr<ISIPipe> pipeInput1_;
-	std::shared_ptr<ISIPipe> pipeEd_;
+	std::shared_ptr<ISIPipe> pipeEmbedded_;
 
 	std::vector<IPABuffer> ipaBuffers_;
 
@@ -139,6 +149,12 @@ private:
 	unsigned int sequence_ = 0;
 	bool rawStreamOnly_ = false;
 	PixelFormat rawPixelFormat_;
+	V4L2SubdeviceFormat sdFormatInput0_;
+	V4L2SubdeviceFormat sdFormatInput1_;
+	V4L2SubdeviceFormat sdFormatEmbedded_;
+	V4L2DeviceFormat vdFormatInput0_;
+	V4L2DeviceFormat vdFormatInput1_;
+	V4L2DeviceFormat vdFormatEmbedded_;
 };
 
 class NxpNeoCameraConfiguration : public CameraConfiguration
@@ -160,7 +176,7 @@ private:
 	 * corresponding Camera instance is valid. In order to borrow a
 	 * reference to the camera data, store a new reference to the camera.
 	 */
-	const NxpNeoCameraData *data_;
+	NxpNeoCameraData *data_;
 };
 
 class PipelineHandlerNxpNeo : public PipelineHandler
@@ -183,12 +199,11 @@ public:
 
 	bool match(DeviceEnumerator *enumerator) override;
 
-	int loadSensorProperties(const CameraSensor *sensor,
-				 SensorProperties *sensorProperties);
+	unsigned int numCameras() const { return manager_->cameras().size(); };
+	bool multiCamera() const { return (numCameras() > 1); };
 
 	std::unique_ptr<ISIDevice> isi_;
 	MediaDevice *isiMedia_ = nullptr;
-	V4L2Subdevice::Routing isiRouting_;
 
 private:
 	NxpNeoCameraData *cameraData(Camera *camera)
@@ -205,7 +220,10 @@ private:
 	int createCamera(MediaEntity *sensorEntity, MediaDevice *neoMedia,
 			 unsigned int neoInstance);
 
-	int configureRoutes();
+	int setupRouting() const;
+	int setupCameraGraphs();
+	int loadPipelineConfig();
+	PipelineConfig pipelineConfig_;
 };
 
 PipelineHandlerNxpNeo *NxpNeoCameraData::pipe()
@@ -291,22 +309,23 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 	 * All streams shall use the same size and that size has to be
 	 * supported by the sensor. First stream with valid resolution has its
 	 * size used as reference for the other streams.
-	 * If no valid size is found in any stream, then we default to sensor
-	 * max supported size.
+	 * If no valid size is found in any stream, or in multi camera mode,
+	 * then fall back to the sensor max supported size.
 	 */
 	CameraSensor *sensor = data_->sensor_.get();
-	unsigned int mbusCode_ = data_->mbusCode_;
-	std::vector<Size> sizes = sensor->sizes(mbusCode_);
-	Size &maxSize = sizes.back();
-	Size size = maxSize;
-
-	auto iter = std::find_if(config_.begin(), config_.end(),
-		[&sizes](auto &cfg) {
-			return (std::find(sizes.begin(), sizes.end(), cfg.size)
-				!= sizes.end());
-		} );
-	if (iter != config_.end())
-		size = iter->size;
+	std::vector<Size> sizes = sensor->sizes(data_->mbusCode_);
+	Size size = sizes.back();
+	bool multiCamera = data_->pipe()->multiCamera();
+	if (!multiCamera) {
+		auto iter = std::find_if(config_.begin(), config_.end(),
+			[&sizes](auto &cfg) {
+				return (std::find(sizes.begin(),
+					sizes.end(), cfg.size)
+					!= sizes.end());
+			} );
+		if (iter != config_.end())
+			size = iter->size;
+	}
 
 	for (unsigned int i = 0; i < config_.size(); ++i) {
 
@@ -370,11 +389,14 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 }
 
 std::unique_ptr<CameraConfiguration>
-PipelineHandlerNxpNeo::generateConfiguration(Camera *camera, Span<const StreamRole> roles)
+PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
+					     Span<const StreamRole> roles)
 {
 	NxpNeoCameraData *data = cameraData(camera);
 	std::unique_ptr<NxpNeoCameraConfiguration> config =
 		std::make_unique<NxpNeoCameraConfiguration>(data);
+
+	LOG(NxpNeo, Debug) << "Generate configuration " << data->cameraName();
 
 	if (roles.empty())
 		return config;
@@ -384,13 +406,17 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera, Span<const StreamRo
 	bool rawOutputAvailable = true;
 
 	CameraSensor *sensor = data->sensor_.get();
-
 	std::vector<Size> sizes = sensor->sizes(data->mbusCode_);
 	Size &maxSize = sizes.back();
 
+	/* Size configuration is possible only with a single camera */
 	std::vector<SizeRange> ranges;
-	for (Size size : sizes)
-		ranges.emplace_back(size);
+	if (!multiCamera()) {
+		for (Size size : sizes)
+			ranges.emplace_back(size);
+	} else {
+		ranges.emplace_back(maxSize);
+	}
 
 	for (const StreamRole role : roles) {
 		std::map<PixelFormat, std::vector<SizeRange>> streamFormats;
@@ -474,41 +500,49 @@ int PipelineHandlerNxpNeo::configure(Camera *camera, CameraConfiguration *c)
 	NxpNeoCameraData *data = cameraData(camera);
 	int ret;
 
+	LOG(NxpNeo, Debug) << "Configure " << data->cameraName();
+
 	/*
 	 * Configurations have been through validate() so they can be applied
 	 * directly.
 	 */
 
-	SensorProperties *sensorProps = &data->sensorProperties_;
-	V4L2SubdeviceFormat sdFormatInput0 = {}, sdFormatInput1 = {},  sdFormatEd = {};
-	V4L2DeviceFormat vdFormatInput0 = {}, vdFormatInput1 = {}, vdFormatEd = {};
+	V4L2SubdeviceFormat *sdFormatInput0 = &data->sdFormatInput0_;
+	V4L2SubdeviceFormat *sdFormatInput1 = &data->sdFormatInput1_;
+	V4L2SubdeviceFormat *sdFormatEd = &data->sdFormatEmbedded_;
 
-	/* All streams share the same size */
-	Size size = (*config)[0].size;
-	sdFormatInput0.mbus_code = data->mbusCode_;
-	sdFormatInput0.size = size;
+	V4L2DeviceFormat *vdFormatInput0 = &data->vdFormatInput0_;
+	V4L2DeviceFormat *vdFormatInput1 = &data->vdFormatInput1_;
+	V4L2DeviceFormat *vdFormatEd = &data->vdFormatEmbedded_;
 
-	if (sensorProps->hasInput1()) {
-		sdFormatInput1.mbus_code = sensorProps->input1Channel_.mbusFormat;
-		sdFormatInput1.size = size;
+	/*
+	 * Camera graph media streams graph reconfiguration
+	 * (single-camera pipeline only)
+	 */
+	if (!multiCamera()) {
+		Size size = (*config)[0].size;
+		unsigned int mbusCode =  data->mbusCode_;
+
+		/* Apply config format to each media pad streams */
+		ret = data->setupCameraStreams(mbusCode, size, sdFormatInput0,
+			                       sdFormatInput1, sdFormatEd);
+		if (ret)
+			return ret;
+
+		/* ISI video video devices configuration */
+		ret = data->setupCameraConfigureIsi(
+				*sdFormatInput0, *sdFormatInput1,
+				*sdFormatEd,
+				vdFormatInput0, vdFormatInput1,
+				vdFormatEd);
+		if (ret)
+			return ret;
 	}
 
-	if (sensorProps->hasEmbedded()) {
-		sdFormatEd.mbus_code = sensorProps->edChannel_.mbusFormat;
-		sdFormatEd.size = Size(size.width,
-				       sensorProps->edChannel_.lines);
-	}
 
-	ret = data->setupCameraConfigureIsi(
-			sdFormatInput0, sdFormatInput1, sdFormatEd,
-			&vdFormatInput0, &vdFormatInput1, &vdFormatEd);
-	if (ret)
-		return ret;
-
-	ret = data->setupCameraConfigureGraph(data->graphLinks_, sdFormatInput0);
-	if (ret)
-		return ret;
-
+	/*
+	 * ISP configuration
+	 */
 
 	/* Bypass ISP configuration in raw-only mode of operation */
 	V4L2DeviceFormat devFormatFrame = {};
@@ -536,23 +570,28 @@ int PipelineHandlerNxpNeo::configure(Camera *camera, CameraConfiguration *c)
 			}
 		}
 
-		ret = data->neo_->configure(vdFormatInput0, vdFormatInput1,
+		ret = data->neo_->configure(*vdFormatInput0, *vdFormatInput1,
 					    devFormatFrame, devFormatIr);
 		if (ret)
 			return ret;
 	}
 
-	CameraSensor *sensor = data->sensor_.get();
 
+	/*
+	 * Sensor transform configuration
+	 */
+	CameraSensor *sensor = data->sensor_.get();
+	ret = sensor->setFormat(sdFormatInput0, config->combinedTransform_);
+	if (ret)
+		return ret;
+
+	/*
+	 * IPA configuration
+	 */
 	IPACameraSensorInfo sensorInfo;
 	ret = sensor->sensorInfo(&sensorInfo);
 	if (ret)
 		return ret;
-
-	ret = sensor->setFormat(&sdFormatInput0, config->combinedTransform_);
-	if (ret)
-		return ret;
-
 
 	std::map<unsigned int, IPAStream> streamConfig;
 
@@ -658,8 +697,10 @@ int PipelineHandlerNxpNeo::start(Camera *camera, [[maybe_unused]] const ControlL
 {
 	NxpNeoCameraData *data = cameraData(camera);
 	NeoDevice *neo = data->neo_.get();
-	SensorProperties *sensorProps = &data->sensorProperties_;
+	const CameraInfo *cameraInfo = data->cameraInfo_;
 	int ret;
+
+	LOG(NxpNeo, Debug) << "Start " << data->cameraName();
 
 	/* Allocate buffers for internal pipeline usage. */
 	ret = allocateBuffers(camera);
@@ -682,14 +723,14 @@ int PipelineHandlerNxpNeo::start(Camera *camera, [[maybe_unused]] const ControlL
 	if (ret)
 		goto error;
 
-	if (sensorProps->hasInput1()) {
+	if (cameraInfo->hasStreamInput1()) {
 		ret = data->pipeInput1_->start();
 		if (ret)
 			goto error;
 	}
 
-	if (sensorProps->hasEmbedded()) {
-		ret = data->pipeEd_->start();
+	if (cameraInfo->hasStreamEmbedded()) {
+		ret = data->pipeEmbedded_->start();
 		if (ret)
 			goto error;
 	}
@@ -704,10 +745,10 @@ error:
 	neo->stop();
 
 	data->pipeInput0_->stop();
-	if (sensorProps->hasInput1())
+	if (cameraInfo->hasStreamInput1())
 		data->pipeInput1_->stop();
-	if (sensorProps->hasEmbedded())
-		data->pipeEd_->stop();
+	if (cameraInfo->hasStreamEmbedded())
+		data->pipeEmbedded_->stop();
 
 	data->ipa_->stop();
 	freeBuffers(camera);
@@ -720,19 +761,20 @@ void PipelineHandlerNxpNeo::stopDevice(Camera *camera)
 {
 	NxpNeoCameraData *data = cameraData(camera);
 	NeoDevice *neo = data->neo_.get();
-	SensorProperties *sensorProps = &data->sensorProperties_;
-
+	const CameraInfo *cameraInfo = data->cameraInfo_;
 	int ret = 0;
+
+	LOG(NxpNeo, Debug) << "Stop device " << data->cameraName();
 
 	data->cancelPendingRequests();
 
 	data->ipa_->stop();
 
 	ret |= data->pipeInput0_->stop();
-	if (sensorProps->hasInput1())
+	if (cameraInfo->hasStreamInput1())
 		ret |= data->pipeInput1_->stop();
-	if (sensorProps->hasEmbedded())
-		ret |= data->pipeEd_->stop();
+	if (cameraInfo->hasStreamEmbedded())
+		ret |= data->pipeEmbedded_->stop();
 
 	ret |= neo->stop();
 
@@ -796,7 +838,7 @@ void NxpNeoCameraData::queuePendingRequests()
 		}
 
 		/* Queue optional INPUT1 buffer to ISI channel */
-		if (sensorProperties_.hasInput1()) {
+		if (cameraInfo_->hasStreamInput1()) {
 			input1Buffer = pipeInput1_->popAvailableBuffer();
 			if (!input1Buffer)
 				goto error;
@@ -804,8 +846,8 @@ void NxpNeoCameraData::queuePendingRequests()
 		}
 
 		/* Queue optional Embedded Data buffer to ISI channel */
-		if (sensorProperties_.hasEmbedded()) {
-			edBuffer = pipeEd_->popAvailableBuffer();
+		if (cameraInfo_->hasStreamEmbedded()) {
+			edBuffer = pipeEmbedded_->popAvailableBuffer();
 			if (!edBuffer)
 				goto error;
 			edBuffer->_d()->setRequest(request);
@@ -814,10 +856,10 @@ void NxpNeoCameraData::queuePendingRequests()
 		ret = pipeInput0_->queueBuffer(rawBuffer);
 		if (ret)
 			goto error;
-		if (sensorProperties_.hasInput1())
+		if (cameraInfo_->hasStreamInput1())
 			ret = pipeInput1_->queueBuffer(input1Buffer);
-		if (sensorProperties_.hasEmbedded())
-			ret |= pipeEd_->queueBuffer(edBuffer);
+		if (cameraInfo_->hasStreamEmbedded())
+			ret |= pipeEmbedded_->queueBuffer(edBuffer);
 
 		if (ret) {
 			LOG(NxpNeo, Error) << "queuePendingRequests error - unbalanced";
@@ -843,7 +885,7 @@ error:
 	if (input1Buffer)
 		pipeInput1_->tryReturnBuffer(input1Buffer);
 	if (!reqRawBuffer && rawBuffer)
-		pipeEd_->tryReturnBuffer(rawBuffer);
+		pipeEmbedded_->tryReturnBuffer(rawBuffer);
 
 	/*
 	 * \todo If queueBuffer fails in queuing a buffer to the device,
@@ -976,201 +1018,47 @@ unsigned int NxpNeoCameraData::getRawMediaBusFormat(PixelFormat *pixelFormat) co
 }
 
 /**
- * \brief Load sensor properties
- * \param[out] sensor The targeted sensor
- * \param[out] sensorProps Sensor properties container
- *
- * Retrieve the properties of the targeted sensor, describing its channels
- * composition and other specific attributes.
- * \todo read those values from configuration file - default values for now.
- *
- * \return 0 in case of success or a negative error code.
- */
-int PipelineHandlerNxpNeo::loadSensorProperties(const CameraSensor *sensor,
-						SensorProperties *sensorProps)
-{
-	*sensorProps = SensorProperties();
-
-	LOG(NxpNeo, Debug)
-		<< " Sensor properties entity " << sensor->entity()->name()
-		<< " id " << sensor->id()
-		<< " model " << sensor->model() << std::endl
-		<< " input0 " << sensorProps->input0Channel_.toString() << std::endl
-		<< " input1 " << sensorProps->input1Channel_.toString() << std::endl
-		<< " ed " << sensorProps->edChannel_.toString();
-
-	return 0;
-}
-
-/**
- * \brief Discover and record graph links from sensor to ISI crossbar.
- * \param[out] links Vector of media links involved in the graph
- *
- * Simplistic walkthrough: only first link of first source pad of every
- * entity is considered as a possible path at the moment.
- * \todo introduce optional path description in pipeline configuration file to
- * give the option to define more complex graph paths.
- *
- * \return 0 on success or a negative error code for error or if no camera
- * has been created
- * \retval -ENODEV no camera has been created
- */
-int NxpNeoCameraData::setupCameraDiscoverLinks(std::vector<MediaLink *> *links)
-{
-	constexpr unsigned int kGraphDepthMax = 8;
-	ISIDevice *isi = pipe()->isi_.get();
-
-	const MediaEntity *sensorEntity = sensor_->entity();
-	const MediaEntity *isiCrossbarEntity = isi->crossbar()->entity();
-	const MediaEntity *entity = sensorEntity;
-
-	for (unsigned int i = 0; i < kGraphDepthMax; i++) {
-		MediaPad *sourcePad = nullptr;
-		MediaPad *sinkPad;
-
-		for (auto pad : entity->pads()) {
-			if (pad->flags() & MEDIA_PAD_FL_SOURCE) {
-				sourcePad = pad;
-				break;
-			}
-		}
-
-		MediaLink *link;
-		if (sourcePad && sourcePad->links().size()) {
-			link = sourcePad->links()[0];
-		} else {
-			LOG(NxpNeo, Debug)
-				<< "Sensor " << sensorEntity->name()
-				<< " entity " << entity->name()
-				<< " has no source pad with links";
-			return -ENOENT;
-		}
-
-		links->push_back(link);
-
-		sinkPad = link->sink();
-		LOG(NxpNeo, Debug)
-			<< "Sensor " << sensorEntity->name()
-			<< " graph, added link "
-			<< " source entity " << sourcePad->entity()->name()
-			<< " pad " << sourcePad->index()
-			<< " -> sink entity " << sinkPad->entity()->name()
-			<< " pad " << sinkPad->index();
-
-		entity = sinkPad->entity();
-		if (entity->name() == isiCrossbarEntity->name())
-			break;
-	}
-
-	if (entity->name() != isiCrossbarEntity->name()) {
-		LOG(NxpNeo, Error)
-			<< "Sensor " << sensorEntity->name()
-			<< " has no default path to ISI crossbar";
-		return -ENOENT;
-	}
-	return 0;
-}
-
-
-/**
- * \brief Handle ISI reservations for the camera sensor
- *
- * Necessary reservations for a the camera sensor are:
- * - Channel(s) allocation(s) according to sensor properties
- * - ISI crossbar routes provision for later usage
+ * \brief Handle ISI channels reservation for the camera sensor
  *
  * \return 0 in case of success or a negative error code.
  */
 int NxpNeoCameraData::setupCameraIsiReserve()
 {
-	SensorProperties *sensorProps = &sensorProperties_;
-
 	ISIDevice *isi = pipe()->isi_.get();
+	unsigned int pipeIndex;
+	auto isiPipeDeleter = [=](ISIPipe *_pipe) { isi->freePipe(_pipe); };
 
-	unsigned int isiPipePadBase = isi->crossbarFirstSourcePad();
-
-	V4L2Subdevice::Routing routing = {};
-	uint32_t sinkPad;
-	uint32_t sinkStream;
-	uint32_t sourcePad;
-	uint32_t sourceStream;
-
-	auto channelRecordRoute = [&routing]
-			(unsigned int _sinkPad, unsigned int _sinkStream,
-			 unsigned int _sourcePad, unsigned int _sourceStream) {
-		struct v4l2_subdev_route _route = {
-			.sink_pad = _sinkPad,
-			.sink_stream = _sinkStream,
-			.source_pad = _sourcePad,
-			.source_stream = _sourceStream,
-			.flags = V4L2_SUBDEV_ROUTE_FL_ACTIVE,
-			.reserved = {}
-		};
-
-		routing.push_back(_route);
-	};
-
-	auto isiPipeDeleter = [=](ISIPipe *ipipe) { isi->freePipe(ipipe); };
-
-	pipeInput0_ = std::shared_ptr<ISIPipe>(isi->allocPipe(), isiPipeDeleter);
+	const CameraMediaStream *streamInput0 =
+		cameraInfo_->getStreamInput0();
+	ASSERT(streamInput0);
+	pipeIndex = streamInput0->pipe();
+	pipeInput0_ = std::shared_ptr<ISIPipe>
+			(isi->allocPipe(pipeIndex), isiPipeDeleter);
 	if (!pipeInput0_.get())
 		return -ENODEV;
 
-	sinkPad = static_cast<uint32_t>
-			(sensorProps->input0Channel_.xbarPad_);
-	sinkStream = static_cast<uint32_t>
-			(sensorProps->input0Channel_.xbarPadStream_);
-	sourcePad = static_cast<uint32_t>
-			(isiPipePadBase + pipeInput0_->index());
-	sourceStream = 0;
-
-	channelRecordRoute(sinkPad, sinkStream, sourcePad, sourceStream);
-
-
-	if (sensorProps->hasInput1()) {
+	if (cameraInfo_->hasStreamInput1()) {
+		const CameraMediaStream *streamInput1 =
+			cameraInfo_->getStreamInput1();
+		pipeIndex = streamInput1->pipe();
 		pipeInput1_ = std::shared_ptr<ISIPipe>
-				(isi->allocPipe(), isiPipeDeleter);
+				(isi->allocPipe(pipeIndex), isiPipeDeleter);
 		if (!pipeInput1_.get())
 			return -ENODEV;
-
-		sinkPad = static_cast<uint32_t>
-				(sensorProps->input1Channel_.xbarPad_);
-		sinkStream = static_cast<uint32_t>
-				(sensorProps->input1Channel_.xbarPadStream_);
-		sourcePad = static_cast<uint32_t>
-				(isiPipePadBase + pipeInput1_->index());
-		sourceStream = 0;
-
-		channelRecordRoute(sinkPad, sinkStream, sourcePad, sourceStream);
 	}
 
-	if (sensorProps->hasEmbedded()) {
-		pipeEd_ = std::shared_ptr<ISIPipe>
-				(isi->allocPipe(), isiPipeDeleter);
-		if (!pipeEd_.get())
+	if (cameraInfo_->hasStreamEmbedded()) {
+		const CameraMediaStream *streamEmbedded =
+			cameraInfo_->getStreamEmbedded();
+		pipeIndex = streamEmbedded->pipe();
+		pipeEmbedded_ = std::shared_ptr<ISIPipe>
+				(isi->allocPipe(pipeIndex), isiPipeDeleter);
+		if (!pipeEmbedded_.get())
 			return -ENODEV;
-
-		sinkPad = static_cast<uint32_t>
-				(sensorProps->edChannel_.xbarPad_);
-		sinkStream = static_cast<uint32_t>
-				(sensorProps->edChannel_.xbarPadStream_);
-		sourcePad = static_cast<uint32_t>
-				(isiPipePadBase + pipeEd_->index());
-		sourceStream = 0;
-
-		channelRecordRoute(sinkPad, sinkStream, sourcePad, sourceStream);
 	}
-
-	LOG(NxpNeo, Debug)
-		<< "Merge ISI routes for " << sensor_->id() << std::endl
-		<< routing.toString();
-
-	for (auto &route : routing)
-		pipe()->isiRouting_.push_back(route);
 
 	return 0;
 }
-
 
 /**
  * \brief Configure camera ISI pipes subdevices and nodes formats
@@ -1184,83 +1072,97 @@ int NxpNeoCameraData::setupCameraIsiReserve()
  * \return 0 in case of success or a negative error code.
  */
 int NxpNeoCameraData::setupCameraConfigureIsi(
-	V4L2SubdeviceFormat &sdFormatInput0, V4L2SubdeviceFormat &sdFormatInput1,
-	V4L2SubdeviceFormat &sdFormatEd,
-	V4L2DeviceFormat *vdFormatInput0, V4L2DeviceFormat *vdFormatInput1,
+	const V4L2SubdeviceFormat &sdFormatInput0,
+	const V4L2SubdeviceFormat &sdFormatInput1,
+	const V4L2SubdeviceFormat &sdFormatEd,
+	V4L2DeviceFormat *vdFormatInput0,
+	V4L2DeviceFormat *vdFormatInput1,
 	V4L2DeviceFormat *vdFormatEd)
 {
-	SensorProperties *sensorProps = &sensorProperties_;
+	*vdFormatInput0 = {};
+	*vdFormatInput1 = {};
+	*vdFormatEd = {};
 
 	int ret = pipeInput0_->configure(sdFormatInput0, vdFormatInput0);
-	if (sensorProps->hasInput1())
-		ret|= pipeInput1_->configure(sdFormatInput1, vdFormatInput1);
-	if (sensorProps->hasEmbedded())
-		ret|= pipeEd_->configure(sdFormatEd, vdFormatEd);
+	if (cameraInfo_->hasStreamInput1())
+		ret |= pipeInput1_->configure(sdFormatInput1, vdFormatInput1);
+	if (cameraInfo_->hasStreamEmbedded())
+		ret |= pipeEmbedded_->configure(sdFormatEd, vdFormatEd);
 
 	return ret;
 }
 
-
 /**
- * \brief Configure links and pads of the media graph
- * \param[in] links Vector of media links involved in camera graph.
- * \param[in] sdFormat The subdevice format to be along the graph.
+ * \brief Configure the graph format for a stream of the camera
+ * \param[in] streamLinks Vector of media links and streams.
+ * \param[in] sdFormat The subdevice format used for the stream.
  *
- * The media links involved in the sensor media graph are enabled.
- * Pads involved in the links are individually configured with the sensor
- * output format.
- * \todo add stream support to pads configuration to cater for INPUT1 and embedded
- * data channels.
+ * The pad/stream involved in the camera stream graph are configured with the
+ * specified format.
  *
  * \return 0 in case of success or a negative error code.
  */
-int NxpNeoCameraData::setupCameraConfigureGraph(std::vector<MediaLink *> &links,
-						V4L2SubdeviceFormat &sdFormat)
+int NxpNeoCameraData::setupCameraStream(
+	const std::vector<StreamLink> &streamLinks,
+	V4L2SubdeviceFormat &sdFormat)
 {
-	MediaDevice *media = pipe()->isiMedia_;
+	const MediaDevice *media = pipe()->isiMedia_;
+	std::unique_ptr<V4L2Subdevice> subDev;
+	int ret = 0;
 
-	for (auto &link : links) {
-		const std::string sinkName = link->sink()->entity()->name();
-		const std::string sourceName = link->source()->entity()->name();
-		unsigned int sinkPad = link->sink()->index();
-		unsigned int sourcePad = link->source()->index();
-
-		/* Log warning and continue in case of error */
-		int ret = link->setEnabled(true);
-		if (ret)
-			LOG(NxpNeo, Warning)
-				<< "Error enabling link sink " << sinkName
-				<< " source " << sourceName;
+	for (const auto &streamLink : streamLinks) {
+		const MediaLink *mediaLink = std::get<0>(streamLink);
+		const MediaPad *sourceMediaPad = mediaLink->source();
+		const MediaPad *sinkMediaPad = mediaLink->sink();
+		std::string sourceName = sourceMediaPad->entity()->name();
+		std::string sinkName = sinkMediaPad->entity()->name();
+		unsigned int sourcePad = sourceMediaPad->index();
+		unsigned int sinkPad = sinkMediaPad->index();
+		unsigned int sourceStream = std::get<1>(streamLink);
+		unsigned int sinkStream = std::get<2>(streamLink);
 
 		LOG(NxpNeo, Debug)
-			<< "Set format sink " << sinkName << " pad " << sinkPad
-			<< " source " << sourceName << " pad " << sourcePad
-			<< " format " << sdFormat.toString();
-
-		std::unique_ptr<V4L2Subdevice> subDev;
-
-		subDev = V4L2Subdevice::fromEntityName(media, sinkName);
-		ret = subDev->open();
-		if (ret) {
-			LOG(NxpNeo, Warning)
-				<< "Error opening subdev " << sinkName;
-		}
-		ret = subDev->setFormat(sinkPad, &sdFormat);
-		if (ret) {
-			LOG(NxpNeo, Warning)
-				<< "Error setting format " << sinkName;
-		}
+			<< "Set format " << sdFormat.toString()
+			<< " source " << sourceName << " "
+			<< sourcePad << "/" << sourceStream
+			<< " sink " << sinkName << " "
+			<< sinkPad << "/" << sinkStream;
 
 		subDev = V4L2Subdevice::fromEntityName(media, sourceName);
 		ret = subDev->open();
 		if (ret) {
 			LOG(NxpNeo, Warning)
 				<< "Error opening subdev " << sourceName;
+			return ret;
 		}
-		ret = subDev->setFormat(sourcePad, &sdFormat);
+		ret = subDev->setFormat(sourcePad, sourceStream, &sdFormat);
 		if (ret) {
 			LOG(NxpNeo, Warning)
 				<< "Error setting format " << sourceName;
+			return ret;
+		}
+
+		/* Stop at capture video node */
+		if (sinkMediaPad->entity()->function() ==
+				MEDIA_ENT_T_V4L2_VIDEO) {
+			LOG(NxpNeo, Debug)
+				<< "Configuration completed at video device "
+				<< sinkName;
+			return 0;
+		}
+
+		subDev = V4L2Subdevice::fromEntityName(media, sinkName);
+		ret = subDev->open();
+		if (ret) {
+			LOG(NxpNeo, Warning)
+				<< "Error opening subdev " << sinkName;
+			return ret;
+		}
+		ret = subDev->setFormat(sinkPad, sinkStream, &sdFormat);
+		if (ret) {
+			LOG(NxpNeo, Warning)
+				<< "Error setting format " << sinkName;
+			return ret;
 		}
 	}
 
@@ -1268,20 +1170,143 @@ int NxpNeoCameraData::setupCameraConfigureGraph(std::vector<MediaLink *> &links,
 }
 
 /**
- * \brief Early configuration of the sensor and associated subdevices
+ * \brief Setup format for each media pad stream belonging to a camera
+ * \param[in] mbusCodeInput0 The mbus code to set on input0 media stream
+ * \param[in] SizeInput0 The size to set on input0 media stream
+ * \param[out] sdFormatInput0 The resulting V4L2 format applied on input0 pads
+ * \param[out] sdFormatInput1 The resulting V4L2 format applied on input1 pads
+ * \param[out] sdFormatEd The resulting V4L2 format applied on embedded pads
+
+ * Format for input0 media stream is defined by parameters as it can be
+ * defined by application. Formats for input1 and embedded media streams
+ * are derived from both the input0 values and configuration file.
  *
+ * \return 0 on success or a negative error code otherwise.
+ */
+int NxpNeoCameraData::setupCameraStreams(
+	unsigned int mbusCodeInput0, Size sizeInput0,
+	V4L2SubdeviceFormat *sdFormatInput0,
+	V4L2SubdeviceFormat *sdFormatInput1,
+	V4L2SubdeviceFormat *sdFormatEd)
+{
+	int ret;
+
+	/* All streams share the same size */
+	*sdFormatInput0 = {};
+	sdFormatInput0->mbus_code = mbusCodeInput0;
+	sdFormatInput0->size = sizeInput0;
+	const CameraMediaStream *streamInput0
+			= cameraInfo_->getStreamInput0();
+	ASSERT(streamInput0);
+	const std::vector<StreamLink> &streamLinksInput0 =
+		streamInput0->streamLinks();
+	ret = setupCameraStream(streamLinksInput0, *sdFormatInput0);
+	if (ret)
+		return ret;
+
+	*sdFormatInput1 = {};
+	if (cameraInfo_->hasStreamInput1()) {
+		const CameraMediaStream *streamInput1
+			= cameraInfo_->getStreamInput1();
+		ASSERT(streamInput1);
+		unsigned int code = streamInput1->mbusCode();
+		sdFormatInput1->mbus_code = code;
+		sdFormatInput1->size = sizeInput0;
+		const std::vector<StreamLink> &streamLinksInput1 =
+			streamInput1->streamLinks();
+		ret = setupCameraStream(streamLinksInput1, *sdFormatInput1);
+		if (ret)
+			return ret;
+	}
+
+	*sdFormatEd = {};
+	if (cameraInfo_->hasStreamEmbedded()) {
+		const CameraMediaStream *streamEmbedded
+			= cameraInfo_->getStreamEmbedded();
+		unsigned int code =
+			streamEmbedded->mbusCode();
+		sdFormatEd->mbus_code = code;
+		unsigned int lines =
+			streamEmbedded->embeddedLines();
+		sdFormatEd->size = Size(sizeInput0.width, lines);
+		const std::vector<StreamLink> &streamLinksEmbedded =
+			streamEmbedded->streamLinks();
+		ret = setupCameraStream(streamLinksEmbedded, *sdFormatEd);
+		if (ret)
+			return ret;
+	}
+
+	return ret;
+}
+
+/**
+ * \brief Enable media links from the camera graph
  * \return 0 in case of success or a negative error code.
  */
-int NxpNeoCameraData::setupCamera()
+int NxpNeoCameraData::setupCameraEnableLinks() const
 {
-	int ret = setupCameraDiscoverLinks(&graphLinks_);
+	int ret;
+
+	/*
+	 * Enable graph media links
+	 */
+	auto EnableLink = [](const CameraMediaStream *_stream,
+			     std::string streamName) -> int
+	{
+		int res;
+		ASSERT(_stream);
+		std::vector<StreamLink> links = _stream->streamLinks();
+		for (auto &streamLink : links) {
+			MediaLink *link = std::get<0>(streamLink);
+			MediaPad *sourceMPad = link->source();
+			MediaPad *sinkMPad = link->sink();
+			std::string source = sourceMPad->entity()->name();
+			std::string sink = sinkMPad->entity()->name();
+			unsigned int sourcePad = sourceMPad->index();
+			unsigned int sinkPad = sinkMPad->index();
+
+			LOG(NxpNeo, Debug)
+				<< "Enable link stream " << streamName
+				<< " source "
+				<< source << "/" << sourcePad
+				<< " sink "
+				<< sink << "/" << sinkPad;
+
+			res = link->setEnabled(true);
+			if (res) {
+				LOG(NxpNeo, Error) << "Failed to enable Link";
+				return res;
+			}
+		}
+
+		return 0;
+	};
+
+	ret = EnableLink(cameraInfo_->getStreamInput0(), "input0");
 	if (ret)
 		return ret;
 
-	ret = setupCameraIsiReserve();
-	if (ret)
-		return ret;
+	if (cameraInfo_->hasStreamInput1()) {
+		ret = EnableLink(cameraInfo_->getStreamInput1(), "input1");
+		if (ret)
+			return ret;
+	}
 
+	if (cameraInfo_->hasStreamEmbedded()) {
+		ret = EnableLink(cameraInfo_->getStreamEmbedded(), "embedded");
+		if (ret)
+			return ret;
+	}
+
+	return ret;
+}
+
+/**
+ * \brief Retrieve camera sensor format and sizes
+ * \return 0 in case of success or a negative error code.
+ */
+int NxpNeoCameraData::setupCameraFormat()
+{
 	/*
 	 * Arbitrary Bayer format with high resolution requested.
 	 * Actual best format supported by the sensor will be adjusted.
@@ -1313,16 +1338,13 @@ int NxpNeoCameraData::setupCamera()
  */
 bool NxpNeoCameraData::sensorIsRgbIr() const
 {
-	/* \todo check sensor mbus codes for IR when those are defined */
+	/* \todo get information from IPA about IR support */
 	return false;
 }
 
 /**
- * \brief Probe, configure and register camera sensor if applicable
- *
- * \return 0 on success or a negative error code for error or if no camera
- * has been created
- * \retval -ENODEV no camera has been created
+ * \brief Probe, configure and register camera sensor
+ * \return 0 on success or a negative error code otherwise.
  */
 int PipelineHandlerNxpNeo::createCamera(MediaEntity *sensorEntity,
 					MediaDevice *neoMedia,
@@ -1331,6 +1353,7 @@ int PipelineHandlerNxpNeo::createCamera(MediaEntity *sensorEntity,
 	int ret;
 	std::unique_ptr<NxpNeoCameraData> data =
 		std::make_unique<NxpNeoCameraData>(this);
+
 	std::set<Stream *> streams = {
 		&data->streamFrame_,
 		&data->streamIr_,
@@ -1343,12 +1366,14 @@ int PipelineHandlerNxpNeo::createCamera(MediaEntity *sensorEntity,
 	if (ret)
 		return ret;
 
-	ret = loadSensorProperties(data->sensor_.get(),
-				   &data->sensorProperties_);
-	if (ret)
-		return ret;
+	std::string name = sensorEntity->name();
+	data->cameraInfo_ = pipelineConfig_.getCameraInfo(name);
+	if (!data->cameraInfo_) {
+		LOG(NxpNeo, Warning) << "No CameraInfo for " << name;
+		return -EINVAL;
+	}
 
-	ret = data->setupCamera();
+	ret = data->setupCameraFormat();
 	if (ret)
 		return ret;
 
@@ -1392,20 +1417,24 @@ int PipelineHandlerNxpNeo::createCamera(MediaEntity *sensorEntity,
 	 * associated NEO inputs where they get processed and
 	 * returned through the NEO main and IR outputs.
 	 */
-	SensorProperties *sensorProps = &data->sensorProperties_;
+	const CameraInfo *cameraInfo = data->cameraInfo_;
+
+	ret = data->setupCameraIsiReserve();
+	if (ret)
+		return ret;
 
 	data->pipeInput0_->bufferReady().connect(data.get(),
 			&NxpNeoCameraData::isiInput0BufferReady);
 	data->pipeInput0_->bufferAvailable.connect(data.get(),
 			&NxpNeoCameraData::queuePendingRequests);
-	if (sensorProps->hasInput1()) {
+	if (cameraInfo->hasStreamInput1()) {
 		data->pipeInput1_->bufferReady().connect(data.get(),
 				&NxpNeoCameraData::isiInput1BufferReady);
 		data->pipeInput1_->bufferAvailable.connect(data.get(),
 				&NxpNeoCameraData::queuePendingRequests);
 	}
-	if (sensorProps->hasEmbedded()) {
-		data->pipeEd_->bufferReady().connect(data.get(),
+	if (cameraInfo->hasStreamEmbedded()) {
+		data->pipeEmbedded_->bufferReady().connect(data.get(),
 				&NxpNeoCameraData::isiEdBufferReady);
 	}
 
@@ -1433,30 +1462,129 @@ int PipelineHandlerNxpNeo::createCamera(MediaEntity *sensorEntity,
 }
 
 /**
- * \brief Configure the global V4L2 subdevices routes
+ * \brief Configure the V4L2 subdevices routing
  *
- * Configure the subdevices routes in the system. As route configuration does
- * reset the subdevice, it has to be done once at system discovery time.
+ * Configure the subdevices routing in the system. As routing configuration can
+ * not be updated while a device is streaming, and because subdevices may be
+ * shared by the streams from multiple cameras, routing has to be setup
+ * once at startup and no longer updated afterwards.
  *
- * \return 0 on success, or a negative error code for error
+ * \return 0 on success, or a negative error code otherwise.
  */
-int PipelineHandlerNxpNeo::configureRoutes()
+int PipelineHandlerNxpNeo::setupRouting() const
 {
 	int ret;
-	V4L2Subdevice::Routing *isiRoutes = &isiRouting_;
 
-	LOG(NxpNeo, Debug)
-		<< "Configure aggregated ISI routes " << std::endl
-		<< isiRoutes->toString();
+	const RoutingMap &routingMap = pipelineConfig_.getRoutingMap();
 
-	ret = isi_->crossbar()
-		      ->setRouting(isiRoutes, V4L2Subdevice::ActiveFormat);
-	if (ret) {
-		LOG(NxpNeo, Error) << "Error setting ISI routes";
-		return ret;
+	for (const auto &[name, routing] : routingMap) {
+		LOG(NxpNeo, Debug)
+			<< "Configure routing for entity " << name
+			<< " routing " << routing.toString();
+
+		std::unique_ptr<V4L2Subdevice> sdev =
+			 V4L2Subdevice::fromEntityName(isiMedia_, name);
+		if (!sdev.get()) {
+			LOG(NxpNeo, Error) << "Subdevice does not exist " << name;
+			return -EINVAL;
+		}
+
+		ret = sdev->open();
+		if (ret) {
+			LOG(NxpNeo, Error)
+				<< "Error opening entity " << name;
+			return -EINVAL;
+		}
+
+		V4L2Subdevice::Routing _routing = routing;
+		ret = sdev->setRouting(&_routing, V4L2Subdevice::ActiveFormat);
+		if (ret) {
+			LOG(NxpNeo, Error)
+				<< "Error setting routing for entity " << name;
+			return -EINVAL;
+		}
 	}
 
 	return 0;
+}
+
+/**
+ * \brief Initialize the camera graphs in the media device
+ *
+ * Cameras managed by the pipeline operate on different streams of the media
+ * device. Those streams share subdevice pads common to multiple cameras.
+ * A given stream to be started requires a valid format to be configured
+ * for every other streams sharing the same media device pads.
+ * Thus, a default config is applied at startup to all media devices streams
+ * used by every camera, so that any selected stream can be started later.
+ *
+ * \return 0 on success or a negative error code otherwise.
+ */
+int PipelineHandlerNxpNeo::setupCameraGraphs()
+{
+	int ret = 0;
+
+	for (auto const &camera : manager_->cameras()) {
+		NxpNeoCameraData *data = cameraData(camera.get());
+		LOG(NxpNeo, Debug)
+			<< "Setup graph for camera " << data->cameraName();
+
+		V4L2SubdeviceFormat *sdFormatInput0 = &data->sdFormatInput0_;
+		V4L2SubdeviceFormat *sdFormatInput1 = &data->sdFormatInput1_;
+		V4L2SubdeviceFormat *sdFormatEd = &data->sdFormatEmbedded_;
+
+		V4L2DeviceFormat *vdFormatInput0 = &data->vdFormatInput0_;
+		V4L2DeviceFormat *vdFormatInput1 = &data->vdFormatInput1_;
+		V4L2DeviceFormat *vdFormatEd = &data->vdFormatEmbedded_;
+
+		/* Enable media link between entities */
+		ret = data->setupCameraEnableLinks();
+		if (ret)
+			return ret;
+
+		/* Apply default format to each media pad streams */
+		unsigned int mbusCode = data->mbusCode_;
+		CameraSensor *sensor = data->sensor_.get();
+		std::vector<Size> sizes = sensor->sizes(mbusCode);
+		Size size = sizes.back();
+		ret = data->setupCameraStreams(mbusCode, size, sdFormatInput0,
+			                       sdFormatInput1, sdFormatEd);
+		if (ret)
+			return ret;
+
+		/* ISI video video devices configuration */
+		ret = data->setupCameraConfigureIsi(
+				*sdFormatInput0, *sdFormatInput1,
+				*sdFormatEd,
+				vdFormatInput0, vdFormatInput1,
+				vdFormatEd);
+		if (ret)
+			return ret;
+	}
+
+	return ret;
+}
+
+
+/**
+ * \brief Load the pipeline configuration file
+ * \return 0 on success, or a negative error code otherwise.
+ */
+int PipelineHandlerNxpNeo::loadPipelineConfig()
+{
+	int ret;
+	std::string file;
+	char const *configFromEnv =
+		utils::secure_getenv("LIBCAMERA_NXP_NEO_CONFIG_FILE");
+	if (configFromEnv && *configFromEnv != '\0')
+		file = std::string(configFromEnv);
+	else
+		file = std::string(NXP_NEO_PIPELINE_DATA_DIR) +
+		       std::string("/config.yaml");
+
+	ret = pipelineConfig_.load(file, isiMedia_);
+
+	return ret;
 }
 
 bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
@@ -1479,6 +1607,10 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 
 	isi_ = std::make_unique<ISIDevice>();
 	ret = isi_->init(isiMedia_);
+	if (ret)
+		return false;
+
+	ret = loadPipelineConfig();
 	if (ret)
 		return false;
 
@@ -1518,7 +1650,7 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 
 		ret = createCamera(entity, neos.front(), numCameras);
 		if (ret) {
-			LOG(NxpNeo, Error) << "Failed to probe camera "
+			LOG(NxpNeo, Warning) << "Failed to probe camera "
 					   << entity->name() << ": " << ret;
 		} else {
 			numCameras++;
@@ -1530,11 +1662,13 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 		return false;
 
 	/*
-	 * Cameras have been probed and configured, so global routing
-	 * configuration can be applied now.
+	 * Apply global routing and setup camera media device streams
 	 */
-	ret = configureRoutes();
+	ret = setupRouting();
+	if (ret)
+		return ret;
 
+	ret = setupCameraGraphs();
 	if (ret)
 		return ret;
 
@@ -1551,7 +1685,7 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
  * This function needs data->ipaControls_ to be initialized by the IPA init()
  * function at camera creation time. Always call this function after IPA init().
  *
- * \return 0 on success or a negative error code otherwise
+ * \return 0 on success or a negative error code otherwise.
  */
 int PipelineHandlerNxpNeo::initControls(NxpNeoCameraData *data)
 {
@@ -1586,7 +1720,7 @@ int PipelineHandlerNxpNeo::initControls(NxpNeoCameraData *data)
  * Always call this function after IPA configure() to make sure to have a
  * properly refreshed IPA controls list.
  *
- * \return 0 on success or a negative error code otherwise
+ * \return 0 on success or a negative error code otherwise.
  */
 int PipelineHandlerNxpNeo::updateControls(NxpNeoCameraData *data)
 {
@@ -1697,7 +1831,7 @@ void NxpNeoCameraData::ipaParamsBufferReady(unsigned int id)
 	neo_->params_->queueBuffer(info->paramsBuffer);
 	neo_->stats_->queueBuffer(info->statsBuffer);
 	neo_->input0_->queueBuffer(info->rawBuffer);
-	if (sensorProperties_.hasInput1())
+	if (cameraInfo_->hasStreamInput1())
 		neo_->input1_->queueBuffer(info->input1Buffer);
 }
 
@@ -1882,8 +2016,8 @@ void NxpNeoCameraData::isiEdBufferReady(FrameBuffer *buffer)
 	 * \todo: make something with that buffer - recycle for now
 	 */
 	pipe()->completeBuffer(request, buffer);
-	ASSERT(pipeEd_);
-	pipeEd_->tryReturnBuffer(buffer);
+	ASSERT(pipeEmbedded_);
+	pipeEmbedded_->tryReturnBuffer(buffer);
 }
 
 /**
