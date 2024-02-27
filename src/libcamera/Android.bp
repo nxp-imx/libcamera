@@ -1,49 +1,120 @@
-cc_library_headers {
-    name: "libcamera_includes",
-    vendor_available: true,
-    export_include_dirs: [
-        "include",
-    ],
-}
+/*
+ * Copyright (C) 2020 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-cc_defaults {
-    name: "libcamera_default_flags",
-    rtti: true,
-    cflags: [
-        "-g3",
-        "-Werror",
-        "-Wshadow",
-        "-Wno-c99-designator",
-        "-D_FORTIFY_SOURCE=2",
-    ],
-    cpp_std: "c++17",
-    cppflags: [
-        "-g3",
-        "-Werror",
-        "-DHAVE_LOCALE_T",
-        "-Wshadow",
-        "-Wno-c99-designator",
-        "-D_FORTIFY_SOURCE=2",
-        "-Wextra-semi",
-        "-Wno-implicit-fallthrough",
-    ],
+/*
+cc_prebuilt_library_shared {
+    name: "libyaml",
+    vendor: true,
+    compile_multilib: "64",
+    check_elf_files: false,
+    recovery_available: true,
+    srcs: ["lib64/libyaml.so"],
+    sdk_version: "34",
 }
-
+*/
 cc_library_shared {
     name: "libcamera",
+ //   sdk_version: "34", 
+    rtti: true,
+   /* proprietary: true, */
     vendor: true,
-    defaults: [
-        "libcamera_default_flags",
-    ],
+  //  recovery_available: true,
     srcs: [
-        "*.cpp",
-        "pipeline/imx8-isi/*.cpp",
+        "bayer_format.cpp",
+        "byte_stream_buffer.cpp",
+        "camera.cpp",
+        "camera_controls.cpp",
+        "camera_lens.cpp",
+        "camera_manager.cpp",
+        "camera_sensor.cpp",
+        "camera_sensor_properties.cpp",
+        "color_space.cpp",
+        "controls.cpp",
+        "control_serializer.cpp",
+        "control_validator.cpp",
+        "converter.cpp",
+        "delayed_controls.cpp",
+        "device_enumerator.cpp",
+        "device_enumerator_sysfs.cpp",
+        "fence.cpp",
+        "formats.cpp",
+        "framebuffer.cpp",
+        "framebuffer_allocator.cpp",
+        "geometry.cpp",
+        "ipa_controls.cpp",
+        "ipa_data_serializer.cpp",
+        "ipa_interface.cpp",
+        "ipa_manager.cpp",
+        "ipa_module.cpp",
+        "ipa_proxy.cpp",
+        "ipc_pipe.cpp",
+        "ipc_pipe_unixsocket.cpp",
+        "ipc_unixsocket.cpp",
+        "mapped_framebuffer.cpp",
+        "media_device.cpp",
+        "media_object.cpp",
+        "pipeline_handler.cpp",
+        "pixel_format.cpp",
+        "process.cpp",
+        "pub_key.cpp",
+        "request.cpp",
+        "source_paths.cpp",
+        "stream.cpp",
+        "sysfs.cpp",
+        "transform.cpp",
+        "v4l2_device.cpp",
+        "v4l2_pixelformat.cpp",
+        "v4l2_subdevice.cpp",
+        "v4l2_videodevice.cpp",
+        "yaml_parser.cpp",  
+        "build/src/libcamera/control_ids.cpp",
+        "build/src/libcamera/ipa_pub_key.cpp",
+        "build/src/libcamera/property_ids.cpp",
+        "build/src/libcamera/version.cpp",
+        "pipeline/imx8-isi/*.cpp",      
+
     ],
-    header_libs: [
-        "libcamera_includes",
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-DLIBCAMERA_BASE_PRIVATE",
+        "-DLIBCAMERA_DATA_DIR=\"/usr/local/share/libcamera\"",
+        "-DLIBCAMERA_SYSCONF_DIR=\"/vendor/etc/configs/libcamera\"",
+        "-DIPA_PROXY_DIR=\"/usr/local/libexec/libcamera\"",
+        "-DIPA_CONFIG_DIR=\"/vendor/etc/configs/libcamera/ipa:/usr/local/share/libcamera/ipa\"",
+        "-DIPA_MODULE_DIR=\"/usr/local/lib/libcamera\"",
     ],
+
+    static_libs: [
+    ],
+
     shared_libs: [
+        "libbase",
+        "libcutils",
+        "libutils",
+        "liblog",
         "libdl",
-				"libcamera-base",
+        "libcamera-base",	
+        "libyaml",
+    ],
+    include_dirs: [
+        "system/core/libcutils/include",
+        "external/libyaml/include",
+        "vendor/nxp-opensource/imx/libcamera/include",
+        "vendor/nxp-opensource/imx/libcamera/build/include",
     ],
 }
