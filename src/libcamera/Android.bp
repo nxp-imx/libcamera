@@ -14,24 +14,10 @@
  * limitations under the License.
  */
 
-/*
-cc_prebuilt_library_shared {
-    name: "libyaml",
-    vendor: true,
-    compile_multilib: "64",
-    check_elf_files: false,
-    recovery_available: true,
-    srcs: ["lib64/libyaml.so"],
-    sdk_version: "34",
-}
-*/
 cc_library_shared {
     name: "libcamera",
- //   sdk_version: "34", 
     rtti: true,
-   /* proprietary: true, */
-    vendor: true,
-  //  recovery_available: true,
+    proprietary: true,
     srcs: [
         "bayer_format.cpp",
         "byte_stream_buffer.cpp",

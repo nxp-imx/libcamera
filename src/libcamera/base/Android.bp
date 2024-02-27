@@ -17,10 +17,6 @@ cc_library_shared {
     name: "libcamera-base",
     rtti: true,
     proprietary: true,
-/*    recovery_available: true,
-
-    relative_install_path: "hw",
-*/
     srcs: [
         "*.cpp",
     ],
