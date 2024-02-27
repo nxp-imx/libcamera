@@ -149,7 +149,7 @@ int ISIPipe::stop()
  * device node.
  * \return 0 on success or a negative error code otherwise
  */
-int ISIPipe::configure(V4L2SubdeviceFormat &sinkFormat,
+int ISIPipe::configure(const V4L2SubdeviceFormat &sinkFormat,
 		       V4L2DeviceFormat *sourceFormat)
 {
 	int ret;
@@ -159,23 +159,6 @@ int ISIPipe::configure(V4L2SubdeviceFormat &sinkFormat,
 			<< "Can't be configured in state " << getState();
 		return -ENODEV;
 	}
-
-	ret = pipe_->setFormat(0, &sinkFormat);
-	if (ret) {
-		LOG(IsiDev, Error) << logPrefix()
-			<< "Failed to configure pipe sink";
-		return ret;
-	}
-
-	ret = pipe_->setFormat(1, &sinkFormat);
-	if (ret) {
-		LOG(IsiDev, Error) << logPrefix()
-			<< "Failed to configure pipe source";
-		return ret;
-	}
-
-	LOG(IsiDev, Debug) << logPrefix() << " Subdevice configured "
-		<< " subdev fmt " << sinkFormat.toString();
 
 	*sourceFormat = {};
 	uint32_t code = sinkFormat.mbus_code;

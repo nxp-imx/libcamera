@@ -47,7 +47,7 @@ public:
 	int exportBuffers(unsigned int count,
 			  std::vector<std::unique_ptr<FrameBuffer>> *buffers);
 
-	int configure(V4L2SubdeviceFormat &sinkFormat,
+	int configure(const V4L2SubdeviceFormat &sinkFormat,
 		      V4L2DeviceFormat *sourceFormat);
 
 	int start();
