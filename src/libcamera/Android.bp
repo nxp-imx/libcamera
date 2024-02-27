@@ -100,7 +100,7 @@ cc_library_shared {
     include_dirs: [
         "system/core/libcutils/include",
         "external/libyaml/include",
-        "vendor/nxp-opensource/imx/libcamera/include",
-        "vendor/nxp-opensource/imx/libcamera/build/include",
+        "external/libcamera/include",
+        "external/libcamera/build/include",
     ],
 }
