@@ -333,7 +333,7 @@ const std::map<uint32_t, V4L2PixelFormat> &ISIPipe::mediaBusToPixelFormats()
 
 /**
  * \brief ISI device capabilities discovery from a \a media device
- * \param[in] media device embedding the ISI entity
+ * \param[in] media The media device embedding the ISI entity
  *
  * Examines the ISI device entities to discover and initialize the associated
  * channels.
@@ -396,8 +396,7 @@ int ISIDevice::init(const MediaDevice *media)
 }
 
 /**
- * \brief Dynamically allocate an ISI channel context
- *
+ * \brief Dynamically allocate any ISI channel context
  * \return The ISI channel context, nullptr otherwise
  */
 ISIPipe *ISIDevice::allocPipe()
@@ -415,6 +414,30 @@ ISIPipe *ISIDevice::allocPipe()
 	ISIPipe *pipe = std::get<0>(*it).get();
 	/* allocation state */
 	std::get<1>(*it) = true;
+	return pipe;
+}
+
+/**
+ * \brief Dynamically allocate a specific ISI channel context
+ * \param[in] index The ISI pipe index to be allocated
+ * \return The ISI channel context if available, nullptr otherwise
+ */
+ISIPipe *ISIDevice::allocPipe(unsigned int index)
+{
+	if (index >= pipeEntries_.size()) {
+		LOG(IsiDev, Error) << "Invalid ISI channel " << index;
+		return nullptr;
+	}
+
+	auto &pipeEntry = pipeEntries_[index];
+	if (std::get<1>(pipeEntry) == true) {
+		LOG(IsiDev, Error) << "ISI channel already allocated" << index;
+		return nullptr;
+	}
+
+	ISIPipe *pipe = std::get<0>(pipeEntry).get();
+	/* allocation state */
+	std::get<1>(pipeEntry) = true;
 	return pipe;
 }
 

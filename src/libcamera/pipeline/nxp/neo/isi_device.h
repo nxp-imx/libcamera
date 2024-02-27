@@ -106,6 +106,7 @@ public:
 
 	int init(const MediaDevice *media);
 	ISIPipe *allocPipe();
+	ISIPipe *allocPipe(unsigned int index);
 	void freePipe(ISIPipe *pipe);
 
 	static std::string kDriverName()
