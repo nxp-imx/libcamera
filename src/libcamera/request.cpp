@@ -219,8 +219,12 @@ void Request::Private::emitPrepareCompleted()
  */
 void Request::Private::prepare(std::chrono::milliseconds timeout)
 {
+	LOG(Request, Info) << "==== prepare, pending_ buffers " << pending_.size(); 
 	/* Create and connect one notifier for each synchronization fence. */
 	for (FrameBuffer *buffer : pending_) {
+
+		LOG(Request, Info) << "==== buffer " << buffer << ", buffer->_d() " << buffer->_d();
+		  
 		const Fence *fence = buffer->_d()->fence();
 		if (!fence)
 			continue;
@@ -481,6 +485,8 @@ int Request::addBuffer(const Stream *stream, FrameBuffer *buffer,
 	_d()->pending_.insert(buffer);
 	bufferMap_[stream] = buffer;
 
+	LOG(Request, Info) << "==== addBuffer " << buffer << " for stream " << stream << ", fence " << fence.get() << ", buffer->_d() " << buffer->_d();
+
 	/*
 	 * Make sure the fence has been extracted from the buffer
 	 * to avoid waiting on a stale fence.
@@ -492,6 +498,8 @@ int Request::addBuffer(const Stream *stream, FrameBuffer *buffer,
 
 	if (fence && fence->isValid())
 		buffer->_d()->setFence(std::move(fence));
+	else
+		LOG(Request, Info) << "==== addBuffer, fence invalid"; 
 
 	return 0;
 }

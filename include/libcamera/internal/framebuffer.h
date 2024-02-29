@@ -40,7 +40,7 @@ private:
 	FrameMetadata metadata_;
 	uint64_t cookie_;
 
-	std::unique_ptr<Fence> fence_;
+	std::unique_ptr<Fence> fence_ = nullptr;
 	Request *request_;
 	bool isContiguous_;
 };
