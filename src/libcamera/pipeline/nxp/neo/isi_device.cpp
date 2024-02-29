@@ -98,11 +98,11 @@ int ISIPipe::start()
 		return -EAGAIN;
 	}
 
-	int ret = output_->exportBuffers(kBufferCount, &buffers_);
+	int ret = output_->exportBuffers(bufferCount_, &buffers_);
 	if (ret < 0)
 		LOG(IsiDev, Error) << logPrefix() << "failed to export buffers";
 
-	ret = output_->importBuffers(kBufferCount);
+	ret = output_->importBuffers(bufferCount_);
 	if (ret)
 		LOG(IsiDev, Error) << logPrefix() << "failed to import buffers";
 
@@ -317,13 +317,14 @@ const std::map<uint32_t, V4L2PixelFormat> &ISIPipe::mediaBusToPixelFormats()
 /**
  * \brief ISI device capabilities discovery from a \a media device
  * \param[in] media The media device embedding the ISI entity
+ * \param[in] bufferCount The maximum number of in-flight buffers for a stream
  *
  * Examines the ISI device entities to discover and initialize the associated
  * channels.
  *
  * \return 0 in case of success, or a negative error value
  */
-int ISIDevice::init(const MediaDevice *media)
+int ISIDevice::init(const MediaDevice *media, unsigned int bufferCount)
 {
 	int ret;
 
@@ -358,7 +359,8 @@ int ISIDevice::init(const MediaDevice *media)
 	 * Discover the number of ISI pipes
 	 */
 	for (unsigned int i = 0;; ++i) {
-		std::unique_ptr<ISIPipe> pipe = std::make_unique<ISIPipe>(i);
+		std::unique_ptr<ISIPipe> pipe =
+			std::make_unique<ISIPipe>(i, bufferCount);
 		ret = pipe->init(media);
 		if (ret)
 			break;

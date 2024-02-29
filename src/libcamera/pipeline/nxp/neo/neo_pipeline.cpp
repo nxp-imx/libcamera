@@ -363,7 +363,7 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 		} else if (isRaw) {
 			cfg->pixelFormat = data_->rawPixelFormat_;
 			cfg->size = size;
-			cfg->bufferCount = ISIPipe::kBufferCount;
+			cfg->bufferCount = data_->pipeInput0_->bufferCount();
 			const PixelFormatInfo &info =
 					PixelFormatInfo::info(cfg->pixelFormat);
 			cfg->stride = info.stride(cfg->size.width, 0, 64);
@@ -463,7 +463,7 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 				LOG(NxpNeo, Error) << "Too many raw streams";
 				return nullptr;
 			}
-			bufferCount = ISIPipe::kBufferCount;
+			bufferCount = data->pipeInput0_->bufferCount();
 			pixelFormat = data->rawPixelFormat_;
 			streamFormats[pixelFormat] = ranges;
 			rawOutputAvailable = false;
@@ -1606,7 +1606,8 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 		return false;
 
 	isi_ = std::make_unique<ISIDevice>();
-	ret = isi_->init(isiMedia_);
+	unsigned int bufferCount = NxpNeoCameraConfiguration::kBufferCount;
+	ret = isi_->init(isiMedia_, bufferCount);
 	if (ret)
 		return false;
 

@@ -33,16 +33,14 @@ struct StreamConfiguration;
 class ISIPipe
 {
 public:
-	static constexpr unsigned int kBufferCount = 4;
-
 	enum {
 		kStateIdle,
 		kStateConfigured,
 		kStateActive,
 	};
 
-	ISIPipe(unsigned int index)
-		: index_(index), state_(kStateIdle) {}
+	ISIPipe(unsigned int index, unsigned int bufferCount) :
+		index_(index), state_(kStateIdle), bufferCount_(bufferCount) {}
 
 	int exportBuffers(unsigned int count,
 			  std::vector<std::unique_ptr<FrameBuffer>> *buffers);
@@ -65,6 +63,8 @@ public:
 
 	unsigned int index() const
 		{ return index_; }
+	unsigned int bufferCount() const
+		{ return bufferCount_; }
 
 private:
 	friend class ISIDevice;
@@ -95,6 +95,7 @@ private:
 
 	unsigned int index_;
 	unsigned int state_;
+	unsigned int bufferCount_;
 };
 
 class ISIDevice
@@ -104,7 +105,7 @@ public:
 
 	static constexpr unsigned int kPipesMax = 16;
 
-	int init(const MediaDevice *media);
+	int init(const MediaDevice *media, unsigned int bufferCount);
 	ISIPipe *allocPipe();
 	ISIPipe *allocPipe(unsigned int index);
 	void freePipe(ISIPipe *pipe);
