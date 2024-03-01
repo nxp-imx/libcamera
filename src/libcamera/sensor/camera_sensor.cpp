@@ -267,6 +267,58 @@ int CameraSensor::setEmbeddedDataEnabled(bool enable)
 }
 
 /**
+ * \brief Retrieve the auxiliary image source stream
+ *
+ * Some sensors produce an auxiliary image stream separate from the image
+ * stream. This function indicates if the sensor supports this feature by
+ * returning the auxialiary stream on the sensor's source pad if available,
+ * or an std::optional<> without a value otheriwse.
+ *
+ * \return The auxiliary source stream
+ */
+std::optional<V4L2Subdevice::Stream> CameraSensor::auxiliaryStream() const
+{
+	return {};
+}
+
+/**
+ * \brief Retrieve the format on the auxiliary stream
+ *
+ * When an auxiliary image stream is available, this function returns the
+ * corresponding format on the sensor's source pad. The format may vary with
+ * the image stream format, and should therefore be retrieved after configuring
+ * the image stream.
+ *
+ * If the sensor doesn't support auxiliary stream, this function returns a
+ * default-constructed format.
+ *
+ * \return The format on the embedded data stream
+ */
+V4L2SubdeviceFormat CameraSensor::auxiliaryFormat() const
+{
+	return {};
+}
+
+/**
+ * \brief Enable or disable the auxiliary image stream
+ * \param[in] enable True to enable the auxiliary image stream, false to disable it
+ *
+ * For sensors that support it function enables or disables generation of
+ * auxiliary image stream. Some of such sensors always produce an auxiliary
+ * stream, in which case this function return -EISCONN if the caller attempts to
+ * disable it.
+ *
+ * If the sensor doesn't support an auxiliary image stream, this function
+ * returns 0 when \a enable is false, and -ENOSTR otherwise.
+ *
+ * \return 0 on success, or a negative error code otherwise
+ */
+int CameraSensor::setAuxiliaryEnabled(bool enable)
+{
+	return enable ? -ENOSTR : 0;
+}
+
+/**
  * \fn CameraSensor::properties()
  * \brief Retrieve the camera sensor properties
  * \return The list of camera sensor properties
