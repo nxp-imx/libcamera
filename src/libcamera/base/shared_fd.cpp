@@ -280,12 +280,16 @@ SharedFD::Descriptor::Descriptor(int fd, bool duplicate)
 		LOG(SharedFD, Fatal)
 			<< "Failed to dup() fd: " << strerror(-ret);
 	}
+
+  LOG(SharedFD, Info) << "==== SharedFD::Descriptor ctor, dup fd " << fd  << " to " << fd_;
 }
 
 SharedFD::Descriptor::~Descriptor()
 {
 	if (fd_ != -1)
 		close(fd_);
+
+  LOG(SharedFD, Info) << "==== SharedFD::Descriptor dtor, close fd " << fd_;
 }
 
 } /* namespace libcamera */
