@@ -328,8 +328,10 @@ void PipelineHandler::unlockMediaDevices()
  */
 void PipelineHandler::stop(Camera *camera)
 {
+	LOG(Pipeline, Info) << "==== enter stop(), this " << this;	
 	/* Stop the pipeline handler and let the queued requests complete. */
 	stopDevice(camera);
+	LOG(Pipeline, Info) << "==== after stopDevice, waitingRequests_.size " << waitingRequests_.size();  
 
 	/* Cancel and signal as complete all waiting requests. */
 	while (!waitingRequests_.empty()) {
@@ -340,11 +342,16 @@ void PipelineHandler::stop(Camera *camera)
 		completeRequest(request);
 	}
 
+	
+	LOG(Pipeline, Info) << "==== after while";  
+
 	/* Make sure no requests are pending. */
 	Camera::Private *data = camera->_d();
 	ASSERT(data->queuedRequests_.empty());
 
 	data->requestSequence_ = 0;
+
+	LOG(Pipeline, Info) << "==== leave stop()";		
 }
 
 /**

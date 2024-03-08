@@ -1189,12 +1189,16 @@ void PipelineHandlerISI::stopDevice(Camera *camera)
 {
 	ISICameraData *data = cameraData(camera);
 
+  LOG(ISI, Info) << "==== enter stopDevice, data->enabledStreams_ size " << data->enabledStreams_.size() << ", this " << this;
 	for (const auto &stream : data->enabledStreams_) {
 		Pipe *pipe = pipeFromStream(camera, stream);
 
+    LOG(ISI, Info) << "==== stop pipe " << pipe << ", stream " << stream;
 		pipe->capture->streamOff();
 		pipe->capture->releaseBuffers();
 	}
+
+  LOG(ISI, Info) << "==== leave stopDevice";
 }
 
 int PipelineHandlerISI::queueRequestDevice(Camera *camera, Request *request)
