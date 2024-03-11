@@ -160,7 +160,8 @@ private:
 class NxpNeoCameraConfiguration : public CameraConfiguration
 {
 public:
-	static constexpr unsigned int kBufferCount = 4;
+	/* \todo get number of buffers from configuration file */
+	static constexpr unsigned int kBufferCount = 6;
 	static constexpr unsigned int kMaxStreams = 3;
 
 	NxpNeoCameraConfiguration(NxpNeoCameraData *data);
