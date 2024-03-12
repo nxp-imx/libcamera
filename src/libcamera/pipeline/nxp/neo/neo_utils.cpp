@@ -4,10 +4,11 @@
  * Copyright 2024 NXP
  */
 
+#include "neo_utils.h"
+
 #include <limits>
 #include <sstream>
 #include <string>
-#include <sstream>
 
 #include <linux/v4l2-subdev.h>
 
@@ -17,7 +18,6 @@
 
 #include "libcamera/internal/yaml_parser.h"
 
-#include "neo_utils.h"
 #include "isi_device.h"
 
 namespace libcamera {
@@ -25,7 +25,6 @@ namespace libcamera {
 LOG_DECLARE_CATEGORY(NxpNeo)
 
 namespace nxpneo {
-
 
 /* -----------------------------------------------------------------------------
  * CameraMediaStream class
@@ -35,7 +34,8 @@ namespace nxpneo {
  * \brief Assemble and return a string describing the camera media stream
  * \return A string describing the camera media stream
  */
-std::string CameraMediaStream::toString() const {
+std::string CameraMediaStream::toString() const
+{
 	std::stringstream ss;
 
 	for (const auto &streamLink : streamLinks_) {
@@ -48,11 +48,11 @@ std::string CameraMediaStream::toString() const {
 		unsigned int _sinkPad = _sinkMediaPad->index();
 		unsigned int _sourceStream = std::get<1>(streamLink);
 		unsigned int _sinkStream = std::get<2>(streamLink);
-		ss	<< "source " << _sourceName << " "
-			<< _sourcePad << "/" << _sourceStream
-			<< " sink " << _sinkName << " "
-			<< _sinkPad << "/" << _sinkStream
-			<< std::endl;
+		ss << "source " << _sourceName << " "
+		   << _sourcePad << "/" << _sourceStream
+		   << " sink " << _sinkName << " "
+		   << _sinkPad << "/" << _sinkStream
+		   << std::endl;
 	}
 
 	ss << "mbus-code " << mbusCode()
@@ -61,7 +61,6 @@ std::string CameraMediaStream::toString() const {
 
 	return ss.str();
 }
-
 
 /* -----------------------------------------------------------------------------
  * CameraInfo class
@@ -72,17 +71,16 @@ std::string CameraMediaStream::toString() const {
  * \param[in] streamId The stream identifier STREAM_<XYZ>.
  * \return True if the stream is configured.
  */
-bool CameraInfo::hasStream(unsigned int streamId) const {
+bool CameraInfo::hasStream(unsigned int streamId) const
+{
 	if (streamId >= streams_.size())
 		return false;
 	return streams_[streamId].has_value();
 }
 
-
 /* -----------------------------------------------------------------------------
  * PipelineConfig class
  */
-
 
 /**
  * \brief Report the CameraInfo associated to a camera
@@ -132,7 +130,8 @@ const RoutingMap &PipelineConfig::getRoutingMap() const
  * \return 0 on success or a negative error code otherwise.
  */
 int PipelineConfig::loadAutoDetectRouting(MediaEntity *entity,
-				unsigned int sinkPad, unsigned int sourcePad)
+					  unsigned int sinkPad,
+					  unsigned int sourcePad)
 {
 	int ret;
 	std::string entityName = entity->name();
@@ -167,7 +166,6 @@ int PipelineConfig::loadAutoDetectRouting(MediaEntity *entity,
 	routingMap_[entityName] = routing;
 	return 0;
 }
-
 
 /**
  * \brief Extract camera media device graph to the capture video device
@@ -248,8 +246,7 @@ int PipelineConfig::loadAutoDetectEntity(MediaEntity *entity)
 	unsigned int mbusCode = 0;
 	unsigned int isiPipe = 0;
 	unsigned int embeddedLines = 0;
-	CameraMediaStream mediaStream =
-		{streamLinks, isiPipe, mbusCode, embeddedLines};
+	CameraMediaStream mediaStream = { streamLinks, isiPipe, mbusCode, embeddedLines };
 
 	LOG(NxpNeo, Debug)
 		<< "Camera media stream detected " << std::endl
@@ -268,7 +265,7 @@ int PipelineConfig::loadAutoDetectEntity(MediaEntity *entity)
  *
  * \return 0 on success or a negative error code otherwise.
  */
-int PipelineConfig::loadAutoDetect(MediaDevice* media)
+int PipelineConfig::loadAutoDetect(MediaDevice *media)
 {
 	int ret = -EINVAL;
 
@@ -350,8 +347,7 @@ int PipelineConfig::parseRoutings(const YamlObject &platform)
 		V4L2Subdevice::Routing routing;
 		for (const auto &route : routes.asList()) {
 			std::vector<unsigned int> v =
-				route.getList<unsigned int>().
-					value_or(std::vector<unsigned int>{});
+				route.getList<unsigned int>().value_or(std::vector<unsigned int>{});
 			if (v.size() != ROUTE_MAX) {
 				LOG(NxpNeo, Warning)
 					<< "Unexpected route size " << v.size();
@@ -426,11 +422,9 @@ PipelineConfig::parseMediaStream(const YamlObject &camera,
 		}
 
 		unsigned int sourcePad =
-			link[LINK_SOURCE_PAD]
-				.get<unsigned int>().value_or(maxUint);
+			link[LINK_SOURCE_PAD].get<unsigned int>().value_or(maxUint);
 		unsigned int sourceStream =
-			link[LINK_SOURCE_STREAM]
-				.get<unsigned int>().value_or(maxUint);
+			link[LINK_SOURCE_STREAM].get<unsigned int>().value_or(maxUint);
 
 		std::string sinkEntityName =
 			link[LINK_SINK_NAME].get<std::string>().value_or("");
@@ -443,12 +437,9 @@ PipelineConfig::parseMediaStream(const YamlObject &camera,
 		}
 
 		unsigned int sinkPad =
-			link[LINK_SINK_PAD]
-				.get<unsigned int>().value_or(maxUint);
+			link[LINK_SINK_PAD].get<unsigned int>().value_or(maxUint);
 		unsigned int sinkStream =
-			link[LINK_SINK_STREAM]
-				.get<unsigned int>().value_or(maxUint);
-
+			link[LINK_SINK_STREAM].get<unsigned int>().value_or(maxUint);
 
 		/*
 		 * Lookup for matching media link in the graph corresponding to
@@ -501,8 +492,7 @@ PipelineConfig::parseMediaStream(const YamlObject &camera,
 	const YamlObject &lines = stream["embedded-lines"];
 	unsigned int embeddedLines = lines.get<unsigned int>().value_or(0);
 
-	CameraMediaStream mediaStream =
-		{streamLinks, isiPipe, mbusCode, embeddedLines};
+	CameraMediaStream mediaStream = { streamLinks, isiPipe, mbusCode, embeddedLines };
 
 	LOG(NxpNeo, Debug)
 		<< "Camera media stream parsed " << std::endl
@@ -510,7 +500,6 @@ PipelineConfig::parseMediaStream(const YamlObject &camera,
 
 	return std::make_optional(std::move(mediaStream));
 }
-
 
 /**
  * \brief Parse camera entries in a platform node
@@ -542,14 +531,11 @@ int PipelineConfig::parseCameras(const YamlObject &platform, MediaDevice *media)
 		CameraInfo cameraInfo = {};
 		std::optional<CameraMediaStream> stream;
 		stream = parseMediaStream(camera, "stream-input0", media);
-		cameraInfo.streams_[CameraInfo::STREAM_INPUT0]
-			= std::move(stream);
+		cameraInfo.streams_[CameraInfo::STREAM_INPUT0] = std::move(stream);
 		stream = parseMediaStream(camera, "stream-input1", media);
-		cameraInfo.streams_[CameraInfo::STREAM_INPUT1]
-			= std::move(stream);
+		cameraInfo.streams_[CameraInfo::STREAM_INPUT1] = std::move(stream);
 		stream = parseMediaStream(camera, "stream-embedded", media);
-		cameraInfo.streams_[CameraInfo::STREAM_EMBEDDED]
-			= std::move(stream);
+		cameraInfo.streams_[CameraInfo::STREAM_EMBEDDED] = std::move(stream);
 
 		if (!cameraInfo.hasStreamInput0()) {
 			LOG(NxpNeo, Error)
@@ -571,7 +557,6 @@ int PipelineConfig::parseCameras(const YamlObject &platform, MediaDevice *media)
 	LOG(NxpNeo, Debug) << "Camera configurations " << cameraMap_.size();
 	return cameraMap_.size() > 0 ? 0 : -EINVAL;
 }
-
 
 /**
  * \brief Parse a platform entry in yaml configuration file
@@ -610,7 +595,7 @@ int PipelineConfig::parsePlatform(const YamlObject &platform,
  * \param[in] media The backend media device (CSI, ISI, sensors).
  * \return 0 on success or a negative error code otherwise.
  */
-int PipelineConfig::loadFromFile(std::string filename, MediaDevice* media)
+int PipelineConfig::loadFromFile(std::string filename, MediaDevice *media)
 {
 	File file(filename);
 	int ret;
@@ -644,7 +629,6 @@ int PipelineConfig::loadFromFile(std::string filename, MediaDevice* media)
 
 	LOG(NxpNeo, Info) << "Parsing pipeline config file " << filename;
 
-
 	for (const auto &platform : platforms.asList()) {
 		ret = parsePlatform(platform, media);
 		if (!ret)
@@ -667,7 +651,7 @@ int PipelineConfig::loadFromFile(std::string filename, MediaDevice* media)
  *
  * \return 0 on success or a negative error code otherwise.
  */
-int PipelineConfig::load(std::string filename, MediaDevice* media)
+int PipelineConfig::load(std::string filename, MediaDevice *media)
 {
 	int ret;
 

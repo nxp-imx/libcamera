@@ -56,24 +56,49 @@ public:
 	std::vector<std::unique_ptr<FrameBuffer>> statsBuffers_;
 
 	static std::string kDriverName()
-		{ return "neoisp"; }
+	{
+		return "neoisp";
+	}
+
 	static std::string kSDevNeoEntityName()
-		{ return "neoisp"; }
+	{
+		return "neoisp";
+	}
+
 	static std::string kVDevInput0EntityName()
-		{ return "neoisp-input0"; }
+	{
+		return "neoisp-input0";
+	}
+
 	static std::string kVDevInput1EntityName()
-		{ return "neoisp-input1"; }
+	{
+		return "neoisp-input1";
+	}
+
 	static std::string kVDevEntityParamsName()
-		{ return "neoisp-params"; }
+	{
+		return "neoisp-params";
+	}
+
 	static std::string kVDevEntityFrameName()
-		{ return "neoisp-frame"; }
+	{
+		return "neoisp-frame";
+	}
+
 	static std::string kVDevEntityIrName()
-		{ return "neoisp-ir"; }
+	{
+		return "neoisp-ir";
+	}
+
 	static std::string kVDevEntityStatsName()
-		{ return "neoisp-stats"; }
+	{
+		return "neoisp-stats";
+	}
 
 	std::string logPrefix() const
-		{ return "Neo[" + std::to_string(index_) + "] "; }
+	{
+		return "Neo[" + std::to_string(index_) + "] ";
+	}
 
 	static const std::vector<V4L2PixelFormat> &frameFormats();
 	static const std::vector<V4L2PixelFormat> &irFormats();
@@ -81,7 +106,10 @@ public:
 	static const std::vector<V4L2PixelFormat> &input1Formats();
 
 	const MediaDevice *media() const
-		{ return media_; }
+	{
+		return media_;
+	}
+
 private:
 	enum {
 		PAD_INPUT0 = 0,
@@ -101,11 +129,19 @@ private:
 				     unsigned int pad, uint32_t fourcc);
 
 	bool padActiveInput1() const
-		{ return configInput1_; }
+	{
+		return configInput1_;
+	}
+
 	bool padActiveFrame() const
-		{ return configFrame_; }
+	{
+		return configFrame_;
+	}
+
 	bool padActiveIr() const
-		{ return configIr_; }
+	{
+		return configIr_;
+	}
 
 	unsigned int index_;
 	MediaDevice *media_ = nullptr;

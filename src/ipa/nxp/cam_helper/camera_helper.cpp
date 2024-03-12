@@ -51,7 +51,6 @@ namespace nxp {
  * function.
  */
 
-
 /**
  * \brief Retrieve exposure from the control list
  * \param[in] ctrls The control list to use
@@ -98,7 +97,6 @@ uint32_t CameraHelper::controlListGetExposure(const ControlList *ctrls) const
  */
 uint32_t CameraHelper::controlListGetGain(const ControlList *ctrls) const
 {
-
 	uint32_t gain = 0;
 	if (!ctrls->contains(V4L2_CID_ANALOGUE_GAIN)) {
 		LOG(NxpCameraHelper, Error)
@@ -174,8 +172,8 @@ void CameraHelper::controlListSetGain(
  * a proprietary programming model.
  */
 void CameraHelper::controlInfoMapGetExposureRange(
-		const ControlInfoMap *ctrls, uint32_t *minExposure,
-		uint32_t *maxExposure, uint32_t *defExposure) const
+	const ControlInfoMap *ctrls, uint32_t *minExposure,
+	uint32_t *maxExposure, uint32_t *defExposure) const
 {
 	uint32_t min, max, def;
 	const auto it = ctrls->find(V4L2_CID_EXPOSURE);
@@ -211,8 +209,8 @@ void CameraHelper::controlInfoMapGetExposureRange(
  * a proprietary programming model.
  */
 void CameraHelper::controlInfoMapGetGainRange(
-		const ControlInfoMap *ctrls, uint32_t *minGainCode,
-		uint32_t *maxGainCode, uint32_t *defGainCode) const
+	const ControlInfoMap *ctrls, uint32_t *minGainCode,
+	uint32_t *maxGainCode, uint32_t *defGainCode) const
 {
 	uint32_t min, max, def;
 	const auto it = ctrls->find(V4L2_CID_ANALOGUE_GAIN);
@@ -282,7 +280,6 @@ bool CameraHelper::controlListHasId(const ControlList *ctrls, unsigned int id) c
 	auto idMap = ctrls->idMap();
 	return (idMap->find(id) != idMap->end());
 }
-
 
 /*-------------------------- Factory definitions --------------------------*/
 

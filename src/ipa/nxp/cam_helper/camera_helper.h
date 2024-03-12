@@ -11,10 +11,9 @@
 
 #pragma once
 
-#include <stdint.h>
-
 #include <map>
 #include <memory>
+#include <stdint.h>
 #include <string>
 #include <vector>
 
@@ -58,8 +57,6 @@ private:
 	LIBCAMERA_DISABLE_COPY_AND_MOVE(CameraHelper)
 };
 
-
-
 class CameraHelperFactoryBase
 {
 public:
@@ -97,7 +94,7 @@ private:
 };
 
 #define REGISTER_CAMERA_HELPER(name, helper) \
-static CamerarHelperFactory<helper> global_##helper##Factory(name);
+	static CamerarHelperFactory<helper> global_##helper##Factory(name);
 
 } /* namespace nxp */
 

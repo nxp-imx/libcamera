@@ -77,7 +77,8 @@ int ISIPipe::exportBuffers(unsigned int count,
 			   std::vector<std::unique_ptr<FrameBuffer>> *buffers)
 {
 	if (!stateConfigured()) {
-		LOG(IsiDev, Error) << logPrefix()
+		LOG(IsiDev, Error)
+			<< logPrefix()
 			<< "Export buffer while not configured "
 			<< "(" << getState() << ")";
 	}
@@ -92,7 +93,8 @@ int ISIPipe::exportBuffers(unsigned int count,
 int ISIPipe::start()
 {
 	if (!stateConfigured()) {
-		LOG(IsiDev, Error) << logPrefix()
+		LOG(IsiDev, Error)
+			<< logPrefix()
 			<< "Starting while not in configured state"
 			<< "(" << getState() << ")";
 		return -EAGAIN;
@@ -127,7 +129,8 @@ int ISIPipe::start()
 int ISIPipe::stop()
 {
 	if (!stateActive()) {
-		LOG(IsiDev, Error) << logPrefix()
+		LOG(IsiDev, Error)
+			<< logPrefix()
 			<< "Stopping while not active "
 			<< "(" << getState() << ")";
 		return -EAGAIN;
@@ -155,7 +158,8 @@ int ISIPipe::configure(const V4L2SubdeviceFormat &sinkFormat,
 	int ret;
 
 	if (!(stateIdle() || stateConfigured())) {
-		LOG(IsiDev, Error) << logPrefix()
+		LOG(IsiDev, Error)
+			<< logPrefix()
 			<< "Can't be configured in state " << getState();
 		return -ENODEV;
 	}
@@ -165,7 +169,8 @@ int ISIPipe::configure(const V4L2SubdeviceFormat &sinkFormat,
 
 	const std::map<uint32_t, V4L2PixelFormat> &formats = mediaBusToPixelFormats();
 	if (!formats.count(code)) {
-		LOG(IsiDev, Error) << logPrefix()
+		LOG(IsiDev, Error)
+			<< logPrefix()
 			<< "mbus code " << code << " not supported by ISI ";
 		return -ENOTSUP;
 	}
@@ -176,14 +181,16 @@ int ISIPipe::configure(const V4L2SubdeviceFormat &sinkFormat,
 	/* \todo Set stride and format. */
 	ret = output_->setFormat(sourceFormat);
 	if (ret) {
-		LOG(IsiDev, Error) << logPrefix()
+		LOG(IsiDev, Error)
+			<< logPrefix()
 			<< "Failed to configure video device";
 		return ret;
 	}
 
 	setState(kStateConfigured);
 
-	LOG(IsiDev, Debug) << logPrefix() << " Video device configured "
+	LOG(IsiDev, Debug)
+		<< logPrefix() << " Video device configured "
 		<< " dev fmt " << sourceFormat->toString();
 
 	return 0;
@@ -274,37 +281,37 @@ const std::map<uint32_t, V4L2PixelFormat> &ISIPipe::mediaBusToPixelFormats()
 	 */
 	static const std::map<uint32_t, V4L2PixelFormat> formats = {
 
-	/* Bayer formats (frame output) */
-	{ MEDIA_BUS_FMT_SBGGR8_1X8, V4L2PixelFormat(V4L2_PIX_FMT_SBGGR8) },
-	{ MEDIA_BUS_FMT_SGBRG8_1X8, V4L2PixelFormat(V4L2_PIX_FMT_SGBRG8) },
-	{ MEDIA_BUS_FMT_SGRBG8_1X8, V4L2PixelFormat(V4L2_PIX_FMT_SGRBG8) },
-	{ MEDIA_BUS_FMT_SRGGB8_1X8, V4L2PixelFormat(V4L2_PIX_FMT_SRGGB8) },
-	{ MEDIA_BUS_FMT_SBGGR10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_SBGGR10) },
-	{ MEDIA_BUS_FMT_SGBRG10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_SGBRG10) },
-	{ MEDIA_BUS_FMT_SGRBG10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_SGRBG10) },
-	{ MEDIA_BUS_FMT_SRGGB10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_SRGGB10) },
-	{ MEDIA_BUS_FMT_SBGGR12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_SBGGR12) },
-	{ MEDIA_BUS_FMT_SGBRG12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_SGBRG12) },
-	{ MEDIA_BUS_FMT_SGRBG12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_SGRBG12) },
-	{ MEDIA_BUS_FMT_SRGGB12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_SRGGB12) },
-	{ MEDIA_BUS_FMT_SBGGR14_1X14, V4L2PixelFormat(V4L2_PIX_FMT_SBGGR14) },
-	{ MEDIA_BUS_FMT_SGBRG14_1X14, V4L2PixelFormat(V4L2_PIX_FMT_SGBRG14) },
-	{ MEDIA_BUS_FMT_SGRBG14_1X14, V4L2PixelFormat(V4L2_PIX_FMT_SGRBG14) },
-	{ MEDIA_BUS_FMT_SRGGB14_1X14, V4L2PixelFormat(V4L2_PIX_FMT_SRGGB14) },
-	{ MEDIA_BUS_FMT_SBGGR16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_SBGGR16) },
-	{ MEDIA_BUS_FMT_SGBRG16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_SGBRG16) },
-	{ MEDIA_BUS_FMT_SGRBG16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_SGRBG16) },
-	{ MEDIA_BUS_FMT_SRGGB16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_SRGGB16) },
+		/* Bayer formats (frame output) */
+		{ MEDIA_BUS_FMT_SBGGR8_1X8, V4L2PixelFormat(V4L2_PIX_FMT_SBGGR8) },
+		{ MEDIA_BUS_FMT_SGBRG8_1X8, V4L2PixelFormat(V4L2_PIX_FMT_SGBRG8) },
+		{ MEDIA_BUS_FMT_SGRBG8_1X8, V4L2PixelFormat(V4L2_PIX_FMT_SGRBG8) },
+		{ MEDIA_BUS_FMT_SRGGB8_1X8, V4L2PixelFormat(V4L2_PIX_FMT_SRGGB8) },
+		{ MEDIA_BUS_FMT_SBGGR10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_SBGGR10) },
+		{ MEDIA_BUS_FMT_SGBRG10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_SGBRG10) },
+		{ MEDIA_BUS_FMT_SGRBG10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_SGRBG10) },
+		{ MEDIA_BUS_FMT_SRGGB10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_SRGGB10) },
+		{ MEDIA_BUS_FMT_SBGGR12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_SBGGR12) },
+		{ MEDIA_BUS_FMT_SGBRG12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_SGBRG12) },
+		{ MEDIA_BUS_FMT_SGRBG12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_SGRBG12) },
+		{ MEDIA_BUS_FMT_SRGGB12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_SRGGB12) },
+		{ MEDIA_BUS_FMT_SBGGR14_1X14, V4L2PixelFormat(V4L2_PIX_FMT_SBGGR14) },
+		{ MEDIA_BUS_FMT_SGBRG14_1X14, V4L2PixelFormat(V4L2_PIX_FMT_SGBRG14) },
+		{ MEDIA_BUS_FMT_SGRBG14_1X14, V4L2PixelFormat(V4L2_PIX_FMT_SGRBG14) },
+		{ MEDIA_BUS_FMT_SRGGB14_1X14, V4L2PixelFormat(V4L2_PIX_FMT_SRGGB14) },
+		{ MEDIA_BUS_FMT_SBGGR16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_SBGGR16) },
+		{ MEDIA_BUS_FMT_SGBRG16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_SGBRG16) },
+		{ MEDIA_BUS_FMT_SGRBG16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_SGRBG16) },
+		{ MEDIA_BUS_FMT_SRGGB16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_SRGGB16) },
 
-	/* Gray formats (IR) */
-	{ MEDIA_BUS_FMT_Y8_1X8, V4L2PixelFormat(V4L2_PIX_FMT_GREY) },
-	{ MEDIA_BUS_FMT_Y10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_Y10) },
-	{ MEDIA_BUS_FMT_Y12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_Y12) },
-	{ MEDIA_BUS_FMT_Y14_1X14, V4L2PixelFormat(V4L2_PIX_FMT_Y14) },
+		/* Gray formats (IR) */
+		{ MEDIA_BUS_FMT_Y8_1X8, V4L2PixelFormat(V4L2_PIX_FMT_GREY) },
+		{ MEDIA_BUS_FMT_Y10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_Y10) },
+		{ MEDIA_BUS_FMT_Y12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_Y12) },
+		{ MEDIA_BUS_FMT_Y14_1X14, V4L2PixelFormat(V4L2_PIX_FMT_Y14) },
 
-	/* \todo MEDIA_BUS_FMT_Y16_1X16 not defined in libcamera headers yet
-		{ MEDIA_BUS_FMT_Y16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_Y16) },
-	*/
+		/* \todo MEDIA_BUS_FMT_Y16_1X16 not defined in libcamera headers yet
+			{ MEDIA_BUS_FMT_Y16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_Y16) },
+		*/
 	};
 
 	return formats;
@@ -337,7 +344,6 @@ int ISIDevice::init(const MediaDevice *media, unsigned int bufferCount)
 	ret = crossbar_->open();
 	if (ret)
 		return ret;
-
 
 	/*
 	 * Discover the number of sink pads
@@ -387,9 +393,11 @@ int ISIDevice::init(const MediaDevice *media, unsigned int bufferCount)
 ISIPipe *ISIDevice::allocPipe()
 {
 	/* \todo handle line buffers sharing between channels */
-	auto it = std::find_if(pipeEntries_.begin(), pipeEntries_.end(),
-		[](const auto &entry) -> bool
-				{ return std::get<1>(entry) == false; });
+	auto it = std::find_if(pipeEntries_.begin(),
+			       pipeEntries_.end(),
+			       [](const auto &entry) -> bool {
+				       return std::get<1>(entry) == false;
+			       });
 
 	if (it == pipeEntries_.end()) {
 		LOG(IsiDev, Error) << "No more ISI channel available";
@@ -434,9 +442,11 @@ void ISIDevice::freePipe(ISIPipe *pipe)
 	if (!pipe)
 		return;
 
-	auto it = std::find_if(pipeEntries_.begin(), pipeEntries_.end(),
-		[=](auto &entry) -> bool
-			 { return std::get<0>(entry).get() == pipe; });
+	auto it = std::find_if(pipeEntries_.begin(),
+			       pipeEntries_.end(),
+			       [=](auto &entry) -> bool {
+				       return std::get<0>(entry).get() == pipe;
+			       });
 
 	if (it == pipeEntries_.end()) {
 		LOG(IsiDev, Error) << "Unknown pipe to free";

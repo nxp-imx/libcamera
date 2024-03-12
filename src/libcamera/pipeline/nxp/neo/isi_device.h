@@ -39,8 +39,8 @@ public:
 		kStateActive,
 	};
 
-	ISIPipe(unsigned int index, unsigned int bufferCount) :
-		index_(index), state_(kStateIdle), bufferCount_(bufferCount) {}
+	ISIPipe(unsigned int index, unsigned int bufferCount)
+		: index_(index), state_(kStateIdle), bufferCount_(bufferCount) {}
 
 	int exportBuffers(unsigned int count,
 			  std::vector<std::unique_ptr<FrameBuffer>> *buffers);
@@ -59,12 +59,19 @@ public:
 	Signal<> bufferAvailable;
 
 	std::string logPrefix() const
-		{ return "Pipe[" + std::to_string(index_) + "] "; }
+	{
+		return "Pipe[" + std::to_string(index_) + "] ";
+	}
 
 	unsigned int index() const
-		{ return index_; }
+	{
+		return index_;
+	}
+
 	unsigned int bufferCount() const
-		{ return bufferCount_; }
+	{
+		return bufferCount_;
+	}
 
 private:
 	friend class ISIDevice;
@@ -76,16 +83,29 @@ private:
 	void freeBuffers();
 
 	void setState(unsigned int state)
-		{ state_ = state; }
+	{
+		state_ = state;
+	}
+
 	unsigned getState() const
-		{ return state_; }
+	{
+		return state_;
+	}
 
 	bool stateIdle() const
-		{ return state_ == kStateIdle; }
+	{
+		return state_ == kStateIdle;
+	}
+
 	bool stateConfigured() const
-		{ return state_ == kStateConfigured; }
+	{
+		return state_ == kStateConfigured;
+	}
+
 	bool stateActive() const
-		{ return state_ == kStateActive; }
+	{
+		return state_ == kStateActive;
+	}
 
 	std::vector<std::unique_ptr<FrameBuffer>> buffers_;
 	std::queue<FrameBuffer *> availableBuffers_;
@@ -111,34 +131,55 @@ public:
 	void freePipe(ISIPipe *pipe);
 
 	static std::string kDriverName()
-		{ return "mxc-isi"; }
+	{
+		return "mxc-isi";
+	}
+
 	static std::string kSDevCrossBarEntityName()
-		{ return "crossbar"; }
+	{
+		return "crossbar";
+	}
+
 	static std::string kSDevPipeEntityName(unsigned int i)
-		{ return "mxc_isi." + std::to_string(i); }
+	{
+		return "mxc_isi." + std::to_string(i);
+	}
+
 	static std::string kVDevPipeEntityName(unsigned int i)
-		{ return "mxc_isi." + std::to_string(i) + ".capture"; }
+	{
+		return "mxc_isi." + std::to_string(i) + ".capture";
+	}
 
 	static const std::map<uint32_t, V4L2PixelFormat> &mediaBusToPixelFormats()
-		{ return ISIPipe::mediaBusToPixelFormats(); }
+	{
+		return ISIPipe::mediaBusToPixelFormats();
+	}
 
 	V4L2Subdevice *crossbar() const
-		{ return crossbar_.get(); }
+	{
+		return crossbar_.get();
+	}
 
 	unsigned int crossbarFirstSourcePad() const
-		{ return xbarSinkPads_; }
+	{
+		return xbarSinkPads_;
+	}
 
 	unsigned int crossbarSourcePads() const
-		{ return pipeEntries_.size(); }
+	{
+		return pipeEntries_.size();
+	}
 
-	const MediaDevice* media() const
-		{ return media_; }
+	const MediaDevice *media() const
+	{
+		return media_;
+	}
 
 private:
 	std::vector<std::tuple<std::unique_ptr<ISIPipe>, bool>> pipeEntries_;
 	std::unique_ptr<V4L2Subdevice> crossbar_;
 	unsigned int xbarSinkPads_ = 0;
-	const MediaDevice* media_ = nullptr;
+	const MediaDevice *media_ = nullptr;
 };
 
 } /* namespace libcamera */

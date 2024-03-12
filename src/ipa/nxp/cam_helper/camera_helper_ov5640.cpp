@@ -9,11 +9,11 @@
  * for ov5640 sensor
  * Copyright 2024 NXP
  */
-#include "camera_helper.h"
-
 #include <cmath>
 
 #include <libcamera/base/log.h>
+
+#include "camera_helper.h"
 
 namespace libcamera {
 
@@ -29,7 +29,6 @@ public:
 		gainType_ = AnalogueGainLinear;
 		gainConstants_.linear = { 1, 0, 0, 16 };
 	}
-
 };
 
 REGISTER_CAMERA_HELPER("ov5640", CameraHelperOv5640)

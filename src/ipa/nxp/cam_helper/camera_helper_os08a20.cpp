@@ -5,11 +5,12 @@
  * for Omnivision OS08A20 sensor
  * Copyright 2024 NXP
  */
-#include "camera_helper.h"
 
 #include <cmath>
 
 #include <libcamera/base/log.h>
+
+#include "camera_helper.h"
 
 namespace libcamera {
 

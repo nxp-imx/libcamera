@@ -14,7 +14,6 @@
 
 #include "camera_helper.h"
 
-
 namespace libcamera {
 
 LOG_DECLARE_CATEGORY(NxpCameraHelper)
@@ -104,7 +103,7 @@ CameraHelperMx95mbcam::controlListGetExposure(const ControlList *ctrls) const
 		Span<const uint8_t> data = value.data();
 		ASSERT(data.size() == sizeof(ox03c10_exposure));
 		const struct ox03c10_exposure *payload;
-		payload = reinterpret_cast<const struct ox03c10_exposure *> (data.data());
+		payload = reinterpret_cast<const struct ox03c10_exposure *>(data.data());
 
 		exposure = payload->dcg;
 	} else {
@@ -136,7 +135,7 @@ uint32_t CameraHelperMx95mbcam::controlListGetGain(const ControlList *ctrls) con
 		Span<const uint8_t> data = value.data();
 		ASSERT(data.size() == sizeof(ox03c10_analog_gain));
 		const struct ox03c10_analog_gain *payload;
-		payload = reinterpret_cast<const struct ox03c10_analog_gain *> (data.data());
+		payload = reinterpret_cast<const struct ox03c10_analog_gain *>(data.data());
 
 		gain = payload->hcg;
 	} else {
@@ -216,8 +215,8 @@ void CameraHelperMx95mbcam::controlListSetGain(
 }
 
 void CameraHelperMx95mbcam::controlInfoMapGetExposureRange(
-		const ControlInfoMap *ctrls, uint32_t *minExposure,
-		uint32_t *maxExposure, uint32_t *defExposure) const
+	const ControlInfoMap *ctrls, uint32_t *minExposure,
+	uint32_t *maxExposure, uint32_t *defExposure) const
 {
 	(void)ctrls;
 
@@ -243,8 +242,8 @@ void CameraHelperMx95mbcam::controlInfoMapGetExposureRange(
 }
 
 void CameraHelperMx95mbcam::controlInfoMapGetGainRange(
-		const ControlInfoMap *ctrls, uint32_t *minGainCode,
-		uint32_t *maxGainCode, uint32_t *defGainCode) const
+	const ControlInfoMap *ctrls, uint32_t *minGainCode,
+	uint32_t *maxGainCode, uint32_t *defGainCode) const
 {
 	(void)ctrls;
 
@@ -259,7 +258,7 @@ void CameraHelperMx95mbcam::controlInfoMapGetGainRange(
 }
 
 std::map<int32_t, std::pair<uint32_t, bool>>
-	CameraHelperMx95mbcam::delayedControlParams() const
+CameraHelperMx95mbcam::delayedControlParams() const
 {
 	static const std::map<int32_t, std::pair<uint32_t, bool>> params = {
 		{ V4L2_CID_OX03C10_ANALOGUE_GAIN, { 2, false } },
