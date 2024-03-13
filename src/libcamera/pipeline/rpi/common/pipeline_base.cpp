@@ -37,12 +37,6 @@ namespace {
 
 constexpr unsigned int defaultRawBitDepth = 12;
 
-bool isRaw(const PixelFormat &pixFmt)
-{
-	/* This test works for both Bayer and raw mono formats. */
-	return BayerFormat::fromPixelFormat(pixFmt).isValid();
-}
-
 PixelFormat mbusCodeToPixelFormat(unsigned int mbus_code,
 				  BayerFormat::Packing packingReq)
 {
@@ -91,22 +85,6 @@ std::optional<ColorSpace> findValidColorSpace(const ColorSpace &colourSpace)
 	return std::nullopt;
 }
 
-bool isRgb(const PixelFormat &pixFmt)
-{
-	const PixelFormatInfo &info = PixelFormatInfo::info(pixFmt);
-	return info.colourEncoding == PixelFormatInfo::ColourEncodingRGB;
-}
-
-bool isYuv(const PixelFormat &pixFmt)
-{
-	/* The code below would return true for raw mono streams, so weed those out first. */
-	if (isRaw(pixFmt))
-		return false;
-
-	const PixelFormatInfo &info = PixelFormatInfo::info(pixFmt);
-	return info.colourEncoding == PixelFormatInfo::ColourEncodingYUV;
-}
-
 } /* namespace */
 
 /*
@@ -129,7 +107,7 @@ CameraConfiguration::Status RPiCameraConfiguration::validateColorSpaces([[maybe_
 
 	for (auto cfg : config_) {
 		/* First fix up raw streams to have the "raw" colour space. */
-		if (isRaw(cfg.pixelFormat)) {
+		if (PipelineHandlerBase::isRaw(cfg.pixelFormat)) {
 			/* If there was no value here, that doesn't count as "adjusted". */
 			if (cfg.colorSpace && cfg.colorSpace != ColorSpace::Raw)
 				status = Adjusted;
@@ -156,13 +134,13 @@ CameraConfiguration::Status RPiCameraConfiguration::validateColorSpaces([[maybe_
 		if (cfg.colorSpace == ColorSpace::Raw)
 			continue;
 
-		if (isYuv(cfg.pixelFormat) && cfg.colorSpace != yuvColorSpace_) {
+		if (PipelineHandlerBase::isYuv(cfg.pixelFormat) && cfg.colorSpace != yuvColorSpace_) {
 			/* Again, no value means "not adjusted". */
 			if (cfg.colorSpace)
 				status = Adjusted;
 			cfg.colorSpace = yuvColorSpace_;
 		}
-		if (isRgb(cfg.pixelFormat) && cfg.colorSpace != rgbColorSpace_) {
+		if (PipelineHandlerBase::isRgb(cfg.pixelFormat) && cfg.colorSpace != rgbColorSpace_) {
 			/* Be nice, and let the YUV version count as non-adjusted too. */
 			if (cfg.colorSpace && cfg.colorSpace != yuvColorSpace_)
 				status = Adjusted;
@@ -180,6 +158,15 @@ CameraConfiguration::Status RPiCameraConfiguration::validate()
 	if (config_.empty())
 		return Invalid;
 
+	/*
+	 * Make sure that if a sensor configuration has been requested it
+	 * is valid.
+	 */
+	if (sensorConfig && !sensorConfig->isValid()) {
+		LOG(RPI, Error) << "Invalid sensor configuration request";
+		return Invalid;
+	}
+
 	status = validateColorSpaces(ColorSpaceFlag::StreamsShareColorSpace);
 
 	/*
@@ -187,54 +174,70 @@ CameraConfiguration::Status RPiCameraConfiguration::validate()
 	 * rotation and store the final combined transform that configure() will
 	 * need to apply to the sensor to save us working it out again.
 	 */
-	Transform requestedTransform = transform;
-	combinedTransform_ = data_->sensor_->validateTransform(&transform);
-	if (transform != requestedTransform)
+	Orientation requestedOrientation = orientation;
+	combinedTransform_ = data_->sensor_->computeTransform(&orientation);
+	if (orientation != requestedOrientation)
 		status = Adjusted;
 
-	std::vector<CameraData::StreamParams> rawStreams, outStreams;
+	rawStreams_.clear();
+	outStreams_.clear();
+
 	for (const auto &[index, cfg] : utils::enumerate(config_)) {
-		if (isRaw(cfg.pixelFormat))
-			rawStreams.emplace_back(index, &cfg);
+		if (PipelineHandlerBase::isRaw(cfg.pixelFormat))
+			rawStreams_.emplace_back(index, &cfg);
 		else
-			outStreams.emplace_back(index, &cfg);
+			outStreams_.emplace_back(index, &cfg);
 	}
 
 	/* Sort the streams so the highest resolution is first. */
-	std::sort(rawStreams.begin(), rawStreams.end(),
+	std::sort(rawStreams_.begin(), rawStreams_.end(),
 		  [](auto &l, auto &r) { return l.cfg->size > r.cfg->size; });
 
-	std::sort(outStreams.begin(), outStreams.end(),
+	std::sort(outStreams_.begin(), outStreams_.end(),
 		  [](auto &l, auto &r) { return l.cfg->size > r.cfg->size; });
 
-	/* Compute the sensor configuration. */
-	unsigned int bitDepth = defaultRawBitDepth;
-	if (!rawStreams.empty()) {
-		BayerFormat bayerFormat = BayerFormat::fromPixelFormat(rawStreams[0].cfg->pixelFormat);
+	/* Compute the sensor's format then do any platform specific fixups. */
+	unsigned int bitDepth;
+	Size sensorSize;
+
+	if (sensorConfig) {
+		/* Use the application provided sensor configuration. */
+		bitDepth = sensorConfig->bitDepth;
+		sensorSize = sensorConfig->outputSize;
+	} else if (!rawStreams_.empty()) {
+		/* Use the RAW stream format and size. */
+		BayerFormat bayerFormat = BayerFormat::fromPixelFormat(rawStreams_[0].cfg->pixelFormat);
 		bitDepth = bayerFormat.bitDepth;
+		sensorSize = rawStreams_[0].cfg->size;
+	} else {
+		bitDepth = defaultRawBitDepth;
+		sensorSize = outStreams_[0].cfg->size;
 	}
 
-	sensorFormat_ = data_->findBestFormat(rawStreams.empty() ? outStreams[0].cfg->size
-								 : rawStreams[0].cfg->size,
-					      bitDepth);
+	sensorFormat_ = data_->findBestFormat(sensorSize, bitDepth);
 
-	/* Do any platform specific fixups. */
-	status = data_->platformValidate(rawStreams, outStreams);
-	if (status == Invalid)
-		return Invalid;
+	/*
+	 * If a sensor configuration has been requested, it should apply
+	 * without modifications.
+	 */
+	if (sensorConfig) {
+		BayerFormat bayer = BayerFormat::fromMbusCode(sensorFormat_.mbus_code);
 
-	/* Further fixups on the RAW streams. */
-	for (auto &raw : rawStreams) {
-		StreamConfiguration &cfg = config_.at(raw.index);
-
-		V4L2DeviceFormat rawFormat;
-		rawFormat.fourcc = raw.dev->toV4L2PixelFormat(cfg.pixelFormat);
-		rawFormat.size = cfg.size;
-		rawFormat.colorSpace = cfg.colorSpace;
-
-		int ret = raw.dev->tryFormat(&rawFormat);
-		if (ret)
+		if (bayer.bitDepth != sensorConfig->bitDepth ||
+		    sensorFormat_.size != sensorConfig->outputSize) {
+			LOG(RPI, Error) << "Invalid sensor configuration: "
+					<< "bitDepth/size mismatch";
 			return Invalid;
+		}
+	}
+
+	/* Start with some initial generic RAW stream adjustments. */
+	for (auto &raw : rawStreams_) {
+		StreamConfiguration *rawStream = raw.cfg;
+
+		/* Adjust the RAW stream to match the computed sensor format. */
+		BayerFormat sensorBayer = BayerFormat::fromMbusCode(sensorFormat_.mbus_code);
+
 		/*
 		 * Some sensors change their Bayer order when they are h-flipped
 		 * or v-flipped, according to the transform. If this one does, we
@@ -242,69 +245,132 @@ CameraConfiguration::Status RPiCameraConfiguration::validate()
 		 * Note how we must fetch the "native" (i.e. untransformed) Bayer
 		 * order, because the sensor may currently be flipped!
 		 */
-		V4L2PixelFormat fourcc = rawFormat.fourcc;
 		if (data_->flipsAlterBayerOrder_) {
-			BayerFormat bayer = BayerFormat::fromV4L2PixelFormat(fourcc);
-			bayer.order = data_->nativeBayerOrder_;
-			bayer = bayer.transform(combinedTransform_);
-			fourcc = bayer.toV4L2PixelFormat();
+			sensorBayer.order = data_->nativeBayerOrder_;
+			sensorBayer = sensorBayer.transform(combinedTransform_);
 		}
 
-		PixelFormat inputPixFormat = fourcc.toPixelFormat();
-		if (raw.cfg->size != rawFormat.size || raw.cfg->pixelFormat != inputPixFormat) {
-			raw.cfg->size = rawFormat.size;
-			raw.cfg->pixelFormat = inputPixFormat;
+		/* Apply the sensor adjusted Bayer order to the user request. */
+		BayerFormat cfgBayer = BayerFormat::fromPixelFormat(rawStream->pixelFormat);
+		cfgBayer.order = sensorBayer.order;
+
+		if (rawStream->pixelFormat != cfgBayer.toPixelFormat()) {
+			rawStream->pixelFormat = cfgBayer.toPixelFormat();
 			status = Adjusted;
 		}
-
-		raw.cfg->stride = rawFormat.planes[0].bpl;
-		raw.cfg->frameSize = rawFormat.planes[0].size;
 	}
 
-	/* Further fixups on the ISP output streams. */
-	for (auto &out : outStreams) {
-		StreamConfiguration &cfg = config_.at(out.index);
-		PixelFormat &cfgPixFmt = cfg.pixelFormat;
-		V4L2VideoDevice::Formats fmts = out.dev->formats();
+	/* Do any platform specific fixups. */
+	Status st = data_->platformValidate(this);
+	if (st == Invalid)
+		return Invalid;
+	else if (st == Adjusted)
+		status = Adjusted;
 
-		if (fmts.find(out.dev->toV4L2PixelFormat(cfgPixFmt)) == fmts.end()) {
-			/* If we cannot find a native format, use a default one. */
-			cfgPixFmt = formats::NV12;
-			status = Adjusted;
-		}
-
-		V4L2DeviceFormat format;
-		format.fourcc = out.dev->toV4L2PixelFormat(cfg.pixelFormat);
-		format.size = cfg.size;
-		/* We want to send the associated YCbCr info through to the driver. */
-		format.colorSpace = yuvColorSpace_;
-
-		LOG(RPI, Debug)
-			<< "Try color space " << ColorSpace::toString(cfg.colorSpace);
-
-		int ret = out.dev->tryFormat(&format);
+	/* Further fixups on the RAW streams. */
+	for (auto &raw : rawStreams_) {
+		int ret = raw.dev->tryFormat(&raw.format);
 		if (ret)
 			return Invalid;
 
+		if (RPi::PipelineHandlerBase::updateStreamConfig(raw.cfg, raw.format))
+			status = Adjusted;
+	}
+
+	/* Further fixups on the ISP output streams. */
+	for (auto &out : outStreams_) {
+
 		/*
+		 * We want to send the associated YCbCr info through to the driver.
+		 *
 		 * But for RGB streams, the YCbCr info gets overwritten on the way back
 		 * so we must check against what the stream cfg says, not what we actually
 		 * requested (which carefully included the YCbCr info)!
 		 */
-		if (cfg.colorSpace != format.colorSpace) {
-			status = Adjusted;
-			LOG(RPI, Debug)
-				<< "Color space changed from "
-				<< ColorSpace::toString(cfg.colorSpace) << " to "
-				<< ColorSpace::toString(format.colorSpace);
-		}
+		out.format.colorSpace = yuvColorSpace_;
 
-		cfg.colorSpace = format.colorSpace;
-		cfg.stride = format.planes[0].bpl;
-		cfg.frameSize = format.planes[0].size;
+		LOG(RPI, Debug)
+			<< "Try color space " << ColorSpace::toString(out.cfg->colorSpace);
+
+		int ret = out.dev->tryFormat(&out.format);
+		if (ret)
+			return Invalid;
+
+		if (RPi::PipelineHandlerBase::updateStreamConfig(out.cfg, out.format))
+			status = Adjusted;
 	}
 
 	return status;
+}
+
+bool PipelineHandlerBase::isRgb(const PixelFormat &pixFmt)
+{
+	const PixelFormatInfo &info = PixelFormatInfo::info(pixFmt);
+	return info.colourEncoding == PixelFormatInfo::ColourEncodingRGB;
+}
+
+bool PipelineHandlerBase::isYuv(const PixelFormat &pixFmt)
+{
+	/* The code below would return true for raw mono streams, so weed those out first. */
+	if (PipelineHandlerBase::isRaw(pixFmt))
+		return false;
+
+	const PixelFormatInfo &info = PixelFormatInfo::info(pixFmt);
+	return info.colourEncoding == PixelFormatInfo::ColourEncodingYUV;
+}
+
+bool PipelineHandlerBase::isRaw(const PixelFormat &pixFmt)
+{
+	/* This test works for both Bayer and raw mono formats. */
+	return BayerFormat::fromPixelFormat(pixFmt).isValid();
+}
+
+/*
+ * Adjust a StreamConfiguration fields to match a video device format.
+ * Returns true if the StreamConfiguration has been adjusted.
+ */
+bool PipelineHandlerBase::updateStreamConfig(StreamConfiguration *stream,
+					     const V4L2DeviceFormat &format)
+{
+	const PixelFormat &pixFormat = format.fourcc.toPixelFormat();
+	bool adjusted = false;
+
+	if (stream->pixelFormat != pixFormat || stream->size != format.size) {
+		stream->pixelFormat = pixFormat;
+		stream->size = format.size;
+		adjusted = true;
+	}
+
+	if (stream->colorSpace != format.colorSpace) {
+		stream->colorSpace = format.colorSpace;
+		adjusted = true;
+		LOG(RPI, Debug)
+			<< "Color space changed from "
+			<< ColorSpace::toString(stream->colorSpace) << " to "
+			<< ColorSpace::toString(format.colorSpace);
+	}
+
+	stream->stride = format.planes[0].bpl;
+	stream->frameSize = format.planes[0].size;
+
+	return adjusted;
+}
+
+/*
+ * Populate and return a video device format using a StreamConfiguration. */
+V4L2DeviceFormat PipelineHandlerBase::toV4L2DeviceFormat(const V4L2VideoDevice *dev,
+							 const StreamConfiguration *stream)
+{
+	V4L2DeviceFormat deviceFormat;
+
+	const PixelFormatInfo &info = PixelFormatInfo::info(stream->pixelFormat);
+	deviceFormat.planesCount = info.numPlanes();
+	deviceFormat.fourcc = dev->toV4L2PixelFormat(stream->pixelFormat);
+	deviceFormat.size = stream->size;
+	deviceFormat.planes[0].bpl = stream->stride;
+	deviceFormat.colorSpace = stream->colorSpace;
+
+	return deviceFormat;
 }
 
 V4L2DeviceFormat PipelineHandlerBase::toV4L2DeviceFormat(const V4L2VideoDevice *dev,
@@ -352,7 +418,7 @@ PipelineHandlerBase::generateConfiguration(Camera *camera, Span<const StreamRole
 
 		case StreamRole::StillCapture:
 			fmts = data->ispFormats();
-			pixelFormat = formats::NV12;
+			pixelFormat = formats::YUV420;
 			/*
 			 * Still image codecs usually expect the sYCC color space.
 			 * Even RGB codecs will be fine as the RGB we get with the
@@ -386,7 +452,7 @@ PipelineHandlerBase::generateConfiguration(Camera *camera, Span<const StreamRole
 
 		case StreamRole::Viewfinder:
 			fmts = data->ispFormats();
-			pixelFormat = formats::ARGB8888;
+			pixelFormat = formats::XRGB8888;
 			colorSpace = ColorSpace::Sycc;
 			size = { 800, 600 };
 			bufferCount = 4;
@@ -449,46 +515,31 @@ int PipelineHandlerBase::configure(Camera *camera, CameraConfiguration *config)
 	for (auto const stream : data->streams_)
 		stream->clearFlags(StreamFlag::External);
 
-	std::vector<CameraData::StreamParams> rawStreams, ispStreams;
+	/*
+	 * Apply the format on the sensor with any cached transform.
+	 *
+	 * If the application has provided a sensor configuration apply it
+	 * instead of just applying a format.
+	 */
+	RPiCameraConfiguration *rpiConfig = static_cast<RPiCameraConfiguration *>(config);
+	V4L2SubdeviceFormat *sensorFormat = &rpiConfig->sensorFormat_;
 
-	for (unsigned i = 0; i < config->size(); i++) {
-		StreamConfiguration *cfg = &config->at(i);
-
-		if (isRaw(cfg->pixelFormat))
-			rawStreams.emplace_back(i, cfg);
-		else
-			ispStreams.emplace_back(i, cfg);
+	if (rpiConfig->sensorConfig) {
+		ret = data->sensor_->applyConfiguration(*rpiConfig->sensorConfig,
+							rpiConfig->combinedTransform_,
+							sensorFormat);
+	} else {
+		ret = data->sensor_->setFormat(sensorFormat,
+					       rpiConfig->combinedTransform_);
 	}
-
-	/* Sort the streams so the highest resolution is first. */
-	std::sort(rawStreams.begin(), rawStreams.end(),
-		  [](auto &l, auto &r) { return l.cfg->size > r.cfg->size; });
-
-	std::sort(ispStreams.begin(), ispStreams.end(),
-		  [](auto &l, auto &r) { return l.cfg->size > r.cfg->size; });
-
-	/* Apply the format on the sensor with any cached transform. */
-	const RPiCameraConfiguration *rpiConfig =
-				static_cast<const RPiCameraConfiguration *>(config);
-	V4L2SubdeviceFormat sensorFormat = rpiConfig->sensorFormat_;
-
-	ret = data->sensor_->setFormat(&sensorFormat, rpiConfig->combinedTransform_);
 	if (ret)
 		return ret;
-
-	/* Use the user requested packing/bit-depth. */
-	std::optional<BayerFormat::Packing> packing;
-	if (!rawStreams.empty()) {
-		BayerFormat bayerFormat =
-			BayerFormat::fromPixelFormat(rawStreams[0].cfg->pixelFormat);
-		packing = bayerFormat.packing;
-	}
 
 	/*
 	 * Platform specific internal stream configuration. This also assigns
 	 * external streams which get configured below.
 	 */
-	ret = data->platformConfigure(sensorFormat, packing, rawStreams, ispStreams);
+	ret = data->platformConfigure(rpiConfig);
 	if (ret)
 		return ret;
 
@@ -552,11 +603,11 @@ int PipelineHandlerBase::configure(Camera *camera, CameraConfiguration *config)
 		 */
 		link->setEnabled(true);
 		const MediaPad *sinkPad = link->sink();
-		ret = device->setFormat(sinkPad->index(), &sensorFormat);
+		ret = device->setFormat(sinkPad->index(), sensorFormat);
 		if (ret) {
 			LOG(RPI, Error) << "Failed to set format on " << device->entity()->name()
 					<< " pad " << sinkPad->index()
-					<< " with format  " << sensorFormat
+					<< " with format  " << *sensorFormat
 					<< ": " << ret;
 			return ret;
 		}
@@ -681,7 +732,8 @@ int PipelineHandlerBase::queueRequestDevice(Camera *camera, Request *request)
 	if (!data->isRunning())
 		return -EINVAL;
 
-	LOG(RPI, Debug) << "queueRequestDevice: New request.";
+	LOG(RPI, Debug) << "queueRequestDevice: New request sequence: "
+			<< request->sequence();
 
 	/* Push all buffers supplied in the Request to the respective streams. */
 	for (auto stream : data->streams_) {
@@ -695,7 +747,7 @@ int PipelineHandlerBase::queueRequestDevice(Camera *camera, Request *request)
 			 * outside the v4l2 device. Store it in the stream buffer list
 			 * so we can track it.
 			 */
-			stream->setExternalBuffer(buffer);
+			stream->setExportedBuffer(buffer);
 		}
 
 		/*
@@ -855,7 +907,7 @@ void PipelineHandlerBase::mapBuffers(Camera *camera, const BufferMap &buffers, u
 	 */
 	for (auto const &it : buffers) {
 		bufferIds.push_back(IPABuffer(mask | it.first,
-					      it.second->planes()));
+					      it.second.buffer->planes()));
 		data->bufferIds_.insert(mask | it.first);
 	}
 
@@ -1164,7 +1216,6 @@ int CameraData::loadIPA(ipa::RPi::InitResult *result)
 
 int CameraData::configureIPA(const CameraConfiguration *config, ipa::RPi::ConfigResult *result)
 {
-	std::map<unsigned int, ControlInfoMap> entityControls;
 	ipa::RPi::ConfigParams params;
 	int ret;
 
@@ -1184,7 +1235,8 @@ int CameraData::configureIPA(const CameraConfiguration *config, ipa::RPi::Config
 	}
 
 	/* Always send the user transform to the IPA. */
-	params.transform = static_cast<unsigned int>(config->transform);
+	Transform transform = config->orientation / Orientation::Rotate0;
+	params.transform = static_cast<unsigned int>(transform);
 
 	/* Ready the IPA - it must know about the sensor resolution. */
 	ret = ipa_->configure(sensorInfo_, params, result);
@@ -1383,14 +1435,11 @@ void CameraData::handleStreamBuffer(FrameBuffer *buffer, RPi::Stream *stream)
 	Request *request = requestQueue_.empty() ? nullptr : requestQueue_.front();
 	if (!dropFrameCount_ && request && request->findBuffer(stream) == buffer) {
 		/*
-		 * Check if this is an externally provided buffer, and if
-		 * so, we must stop tracking it in the pipeline handler.
-		 */
-		handleExternalBuffer(buffer, stream);
-		/*
 		 * Tag the buffer as completed, returning it to the
 		 * application.
 		 */
+		LOG(RPI, Debug) << "Completing request buffer for stream "
+				<< stream->name();
 		pipe()->completeBuffer(request, buffer);
 	} else {
 		/*
@@ -1399,6 +1448,8 @@ void CameraData::handleStreamBuffer(FrameBuffer *buffer, RPi::Stream *stream)
 		 * unconditionally for internal streams), or there is no pending
 		 * request, so we can recycle it.
 		 */
+		LOG(RPI, Debug) << "Returning buffer to stream "
+				<< stream->name();
 		stream->returnBuffer(buffer);
 	}
 }
@@ -1426,17 +1477,6 @@ void CameraData::handleState()
 	}
 }
 
-void CameraData::handleExternalBuffer(FrameBuffer *buffer, RPi::Stream *stream)
-{
-	unsigned int id = stream->getBufferId(buffer);
-
-	if (!(id & MaskExternalBuffer))
-		return;
-
-	/* Stop the Stream object from tracking the buffer. */
-	stream->removeExternalBuffer(buffer);
-}
-
 void CameraData::checkRequestCompleted()
 {
 	bool requestCompleted = false;
@@ -1453,6 +1493,9 @@ void CameraData::checkRequestCompleted()
 		if (state_ != State::IpaComplete)
 			return;
 
+		LOG(RPI, Debug) << "Completing request sequence: "
+				<< request->sequence();
+
 		pipe()->completeRequest(request);
 		requestQueue_.pop();
 		requestCompleted = true;
@@ -1465,6 +1508,7 @@ void CameraData::checkRequestCompleted()
 	if (state_ == State::IpaComplete &&
 	    ((ispOutputCount_ == ispOutputTotal_ && dropFrameCount_) ||
 	     requestCompleted)) {
+		LOG(RPI, Debug) << "Going into Idle state";
 		state_ = State::Idle;
 		if (dropFrameCount_) {
 			dropFrameCount_--;

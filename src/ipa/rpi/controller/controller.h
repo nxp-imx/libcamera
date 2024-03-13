@@ -15,6 +15,7 @@
 #include <vector>
 #include <string>
 
+#include <libcamera/base/utils.h>
 #include "libcamera/internal/yaml_parser.h"
 
 #include "camera_mode.h"
@@ -41,10 +42,13 @@ public:
 		libcamera::Size agcRegions;
 		libcamera::Size agcZoneWeights;
 		libcamera::Size awbRegions;
+		libcamera::Size cacRegions;
 		libcamera::Size focusRegions;
 		unsigned int numHistogramBins;
 		unsigned int numGammaPoints;
 		unsigned int pipelineWidth;
+		bool statsInline;
+		libcamera::utils::Duration minPixelProcessingTime;
 	};
 
 	Controller();

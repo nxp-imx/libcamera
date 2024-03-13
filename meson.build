@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: CC0-1.0
 
 project('libcamera', 'c', 'cpp',
-    meson_version : '>= 0.57',
-    version : '0.1.0',
+    meson_version : '>= 0.60',
+    version : '0.2.0',
     default_options : [
         'werror=true',
         'warning_level=2',
@@ -99,12 +99,18 @@ if cc.get_id() == 'clang'
         error('clang version is too old, libcamera requires 9.0 or newer')
     endif
 
-    # Turn _FORTIFY_SOURCE by default on optimised builds (as it requires -O1
-    # or higher). This is needed on clang only as gcc enables it by default.
+    # Turn _FORTIFY_SOURCE by default on. This is needed on clang only as gcc
+    # enables it by default. FORTIFY will not work properly with `-O0`, and may
+    # result in macro redefinition errors if the user already has a setting for
+    # `-D_FORTIFY_SOURCE`. Do not enable FORTIFY in either of those cases.
     if get_option('optimization') != '0'
-        common_arguments += [
-            '-D_FORTIFY_SOURCE=2',
-        ]
+        fortify = cc.get_define('_FORTIFY_SOURCE')
+        if fortify == ''
+            message('Adding _FORTIFY_SOURCE')
+            common_arguments += [
+                '-D_FORTIFY_SOURCE=2',
+            ]
+        endif
     endif
 
     # Use libc++ by default if available instead of libstdc++ when compiling
@@ -261,6 +267,8 @@ py_mod.find_installation('python3', modules : py_modules)
 summary({
             'Enabled pipelines': pipelines,
             'Enabled IPA modules': enabled_ipa_names,
+            'Controls files': controls_files,
+            'Properties files': properties_files,
             'Hotplug support': libudev.found(),
             'Tracing support': tracing_enabled,
             'Android support': android_enabled,
