@@ -124,7 +124,7 @@ FrameBuffer::Private::Private(const std::vector<Plane> &planes, uint64_t cookie)
 	  isContiguous_(true)
 {
 	metadata_.planes_.resize(planes_.size());
-	LOG(Buffer, Info) << "==== FrameBuffer::Private ctor, this " << this;
+	//LOG(Buffer, Info) << "==== FrameBuffer::Private ctor, this " << this;
 }
 
 /**
