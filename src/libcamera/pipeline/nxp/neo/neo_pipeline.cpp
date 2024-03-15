@@ -2026,13 +2026,15 @@ void NxpNeoCameraData::isiInput0BufferReady(FrameBuffer *buffer)
 
 	if (!rawStreamOnly_) {
 		/*
-		 * INPUT0 frame will be queue into ISP once params buffer for the frame
-		 * have been produced by IPA.
-		 * \todo: in case of ISP operation with INPUT0 + INPUT1 inputs, wait for both
-		 * frames to be available before invoking ipa_->fillParamsBuffer()
+		 * INPUT0 frame will be queue into ISP once params buffer for
+		 * the frame have been produced by IPA.
+		 * \todo: in case of ISP operation with INPUT0 + INPUT1 inputs,
+		 * wait for both frames to be available before invoking
+		 * ipa_->fillParamsBuffer()
 		 */
-
-		ipa_->fillParamsBuffer(info->id, info->paramsBuffer->cookie());
+		ipa_->fillParamsBuffer(info->id,
+				       info->paramsBuffer->cookie(),
+				       info->input0Buffer->cookie());
 	} else {
 		if (frameInfos_.tryComplete(info))
 			pipe()->completeRequest(request);

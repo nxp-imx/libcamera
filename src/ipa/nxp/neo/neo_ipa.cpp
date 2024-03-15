@@ -69,7 +69,9 @@ public:
 	void unmapBuffers(const std::vector<unsigned int> &ids) override;
 
 	void queueRequest(const uint32_t frame, const ControlList &controls) override;
-	void fillParamsBuffer(const uint32_t frame, const uint32_t bufferId) override;
+	void fillParamsBuffer(const uint32_t frame,
+			      const uint32_t paramsBufferId,
+			      const uint32_t rawBufferId) override;
 	void processStatsBuffer(const uint32_t frame, const uint32_t bufferId,
 				const ControlList &sensorControls) override;
 
@@ -308,13 +310,15 @@ void IPANxpNeo::queueRequest(const uint32_t frame, const ControlList &controls)
 	}
 }
 
-void IPANxpNeo::fillParamsBuffer(const uint32_t frame, const uint32_t bufferId)
+void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
+				 const uint32_t paramsBufferId,
+				 [[maybe_unused]] const uint32_t rawBufferId)
 {
 	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
 
 	neoisp_meta_params_s *params =
 		reinterpret_cast<neoisp_meta_params_s *>(
-			mappedBuffers_.at(bufferId).planes()[0].data());
+			mappedBuffers_.at(paramsBufferId).planes()[0].data());
 
 	/* Prepare parameters buffer. */
 	params->frame_id = 0;
