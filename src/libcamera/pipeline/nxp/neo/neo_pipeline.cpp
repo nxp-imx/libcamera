@@ -66,12 +66,12 @@ public:
 
 	int loadIPA();
 
+	void neoInput0BufferReady(FrameBuffer *buffer);
+	void neoInput1BufferReady(FrameBuffer *buffer);
 	void neoOutputBufferReady(FrameBuffer *buffer);
 	void isiInput0BufferReady(FrameBuffer *buffer);
 	void isiInput1BufferReady(FrameBuffer *buffer);
 	void isiEdBufferReady(FrameBuffer *buffer);
-	void neoInput0BufferConsumed(FrameBuffer *buffer);
-	void neoInput1BufferConsumed(FrameBuffer *buffer);
 
 	void neoParamsBufferReady(FrameBuffer *buffer);
 	void neoStatsBufferReady(FrameBuffer *buffer);
@@ -105,6 +105,12 @@ public:
 		V4L2DeviceFormat *vdFormatEd);
 
 	bool screenCancelledBuffer(FrameBuffer *buffer, NxpNeoFrames::Info *info);
+
+	int prepareISIPipeBuffers(ISIPipe *pipe,
+				  unsigned int bufferCount,
+				  unsigned int &id);
+	int allocateBuffers();
+	int freeBuffers();
 
 	std::string cameraName() const
 	{
@@ -199,6 +205,7 @@ public:
 	void stopDevice(Camera *camera) override;
 
 	int queueRequestDevice(Camera *camera, Request *request) override;
+	void cancelRequest(Request *request);
 
 	bool match(DeviceEnumerator *enumerator) override;
 
@@ -223,9 +230,6 @@ private:
 
 	int initControls(NxpNeoCameraData *data);
 	int updateControls(NxpNeoCameraData *data);
-
-	int allocateBuffers(Camera *camera);
-	int freeBuffers(Camera *camera);
 
 	int createCamera(MediaEntity *sensorEntity, MediaDevice *neoMedia,
 			 unsigned int neoInstance);
@@ -360,7 +364,6 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 					 }) == formats.end())
 				cfg->pixelFormat = formats[0].toPixelFormat();
 			cfg->size = size;
-			cfg->bufferCount = NxpNeoCameraConfiguration::kBufferCount;
 			const PixelFormatInfo &info =
 				PixelFormatInfo::info(cfg->pixelFormat);
 			cfg->stride = info.stride(cfg->size.width, 0, 1);
@@ -373,7 +376,6 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 		} else if (isRaw) {
 			cfg->pixelFormat = data_->rawPixelFormat_;
 			cfg->size = size;
-			cfg->bufferCount = data_->pipeInput0_->bufferCount();
 			const PixelFormatInfo &info =
 				PixelFormatInfo::info(cfg->pixelFormat);
 			cfg->stride = info.stride(cfg->size.width, 0, 64);
@@ -385,6 +387,8 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 			LOG(NxpNeo, Error) << "Unknown configuration stream";
 			return Invalid;
 		}
+
+		cfg->bufferCount = NxpNeoCameraConfiguration::kBufferCount;
 
 		if (cfg->pixelFormat != originalCfg.pixelFormat ||
 		    cfg->size != originalCfg.size) {
@@ -430,7 +434,6 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 
 	for (const StreamRole role : roles) {
 		std::map<PixelFormat, std::vector<SizeRange>> streamFormats;
-		unsigned int bufferCount;
 		PixelFormat pixelFormat;
 
 		switch (role) {
@@ -460,7 +463,6 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 				return nullptr;
 			}
 
-			bufferCount = NxpNeoCameraConfiguration::kBufferCount;
 			break;
 		}
 
@@ -473,7 +475,6 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 				LOG(NxpNeo, Error) << "Too many raw streams";
 				return nullptr;
 			}
-			bufferCount = data->pipeInput0_->bufferCount();
 			pixelFormat = data->rawPixelFormat_;
 			streamFormats[pixelFormat] = ranges;
 			rawOutputAvailable = false;
@@ -489,7 +490,7 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 		StreamConfiguration cfg(formats);
 		cfg.size = maxSize;
 		cfg.pixelFormat = pixelFormat;
-		cfg.bufferCount = bufferCount;
+		cfg.bufferCount = NxpNeoCameraConfiguration::kBufferCount;
 
 		config->addConfiguration(cfg);
 		LOG(NxpNeo, Debug)
@@ -644,63 +645,6 @@ int PipelineHandlerNxpNeo::exportFrameBuffers(Camera *camera, Stream *stream,
 	return -EINVAL;
 }
 
-int PipelineHandlerNxpNeo::allocateBuffers(Camera *camera)
-{
-	NxpNeoCameraData *data = cameraData(camera);
-	NeoDevice *neo = data->neo_.get();
-	unsigned int bufferCount;
-	int ret;
-
-	bufferCount = std::max({
-		data->streamFrame_.configuration().bufferCount,
-		data->streamIr_.configuration().bufferCount,
-		data->streamRaw_.configuration().bufferCount,
-	});
-
-	ret = neo->allocateBuffers(bufferCount);
-	if (ret < 0)
-		return ret;
-
-	/* Map buffers to the IPA. */
-	unsigned int ipaBufferId = 1;
-
-	for (const std::unique_ptr<FrameBuffer> &buffer : neo->paramsBuffers_) {
-		buffer->setCookie(ipaBufferId++);
-		data->ipaBuffers_.emplace_back(buffer->cookie(), buffer->planes());
-	}
-
-	for (const std::unique_ptr<FrameBuffer> &buffer : neo->statsBuffers_) {
-		buffer->setCookie(ipaBufferId++);
-		data->ipaBuffers_.emplace_back(buffer->cookie(), buffer->planes());
-	}
-
-	data->ipa_->mapBuffers(data->ipaBuffers_);
-
-	data->frameInfos_.init(neo->paramsBuffers_, neo->statsBuffers_);
-	data->frameInfos_.bufferAvailable.connect(
-		data, &NxpNeoCameraData::queuePendingRequests);
-
-	return 0;
-}
-
-int PipelineHandlerNxpNeo::freeBuffers(Camera *camera)
-{
-	NxpNeoCameraData *data = cameraData(camera);
-
-	data->frameInfos_.clear();
-
-	std::vector<unsigned int> ids;
-	for (IPABuffer &ipabuf : data->ipaBuffers_)
-		ids.push_back(ipabuf.id);
-
-	data->ipa_->unmapBuffers(ids);
-	data->ipaBuffers_.clear();
-
-	data->neo_->freeBuffers();
-
-	return 0;
-}
-
 int PipelineHandlerNxpNeo::start(Camera *camera, [[maybe_unused]] const ControlList *controls)
 {
 	NxpNeoCameraData *data = cameraData(camera);
@@ -711,7 +655,7 @@ int PipelineHandlerNxpNeo::start(Camera *camera, [[maybe_unused]] const ControlL
 	LOG(NxpNeo, Debug) << "Start " << data->cameraName();
 
 	/* Allocate buffers for internal pipeline usage. */
-	ret = allocateBuffers(camera);
+	ret = data->allocateBuffers();
 	if (ret)
 		return ret;
 
@@ -759,7 +703,7 @@ error:
 		data->pipeEmbedded_->stop();
 
 	data->ipa_->stop();
-	freeBuffers(camera);
+	data->freeBuffers();
 	LOG(NxpNeo, Error) << "Failed to start camera " << camera->id();
 
 	return ret;
@@ -789,7 +733,7 @@ void PipelineHandlerNxpNeo::stopDevice(Camera *camera)
 	if (ret)
 		LOG(NxpNeo, Warning) << "Failed to stop camera " << camera->id();
 
-	freeBuffers(camera);
+	data->freeBuffers();
 }
 
 void NxpNeoCameraData::cancelPendingRequests()
@@ -798,14 +742,7 @@ void NxpNeoCameraData::cancelPendingRequests()
 
 	while (!pendingRequests_.empty()) {
 		Request *request = pendingRequests_.front();
-
-		for (auto it : request->buffers()) {
-			FrameBuffer *buffer = it.second;
-			buffer->_d()->cancel();
-			pipe()->completeBuffer(request, buffer);
-		}
-
-		pipe()->completeRequest(request);
+		pipe()->cancelRequest(request);
 		pendingRequests_.pop();
 	}
 }
@@ -813,94 +750,53 @@ void NxpNeoCameraData::cancelPendingRequests()
 void NxpNeoCameraData::queuePendingRequests()
 {
 	FrameBuffer *reqRawBuffer;
-	FrameBuffer *rawBuffer;
-	FrameBuffer *input1Buffer;
-	FrameBuffer *edBuffer;
 	NxpNeoFrames::Info *info;
 	int ret;
 
 	while (!pendingRequests_.empty()) {
 		Request *request = pendingRequests_.front();
 
-		info = frameInfos_.create(request, rawStreamOnly_);
+		reqRawBuffer = request->findBuffer(&streamRaw_);
+		info = frameInfos_.create(request, rawStreamOnly_, reqRawBuffer);
 		if (!info)
 			break;
 
-		rawBuffer = nullptr;
-		input1Buffer = nullptr;
-		edBuffer = nullptr;
-
-		/*
-		 * Queue a INPUT0 buffer on the ISI, using the raw stream buffer
-		 * provided in the request, if any, or a ISI internal buffer
-		 * otherwise.
-		 */
-		reqRawBuffer = request->findBuffer(&streamRaw_);
-		if (!reqRawBuffer) {
-			rawBuffer = pipeInput0_->popAvailableBuffer();
-			if (!rawBuffer)
-				goto error;
-			rawBuffer->_d()->setRequest(request);
-		} else {
-			rawBuffer = reqRawBuffer;
-		}
-
-		/* Queue optional INPUT1 buffer to ISI channel */
+		V4L2VideoDevice *dev;
+		FrameBuffer *buffer;
+		buffer = info->input0Buffer;
+		dev = pipeInput0_->output_.get();
+		buffer->_d()->setRequest(request);
+		ret = dev->queueBuffer(buffer);
 		if (cameraInfo_->hasStreamInput1()) {
-			input1Buffer = pipeInput1_->popAvailableBuffer();
-			if (!input1Buffer)
-				goto error;
-			input1Buffer->_d()->setRequest(request);
+			buffer = info->input1Buffer;
+			dev = pipeInput1_->output_.get();
+			buffer->_d()->setRequest(request);
+			ret |= dev->queueBuffer(buffer);
 		}
-
-		/* Queue optional Embedded Data buffer to ISI channel */
 		if (cameraInfo_->hasStreamEmbedded()) {
-			edBuffer = pipeEmbedded_->popAvailableBuffer();
-			if (!edBuffer)
-				goto error;
-			edBuffer->_d()->setRequest(request);
+			buffer = info->embeddedBuffer;
+			dev = pipeEmbedded_->output_.get();
+			buffer->_d()->setRequest(request);
+			ret |= dev->queueBuffer(buffer);
 		}
-
-		ret = pipeInput0_->queueBuffer(rawBuffer);
-		if (ret)
-			goto error;
-		if (cameraInfo_->hasStreamInput1())
-			ret = pipeInput1_->queueBuffer(input1Buffer);
-		if (cameraInfo_->hasStreamEmbedded())
-			ret |= pipeEmbedded_->queueBuffer(edBuffer);
-
 		if (ret) {
-			LOG(NxpNeo, Error) << "queuePendingRequests error - unbalanced";
+			LOG(NxpNeo, Error)
+				<< "Failed to queue buffers, unbalanced queues";
+			pipe()->cancelRequest(request);
+			frameInfos_.remove(info);
 			return;
 		}
 
-		info->rawBuffer = rawBuffer;
-		info->input1Buffer = input1Buffer;
-		info->edBuffer = edBuffer;
+		info->paramsBuffer->_d()->setRequest(request);
+		info->statsBuffer->_d()->setRequest(request);
 
 		ipa_->queueRequest(info->id, request->controls());
 
 		pendingRequests_.pop();
 		processingRequests_.push(request);
 	}
+
 	return;
-
-error:
-	LOG(NxpNeo, Warning) << "queuePendingRequests error ";
-
-	if (edBuffer)
-		pipeInput0_->tryReturnBuffer(edBuffer);
-	if (input1Buffer)
-		pipeInput1_->tryReturnBuffer(input1Buffer);
-	if (!reqRawBuffer && rawBuffer)
-		pipeEmbedded_->tryReturnBuffer(rawBuffer);
-
-	/*
-	 * \todo If queueBuffer fails in queuing a buffer to the device,
-	 * report the request as error by cancelling the request and
-	 * calling PipelineHandler::completeRequest().
-	 */
-	frameInfos_.remove(info);
 }
 
 int PipelineHandlerNxpNeo::queueRequestDevice(Camera *camera, Request *request)
@@ -911,6 +807,25 @@ int PipelineHandlerNxpNeo::queueRequestDevice(Camera *camera, Request *request)
 	data->queuePendingRequests();
 
 	return 0;
+}
+
+/**
+ * \brief Cancel a \a Request.
+ * \request[in] The request to be cancelled
+ *
+ * Cancelling a request involves marking all its associated buffers as cancelled
+ * before reporting them as complete with completeBuffer(). Finally, the request
+ * itself is reported as complete with completeRequest().
+ */
+void PipelineHandlerNxpNeo::cancelRequest(Request *request)
+{
+	for (auto it : request->buffers()) {
+		FrameBuffer *buffer = it.second;
+		buffer->_d()->cancel();
+		completeBuffer(request, buffer);
+	}
+
+	completeRequest(request);
 }
 
 /**
@@ -1351,6 +1266,157 @@ bool NxpNeoCameraData::sensorIsRgbIr() const
 }
 
 /**
+ * \brief Allocate buffers from ISI pipe and append to IPA shared buffers list
+ * \param[in] pipe The ISI pipe to allocate from
+ * \param[in] bufferCount The number of buffers to allocate
+ * \param[in] id The start value for the unique identifier of the IPA shared
+ * buffer
+ *
+ * \return 0 in case of success or a negative error code.
+ */
+int NxpNeoCameraData::prepareISIPipeBuffers(ISIPipe *pipe,
+					    unsigned int bufferCount,
+					    unsigned int &id)
+{
+	int ret;
+	ret = pipe->allocateBuffers(bufferCount);
+	if (ret < 0)
+		return ret;
+
+	for (const std::unique_ptr<FrameBuffer> &buffer : pipe->buffers()) {
+		buffer->setCookie(id++);
+		ipaBuffers_.emplace_back(buffer->cookie(),
+					 buffer->planes());
+	}
+
+	return 0;
+}
+
+/**
+ * \brief Allocate buffers from ISI and ISP
+ *
+ * Internal buffers are allocated for ISI active channels and ISP params and
+ * statistics buffers. Those buffers are aggregated into the list of shared
+ * buffers between the pipeline and the IPA.
+ * Lastly, the NxpNeoFrames object is initialized with respective internal
+ * buffer lists in order to serve the incoming Request.
+ *
+ * \return 0 in case of success or a negative error code.
+ */
+int NxpNeoCameraData::allocateBuffers()
+{
+	NeoDevice *neo = neo_.get();
+	unsigned int bufferCount;
+	int ret;
+
+	bufferCount = std::max({
+		streamFrame_.configuration().bufferCount,
+		streamIr_.configuration().bufferCount,
+		streamRaw_.configuration().bufferCount,
+	});
+
+	/* Allocate and map ISP buffers */
+	ret = neo->allocateBuffers(bufferCount);
+	if (ret < 0)
+		return ret;
+
+	unsigned int ipaBufferId = 1;
+	const std::vector<std::unique_ptr<FrameBuffer>> emptyBufferVector;
+
+	for (const std::unique_ptr<FrameBuffer> &buffer : neo->paramsBuffers_) {
+		buffer->setCookie(ipaBufferId++);
+		ipaBuffers_.emplace_back(buffer->cookie(), buffer->planes());
+	}
+
+	for (const std::unique_ptr<FrameBuffer> &buffer : neo->statsBuffers_) {
+		buffer->setCookie(ipaBufferId++);
+		ipaBuffers_.emplace_back(buffer->cookie(), buffer->planes());
+	}
+
+	ISIPipe *pipeInput0 = pipeInput0_.get();
+	ret = prepareISIPipeBuffers(pipeInput0, bufferCount, ipaBufferId);
+	if (ret) {
+		freeBuffers();
+		return ret;
+	}
+
+	ISIPipe *pipeInput1 = pipeInput1_.get();
+	if (cameraInfo_->hasStreamInput1()) {
+		ret = prepareISIPipeBuffers(pipeInput1, bufferCount, ipaBufferId);
+		if (ret) {
+			freeBuffers();
+			return ret;
+		}
+	}
+
+	ISIPipe *pipeEmbedded = pipeEmbedded_.get();
+	if (cameraInfo_->hasStreamEmbedded()) {
+		ret = prepareISIPipeBuffers(pipeEmbedded, bufferCount, ipaBufferId);
+		if (ret) {
+			freeBuffers();
+			return ret;
+		}
+	}
+
+	ipa_->mapBuffers(ipaBuffers_);
+
+	const std::vector<std::unique_ptr<FrameBuffer>> &input0Buffers =
+		pipeInput0->buffers();
+
+	const std::vector<std::unique_ptr<FrameBuffer>> &input1Buffers =
+		cameraInfo_->hasStreamInput1() ?
+		pipeInput1->buffers() :
+		emptyBufferVector;
+
+	const std::vector<std::unique_ptr<FrameBuffer>> &embeddedBuffers =
+		cameraInfo_->hasStreamEmbedded() ?
+		pipeEmbedded->buffers() :
+		emptyBufferVector;
+
+	frameInfos_.init(input0Buffers, input1Buffers,
+			 embeddedBuffers,
+			 neo->paramsBuffers_, neo->statsBuffers_);
+
+	frameInfos_.bufferAvailable.connect(
+		this, &NxpNeoCameraData::queuePendingRequests);
+
+	return 0;
+}
+
+/**
+ * \brief Deallocate buffers from ISI and ISP
+ * \return 0 in case of success or a negative error code.
+ */
+int NxpNeoCameraData::freeBuffers()
+{
+	frameInfos_.clear();
+
+	std::vector<unsigned int> ids;
+	for (IPABuffer &ipabuf : ipaBuffers_)
+		ids.push_back(ipabuf.id);
+
+	ipa_->unmapBuffers(ids);
+	ipaBuffers_.clear();
+
+	neo_->freeBuffers();
+
+	ISIPipe *pipeInput0 = pipeInput0_.get();
+	pipeInput0->freeBuffers();
+
+	if (cameraInfo_->hasStreamInput1()) {
+		ISIPipe *pipeInput1 = pipeInput1_.get();
+		pipeInput1->freeBuffers();
+	}
+
+	if (cameraInfo_->hasStreamEmbedded()) {
+		ISIPipe *pipeEmbedded = pipeEmbedded_.get();
+		pipeEmbedded->freeBuffers();
+	}
+
+	return 0;
+}
+
+/**
  * \brief Probe, configure and register camera sensor
  * \return 0 on success or a negative error code otherwise.
  */
@@ -1430,33 +1496,39 @@ int PipelineHandlerNxpNeo::createCamera(MediaEntity *sensorEntity,
 	if (ret)
 		return ret;
 
-	data->pipeInput0_->bufferReady().connect(data.get(),
-			&NxpNeoCameraData::isiInput0BufferReady);
-	data->pipeInput0_->bufferAvailable.connect(data.get(),
-			&NxpNeoCameraData::queuePendingRequests);
+	data->pipeInput0_->bufferReady().connect(
+		data.get(),
+		&NxpNeoCameraData::isiInput0BufferReady);
+
 	if (cameraInfo->hasStreamInput1()) {
-		data->pipeInput1_->bufferReady().connect(data.get(),
-				&NxpNeoCameraData::isiInput1BufferReady);
-		data->pipeInput1_->bufferAvailable.connect(data.get(),
-				&NxpNeoCameraData::queuePendingRequests);
+		data->pipeInput1_->bufferReady().connect(
+			data.get(),
+			&NxpNeoCameraData::isiInput1BufferReady);
 	}
 	if (cameraInfo->hasStreamEmbedded()) {
-		data->pipeEmbedded_->bufferReady().connect(data.get(),
-				&NxpNeoCameraData::isiEdBufferReady);
+		data->pipeEmbedded_->bufferReady().connect(
+			data.get(),
+			&NxpNeoCameraData::isiEdBufferReady);
 	}
 
-	data->neo_->input0_->bufferReady.connect(data->pipeInput0_.get(),
-			&ISIPipe::tryReturnBuffer);
-	data->neo_->input1_->bufferReady.connect(data->pipeInput1_.get(),
-			&ISIPipe::tryReturnBuffer);
-	data->neo_->frame_->bufferReady.connect(data.get(),
-			&NxpNeoCameraData::neoOutputBufferReady);
-	data->neo_->ir_->bufferReady.connect(data.get(),
-			&NxpNeoCameraData::neoOutputBufferReady);
-	data->neo_->params_->bufferReady.connect(data.get(),
-			&NxpNeoCameraData::neoParamsBufferReady);
-	data->neo_->stats_->bufferReady.connect(data.get(),
-			&NxpNeoCameraData::neoStatsBufferReady);
+	data->neo_->input0_->bufferReady.connect(
+		data.get(),
+		&NxpNeoCameraData::neoInput0BufferReady);
+	data->neo_->input1_->bufferReady.connect(
+		data.get(),
+		&NxpNeoCameraData::neoInput1BufferReady);
+	data->neo_->frame_->bufferReady.connect(
+		data.get(),
+		&NxpNeoCameraData::neoOutputBufferReady);
+	data->neo_->ir_->bufferReady.connect(
+		data.get(),
+		&NxpNeoCameraData::neoOutputBufferReady);
+	data->neo_->params_->bufferReady.connect(
+		data.get(),
+		&NxpNeoCameraData::neoParamsBufferReady);
+	data->neo_->stats_->bufferReady.connect(
+		data.get(),
+		&NxpNeoCameraData::neoStatsBufferReady);
 
 	/* Create and register the Camera instance. */
 	const std::string &cameraId = sensor->id();
@@ -1611,8 +1683,7 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 		return false;
 
 	isi_ = std::make_unique<ISIDevice>();
-	unsigned int bufferCount = NxpNeoCameraConfiguration::kBufferCount;
-	ret = isi_->init(isiMedia_, bufferCount);
+	ret = isi_->init(isiMedia_);
 	if (ret)
 		return false;
 
@@ -1835,7 +1906,9 @@ void NxpNeoCameraData::ipaParamsBufferReady(unsigned int id)
 		sizeof(struct neoisp_meta_params_s);
 	neo_->params_->queueBuffer(info->paramsBuffer);
 	neo_->stats_->queueBuffer(info->statsBuffer);
-	neo_->input0_->queueBuffer(info->rawBuffer);
+
+	/* Buffers coming from ISI pipes are already part of the request */
+	neo_->input0_->queueBuffer(info->input0Buffer);
 	if (cameraInfo_->hasStreamInput1())
 		neo_->input1_->queueBuffer(info->input1Buffer);
 }
@@ -1867,7 +1940,8 @@ void NxpNeoCameraData::ipaMetadataReady(unsigned int id, const ControlList &meta
  * using stopDevice() method. Buffers queued on those video nodes are released
  * through bufferReady() signal with a status set to FrameCancelled.
  * Such buffers shall be detected so that every other buffer bundled to
- * the same frame can be marked as cancelled and completed.
+ * the same frame and associated request can be marked as cancelled and
+ * completed.
  */
 bool NxpNeoCameraData::screenCancelledBuffer(FrameBuffer *buffer,
 					     NxpNeoFrames::Info *info)
@@ -1876,14 +1950,9 @@ bool NxpNeoCameraData::screenCancelledBuffer(FrameBuffer *buffer,
 
 	/* If the buffer is cancelled force a complete of the whole request. */
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
-		for (auto it : request->buffers()) {
-			FrameBuffer *b = it.second;
-			b->_d()->cancel();
-			pipe()->completeBuffer(request, b);
-		}
+		pipe()->cancelRequest(request);
 
 		frameInfos_.remove(info);
-		pipe()->completeRequest(request);
 
 		return true;
 	}
@@ -1892,11 +1961,11 @@ bool NxpNeoCameraData::screenCancelledBuffer(FrameBuffer *buffer,
 }
 
 /**
- * \brief Handle buffers completion at the NEO output
+ * \brief Handle buffers completion at the NEO capture node
  * \param[in] buffer The completed buffer
  *
  * Buffers completed from the NEO output are directed to the application.
- * This callback is common to main (frame) and IR ISP outputs
+ * This callback is common to main (frame) and IR ISP outputs.
  */
 void NxpNeoCameraData::neoOutputBufferReady(FrameBuffer *buffer)
 {
@@ -1908,7 +1977,6 @@ void NxpNeoCameraData::neoOutputBufferReady(FrameBuffer *buffer)
 		return;
 
 	Request *request = info->request;
-
 	pipe()->completeBuffer(request, buffer);
 
 	if (frameInfos_.tryComplete(info))
@@ -1992,8 +2060,8 @@ void NxpNeoCameraData::isiInput1BufferReady(FrameBuffer *buffer)
 	(void)request;
 
 	/*
-	 * \todo: in case of ISP operation with INPUT0 + INPUT1 inputs, wait for both
-	 * frames to be available before invoking ipa_->fillParamsBuffer()
+	 * \todo: in case of ISP operation with INPUT0 + INPUT1 inputs, wait for
+	 *  both frames to be available before invoking ipa_->fillParamsBuffer()
 	 */
 
 	ASSERT(pipeInput1_);
@@ -2015,53 +2083,33 @@ void NxpNeoCameraData::isiEdBufferReady(FrameBuffer *buffer)
 	if (screenCancelledBuffer(buffer, info))
 		return;
 
-	Request *request = info->request;
-
 	/*
-	 * \todo: make something with that buffer - recycle for now
+	 * \todo inform IPA about this buffer
 	 */
-	pipe()->completeBuffer(request, buffer);
-	ASSERT(pipeEmbedded_);
-	pipeEmbedded_->tryReturnBuffer(buffer);
 }
 
 /**
  * \brief Handle INPUT0 buffers consumed by ISP
- * \param[in] buffer The completed buffer
- *
- * Once buffer has been consumed by ISP it may be recycled to pipe buffer pool
+ * \param[in] buffer The consumed buffer
  */
-void NxpNeoCameraData::neoInput0BufferConsumed(FrameBuffer *buffer)
+void NxpNeoCameraData::neoInput0BufferReady([[maybe_unused]] FrameBuffer *buffer)
 {
-	NxpNeoFrames::Info *info = frameInfos_.find(buffer);
-	if (!info)
-		return;
-
-	Request *request = info->request;
-
-	pipe()->completeBuffer(request, buffer);
-	pipeInput0_->tryReturnBuffer(buffer);
+	/* Nothing to do - buffer will be recycled when request completes */
 }
 
 /**
  * \brief Handle INPUT1 buffers consumed by ISP
- * \param[in] buffer The completed buffer
- *
- * Once buffer has been consumed by ISP it may be recycled to pipe buffer pool
+ * \param[in] buffer The consumed buffer
  */
-void NxpNeoCameraData::neoInput1BufferConsumed(FrameBuffer *buffer)
+void NxpNeoCameraData::neoInput1BufferReady([[maybe_unused]] FrameBuffer *buffer)
 {
-	NxpNeoFrames::Info *info = frameInfos_.find(buffer);
-	if (!info)
-		return;
-
-	Request *request = info->request;
-
-	pipe()->completeBuffer(request, buffer);
-	ASSERT(pipeInput1_);
-	pipeInput1_->tryReturnBuffer(buffer);
+	/* Nothing to do - buffer will be recycled when request completes */
 }
 
+/**
+ * \brief Handle params buffers consumed by ISP
+ * \param[in] buffer The consumed buffer
+ */
 void NxpNeoCameraData::neoParamsBufferReady(FrameBuffer *buffer)
 {
 	NxpNeoFrames::Info *info = frameInfos_.find(buffer);
@@ -2082,6 +2130,10 @@ void NxpNeoCameraData::neoParamsBufferReady(FrameBuffer *buffer)
 		pipe()->completeRequest(request);
 }
 
+/**
+ * \brief Handle stats buffers produced by ISP
+ * \param[in] buffer The produced buffer
+ */
 void NxpNeoCameraData::neoStatsBufferReady(FrameBuffer *buffer)
 {
 	NxpNeoFrames::Info *info = frameInfos_.find(buffer);

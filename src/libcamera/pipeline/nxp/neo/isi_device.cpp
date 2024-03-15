@@ -92,6 +92,8 @@ int ISIPipe::exportBuffers(unsigned int count,
  */
 int ISIPipe::start()
 {
+	int ret;
+
 	if (!stateConfigured()) {
 		LOG(IsiDev, Error)
 			<< logPrefix()
@@ -100,22 +102,9 @@ int ISIPipe::start()
 		return -EAGAIN;
 	}
 
-	int ret = output_->exportBuffers(bufferCount_, &buffers_);
-	if (ret < 0)
-		LOG(IsiDev, Error) << logPrefix() << "failed to export buffers";
-
-	ret = output_->importBuffers(bufferCount_);
-	if (ret)
-		LOG(IsiDev, Error) << logPrefix() << "failed to import buffers";
-
-	for (std::unique_ptr<FrameBuffer> &buffer : buffers_)
-		availableBuffers_.push(buffer.get());
-
 	ret = output_->streamOn();
-	if (ret) {
-		freeBuffers();
+	if (ret)
 		return ret;
-	}
 
 	setState(kStateActive);
 
@@ -137,9 +126,6 @@ int ISIPipe::stop()
 	}
 
 	int ret = output_->streamOff();
-
-	freeBuffers();
-
 	setState(kStateConfigured);
 
 	return ret;
@@ -197,69 +183,47 @@ int ISIPipe::configure(const V4L2SubdeviceFormat &sinkFormat,
 }
 
 /**
- * \brief Get a free buffer for the ISI channel from a pool of buffers
- * preallocated at ISIPipe::start() time.
- * \return The allocated buffer, or nullptr if no buffer available
- */
-FrameBuffer *ISIPipe::popAvailableBuffer()
-{
-	FrameBuffer *buffer;
-
-	if (availableBuffers_.empty()) {
-		LOG(IsiDev, Debug) << logPrefix() << "buffer underrun";
-		return nullptr;
-	}
-
-	buffer = availableBuffers_.front();
-	availableBuffers_.pop();
-
-	return buffer;
-}
-
-/**
- * \brief Queue \a buffer on to ISI channel capture video node.
- * \param[in] buffer The buffer to be queued
+ * \brief Allocate buffers for ISI channel
+ * \param[in] bufferCount The number of buffers to allocate
  * \return 0 on success or a negative error code otherwise
  */
-int ISIPipe::queueBuffer(FrameBuffer *buffer)
+int ISIPipe::allocateBuffers(unsigned int bufferCount)
 {
-	return output_->queueBuffer(buffer);
-}
-
-/**
- * \brief Return a buffer into the ISI channel buffer pool
- * \param[in] buffer The buffer to returned
- */
-void ISIPipe::tryReturnBuffer(FrameBuffer *buffer)
-{
-	bool returned = false;
-
-	/*
-	 * \todo Once more pipelines deal with buffers that may be allocated
-	 * internally or externally this pattern might become a common need. At
-	 * that point this check should be moved to something clever in
-	 * FrameBuffer.
-	 */
-	for (const std::unique_ptr<FrameBuffer> &buf : buffers_) {
-		if (buf.get() == buffer) {
-			availableBuffers_.push(buffer);
-			returned = true;
-			break;
-		}
+	if (!stateConfigured()) {
+		LOG(IsiDev, Error)
+			<< logPrefix()
+			<< "Can't allocate buffers in state " << getState();
+		return -ENODEV;
 	}
 
-	if (!returned)
-		LOG(IsiDev, Debug) << logPrefix() << "buffer not returned";
+	int ret = output_->exportBuffers(bufferCount, &buffers_);
+	if (ret < 0) {
+		LOG(IsiDev, Error) << logPrefix() << "failed to export buffers";
+		return ret;
+	}
 
-	bufferAvailable.emit();
+	ret = output_->importBuffers(bufferCount);
+	if (ret < 0) {
+		LOG(IsiDev, Error) << logPrefix() << "failed to import buffers";
+		freeBuffers();
+		return ret;
+	}
+
+	return 0;
 }
 
 /**
- * \brief Release the pool of preallocated buffers created at ISIPipe::start()
+ * \brief Release the pool of preallocated buffers created by allocateBuffers()
  */
 void ISIPipe::freeBuffers()
 {
-	availableBuffers_ = {};
+	if (!stateConfigured()) {
+		LOG(IsiDev, Error)
+			<< logPrefix()
+			<< "Can't deallocate buffers in state " << getState();
+		return;
+	}
+
 	buffers_.clear();
 
 	if (output_->releaseBuffers())
@@ -324,14 +288,13 @@ const std::map<uint32_t, V4L2PixelFormat> &ISIPipe::mediaBusToPixelFormats()
 /**
  * \brief ISI device capabilities discovery from a \a media device
  * \param[in] media The media device embedding the ISI entity
- * \param[in] bufferCount The maximum number of in-flight buffers for a stream
  *
  * Examines the ISI device entities to discover and initialize the associated
  * channels.
  *
  * \return 0 in case of success, or a negative error value
  */
-int ISIDevice::init(const MediaDevice *media, unsigned int bufferCount)
+int ISIDevice::init(const MediaDevice *media)
 {
 	int ret;
 
@@ -365,8 +328,7 @@ int ISIDevice::init(const MediaDevice *media, unsigned int bufferCount)
 	 * Discover the number of ISI pipes
 	 */
 	for (unsigned int i = 0;; ++i) {
-		std::unique_ptr<ISIPipe> pipe =
-			std::make_unique<ISIPipe>(i, bufferCount);
+		std::unique_ptr<ISIPipe> pipe = std::make_unique<ISIPipe>(i);
 		ret = pipe->init(media);
 		if (ret)
 			break;

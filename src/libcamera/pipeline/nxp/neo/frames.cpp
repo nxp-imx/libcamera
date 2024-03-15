@@ -25,9 +25,27 @@ NxpNeoFrames::NxpNeoFrames()
 {
 }
 
-void NxpNeoFrames::init(const std::vector<std::unique_ptr<FrameBuffer>> &paramsBuffers,
+void NxpNeoFrames::init(const std::vector<std::unique_ptr<FrameBuffer>> &input0Buffers,
+			const std::vector<std::unique_ptr<FrameBuffer>> &input1Buffers,
+			const std::vector<std::unique_ptr<FrameBuffer>> &embeddedBuffers,
+			const std::vector<std::unique_ptr<FrameBuffer>> &paramsBuffers,
 			const std::vector<std::unique_ptr<FrameBuffer>> &statsBuffers)
 {
+	for (const std::unique_ptr<FrameBuffer> &buffer : input0Buffers)
+		availableInput0Buffers_.push(buffer.get());
+
+	hasInput1_ = !!input1Buffers.size();
+	if (hasInput1_) {
+		for (const std::unique_ptr<FrameBuffer> &buffer : input1Buffers)
+			availableInput1Buffers_.push(buffer.get());
+	}
+
+	hasEmbedded_ = !!embeddedBuffers.size();
+	if (hasEmbedded_) {
+		for (const std::unique_ptr<FrameBuffer> &buffer : embeddedBuffers)
+			availableEmbeddedBuffers_.push(buffer.get());
+	}
+
 	for (const std::unique_ptr<FrameBuffer> &buffer : paramsBuffers)
 		availableParamsBuffers_.push(buffer.get());
 
@@ -39,51 +57,86 @@ void NxpNeoFrames::init(const std::vector<std::unique_ptr<FrameBuffer>> &paramsB
 
 void NxpNeoFrames::clear()
 {
+	availableInput0Buffers_ = {};
+	availableInput1Buffers_ = {};
+	availableEmbeddedBuffers_ = {};
 	availableParamsBuffers_ = {};
 	availableStatsBuffers_ = {};
 }
 
-NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly)
+NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly,
+					 FrameBuffer *rawStreamBuffer)
 {
 	unsigned int id = request->sequence();
 
+	FrameBuffer *input0Buffer = nullptr;
+	FrameBuffer *input1Buffer = nullptr;
+	FrameBuffer *embeddedBuffer = nullptr;
 	FrameBuffer *paramsBuffer = nullptr;
 	FrameBuffer *statsBuffer = nullptr;
 
-	if (!rawOnly) {
-		if (availableParamsBuffers_.empty()) {
-			LOG(NxpNeo, Debug) << "Parameters buffer underrun";
-			return nullptr;
-		}
-
-		if (availableStatsBuffers_.empty()) {
-			LOG(NxpNeo, Debug) << "Statistics buffer underrun";
-			return nullptr;
-		}
-
-		paramsBuffer = availableParamsBuffers_.front();
-		statsBuffer = availableStatsBuffers_.front();
-
-		paramsBuffer->_d()->setRequest(request);
-		statsBuffer->_d()->setRequest(request);
-
-		availableParamsBuffers_.pop();
-		availableStatsBuffers_.pop();
+	if (availableInput0Buffers_.empty()) {
+		LOG(NxpNeo, Warning) << "Input0 buffer underrun";
+		return nullptr;
 	}
+
+	if (hasInput1_ && availableInput1Buffers_.empty()) {
+		LOG(NxpNeo, Warning) << "Input1 buffer underrun";
+		return nullptr;
+	}
+
+	if (hasEmbedded_ && availableEmbeddedBuffers_.empty()) {
+		LOG(NxpNeo, Warning) << "Input1 buffer underrun";
+		return nullptr;
+	}
+
+	if (availableParamsBuffers_.empty()) {
+		LOG(NxpNeo, Warning) << "Parameters buffer underrun";
+		return nullptr;
+	}
+
+	if (availableStatsBuffers_.empty()) {
+		LOG(NxpNeo, Warning) << "Statistics buffer underrun";
+		return nullptr;
+	}
+
+	/*
+	 * ISI internal buffers allocation
+	 * Input0 buffer may come from application when raw stream is enabled
+	 */
+	if (!rawStreamBuffer)
+		input0Buffer = allocBuffer(&availableInput0Buffers_);
+	else
+		input0Buffer = rawStreamBuffer;
+
+	if (hasInput1_)
+		input1Buffer = allocBuffer(&availableInput1Buffers_);
+
+	if (hasEmbedded_)
+		embeddedBuffer = allocBuffer(&availableEmbeddedBuffers_);
+
+	/* ISP internal buffers allocation */
+	paramsBuffer = allocBuffer(&availableParamsBuffers_);
+	statsBuffer = allocBuffer(&availableStatsBuffers_);
 
 	/* \todo Remove the dynamic allocation of Info */
 	std::unique_ptr<Info> info = std::make_unique<Info>();
 
 	info->id = id;
 	info->request = request;
-	info->rawBuffer = nullptr;
-	info->input1Buffer = nullptr;
-	info->edBuffer = nullptr;
+	info->input0Buffer = input0Buffer;
+	info->input1Buffer = input1Buffer;
+	info->embeddedBuffer = embeddedBuffer;
 	info->paramsBuffer = paramsBuffer;
 	info->statsBuffer = statsBuffer;
-	info->paramDequeued = false;
-	info->metadataProcessed = false;
+
 	info->isRawOnly = rawOnly;
+	info->hasRawStreamBuffer = !!rawStreamBuffer;
+
+	/* ISP and IPA are bypassed in raw-only */
+	bool doneStatus = rawOnly ? true : false;
+	info->paramDequeued = doneStatus;
+	info->metadataProcessed = doneStatus;
 
 	frameInfo_[id] = std::move(info);
 
@@ -92,11 +145,15 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly)
 
 void NxpNeoFrames::remove(NxpNeoFrames::Info *info)
 {
-	if (!info->isRawOnly) {
-		/* Return params and stats buffer for reuse. */
-		availableParamsBuffers_.push(info->paramsBuffer);
-		availableStatsBuffers_.push(info->statsBuffer);
-	}
+	/* Return internal buffers for reuse. */
+	if (!info->hasRawStreamBuffer)
+		availableInput0Buffers_.push(info->input0Buffer);
+	if (hasInput1_)
+		availableInput1Buffers_.push(info->input1Buffer);
+	if (hasEmbedded_)
+		availableEmbeddedBuffers_.push(info->embeddedBuffer);
+	availableParamsBuffers_.push(info->paramsBuffer);
+	availableStatsBuffers_.push(info->statsBuffer);
 
 	/* Delete the extended frame information. */
 	frameInfo_.erase(info->id);
@@ -109,13 +166,11 @@ bool NxpNeoFrames::tryComplete(NxpNeoFrames::Info *info)
 	if (request->hasPendingBuffers())
 		return false;
 
-	if (!info->isRawOnly) {
-		if (!info->metadataProcessed)
-			return false;
+	if (!info->metadataProcessed)
+		return false;
 
-		if (!info->paramDequeued)
-			return false;
-	}
+	if (!info->paramDequeued)
+		return false;
 
 	remove(info);
 
@@ -145,15 +200,23 @@ NxpNeoFrames::Info *NxpNeoFrames::find(FrameBuffer *buffer)
 			if (itBuffers.second == buffer)
 				return info;
 
-		if (info->rawBuffer == buffer || info->paramsBuffer == buffer ||
-		    info->statsBuffer == buffer ||
-		    info->input1Buffer == buffer || info->edBuffer == buffer)
+		if (info->input0Buffer == buffer || info->input1Buffer == buffer ||
+		    info->embeddedBuffer == buffer ||
+		    info->paramsBuffer == buffer || info->statsBuffer == buffer)
 			return info;
 	}
 
 	LOG(NxpNeo, Info) << "Can't find tracking information from buffer";
 
 	return nullptr;
+}
+
+FrameBuffer *NxpNeoFrames::allocBuffer(std::queue<FrameBuffer *> *queue)
+{
+	ASSERT(!queue->empty());
+	FrameBuffer *buffer = queue->front();
+	queue->pop();
+	return buffer;
 }
 
 } /* namespace libcamera */

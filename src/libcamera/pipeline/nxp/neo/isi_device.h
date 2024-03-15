@@ -39,8 +39,8 @@ public:
 		kStateActive,
 	};
 
-	ISIPipe(unsigned int index, unsigned int bufferCount)
-		: index_(index), state_(kStateIdle), bufferCount_(bufferCount) {}
+	ISIPipe(unsigned int index)
+		: index_(index), state_(kStateIdle) {}
 
 	int exportBuffers(unsigned int count,
 			  std::vector<std::unique_ptr<FrameBuffer>> *buffers);
@@ -51,12 +51,7 @@ public:
 	int start();
 	int stop();
 
-	FrameBuffer *popAvailableBuffer();
-	int queueBuffer(FrameBuffer *buffer);
-	void tryReturnBuffer(FrameBuffer *buffer);
 	Signal<FrameBuffer *> &bufferReady() { return output_->bufferReady; }
-
-	Signal<> bufferAvailable;
 
 	std::string logPrefix() const
 	{
@@ -68,10 +63,11 @@ public:
 		return index_;
 	}
 
-	unsigned int bufferCount() const
-	{
-		return bufferCount_;
-	}
+	int allocateBuffers(unsigned int bufferCount);
+	std::vector<std::unique_ptr<FrameBuffer>> &buffers() { return buffers_; }
+	void freeBuffers();
+
+	std::unique_ptr<V4L2VideoDevice> output_;
 
 private:
 	friend class ISIDevice;
@@ -79,8 +75,6 @@ private:
 	int init(const MediaDevice *media);
 
 	static const std::map<uint32_t, V4L2PixelFormat> &mediaBusToPixelFormats();
-
-	void freeBuffers();
 
 	void setState(unsigned int state)
 	{
@@ -108,14 +102,10 @@ private:
 	}
 
 	std::vector<std::unique_ptr<FrameBuffer>> buffers_;
-	std::queue<FrameBuffer *> availableBuffers_;
-
 	std::unique_ptr<V4L2Subdevice> pipe_;
-	std::unique_ptr<V4L2VideoDevice> output_;
 
 	unsigned int index_;
 	unsigned int state_;
-	unsigned int bufferCount_;
 };
 
 class ISIDevice
@@ -125,7 +115,7 @@ public:
 
 	static constexpr unsigned int kPipesMax = 16;
 
-	int init(const MediaDevice *media, unsigned int bufferCount);
+	int init(const MediaDevice *media);
 	ISIPipe *allocPipe();
 	ISIPipe *allocPipe(unsigned int index);
 	void freePipe(ISIPipe *pipe);
