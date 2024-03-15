@@ -45,7 +45,8 @@ interface IPANxpNeoInterface {
 	unmapBuffers(array<uint32> ids);
 
 	[async] queueRequest(uint32 frame, libcamera.ControlList reqControls);
-	[async] fillParamsBuffer(uint32 frame, uint32 bufferId);
+	[async] fillParamsBuffer(uint32 frame, uint32 paramsbufferId,
+				 uint32 rawBufferId);
 	[async] processStatsBuffer(uint32 frame, uint32 bufferId,
 				   libcamera.ControlList sensorControls);
 };
