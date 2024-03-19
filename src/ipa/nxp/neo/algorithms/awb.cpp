@@ -209,10 +209,27 @@ void Awb::generateBlocks(const neoisp_meta_stats_s *stats)
 
 	for (unsigned int i = 0; i < NEO_CTEMP_BLOCK_NB_X * NEO_CTEMP_BLOCK_NB_Y; i++) {
 		RGB block;
+		/*
+		 * A 2x2 area of RGGB pixels is processed at once
+		 * and the counter is incremented for the whole 2x2 block by one.
+		 * Hence the counted statistics is 4 times smaller than
+		 * the programmed block size.
+		 */
 		double counted = ctemp.ctemp_pix_cnt[i];
-		block.G = ctemp.ctemp_g_sum[i] / counted;
-		block.R = ctemp.ctemp_r_sum[i] / counted;
-		block.B = ctemp.ctemp_b_sum[i] / counted;
+		unsigned long sumR, sumG, sumB = 0;
+		/*
+		 * Each statistics sum has 28 bits mantissa (bit[31:4]) and
+		 * 4 bits exponent (bit[3:0])
+		 */
+		sumR = static_cast<unsigned long>(ctemp.ctemp_r_sum[i] >> 4)
+		       << (ctemp.ctemp_r_sum[i] & 0xF);
+		sumG = static_cast<unsigned long>(ctemp.ctemp_g_sum[i] >> 4)
+		       << (ctemp.ctemp_g_sum[i] & 0xF);
+		sumB = static_cast<unsigned long>(ctemp.ctemp_b_sum[i] >> 4)
+		       << (ctemp.ctemp_b_sum[i] & 0xF);
+		block.R = sumR / counted;
+		block.G = sumG / counted;
+		block.B = sumB / counted;
 		blocks_.push_back(block);
 	}
 }
