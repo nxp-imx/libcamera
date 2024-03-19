@@ -173,6 +173,14 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 
 	/* Configure the Block Statistics measurements. */
 	params->regs.ctemp.roi = context.configuration.awb.roi;
+	/*
+	 * The block size should be such that the sum statistics never
+	 * exceeds the maximum sum value coded with 28 bits mantissa and
+	 * 4 bits exponent.
+	 * The maximum sum is reached with ((1U << 28) - 1)) << 15.
+	 * For 20bits maximum pixel format, the margin is large enough to not
+	 * reach this maximum sum value.
+	 */
 	params->regs.ctemp.stat_blk_size0_xsize =
 				params->regs.ctemp.roi.width / NEO_CTEMP_BLOCK_NB_X;
 	params->regs.ctemp.stat_blk_size0_ysize =
