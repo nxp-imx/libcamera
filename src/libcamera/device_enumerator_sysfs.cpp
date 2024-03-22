@@ -73,6 +73,27 @@ int DeviceEnumeratorSysfs::enumerate()
 			continue;
 		}
 
+		/* Check that the device node not a uvcvideo. */
+		struct media_device_info devinfo;
+		int fd = open(devnode.c_str(), O_RDWR | O_CLOEXEC);
+		if (fd < 0) {
+			LOG(DeviceEnumerator, Warning)
+				<< "Failed to open media device:" + devnode
+				<< " (" << strerror(errno) << "), skipping";
+			continue;
+		}
+		int retval = ioctl(fd, MEDIA_IOC_DEVICE_INFO, &devinfo);
+		close(fd);
+		if (retval != 0) {
+			LOG(DeviceEnumerator, Warning)
+				<< "Failed to get info from device:" + devnode
+				<< " (" << strerror(errno) << "), skipping";
+			continue;
+		}
+		if (strstr("uvcvideo", devinfo.driver)) {
+			continue;
+		}
+
 		std::unique_ptr<MediaDevice> media = createDevice(devnode);
 		if (!media)
 			continue;
