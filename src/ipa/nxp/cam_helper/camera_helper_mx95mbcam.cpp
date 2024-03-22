@@ -105,7 +105,8 @@ CameraHelperMx95mbcam::controlListGetExposure(const ControlList *ctrls) const
 		const struct ox03c10_exposure *payload;
 		payload = reinterpret_cast<const struct ox03c10_exposure *>(data.data());
 
-		exposure = payload->dcg;
+		/* Exposure is reported in rows, sensor uses double-row unit */
+		exposure = payload->dcg * 2;
 	} else {
 		/* Keep debug level for now as root cause occurence is logged */
 		LOG(NxpCameraHelper, Warning) << "Invalid exposure control";
