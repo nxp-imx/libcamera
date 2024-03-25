@@ -24,6 +24,7 @@ struct DelayedControlsParams {
 
 struct SensorConfig {
 	map<int32, DelayedControlsParams> delayedControlsParams;
+	uint32 embeddedTopLines;
 };
 
 interface IPANxpNeoInterface {
