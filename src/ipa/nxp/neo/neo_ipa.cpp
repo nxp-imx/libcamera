@@ -177,7 +177,7 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 	/* Initialize controls. */
 	updateControls(sensorInfo, sensorControls, ipaControls);
 
-	/* Initialize DelayedContols parameters */
+	/* Initialize SensorConfig parameters */
 	std::map<int32_t, std::pair<uint32_t, bool>> camHelperDelayParams =
 		camHelper_->delayedControlParams();
 	std::map<int32_t, ipa::nxpneo::DelayedControlsParams> &ipaDelayParams =
@@ -189,6 +189,9 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 			std::forward_as_tuple(k),
 			std::forward_as_tuple(v.first, v.second));
 	}
+
+	const CameraHelper::MdParams *mdParams = camHelper_->embeddedParams();
+	sensorConfig->embeddedTopLines = mdParams->topLines;
 
 	return 0;
 }
@@ -234,7 +237,8 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	const ControlInfo vBlank = sensorControls_.find(V4L2_CID_VBLANK)->second;
 	context_.configuration.sensor.defVBlank = vBlank.def().get<int32_t>();
 	context_.configuration.sensor.size = info.outputSize;
-	context_.configuration.sensor.lineDuration = info.minLineLength * 1.0s / info.pixelRate;
+	context_.configuration.sensor.lineDuration = info.minLineLength * 1.0s /
+						     info.pixelRate;
 
 	/* Update the camera controls using the new sensor settings. */
 	updateControls(info, sensorControls_, ipaControls);
@@ -251,8 +255,15 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	context_.configuration.sensor.maxShutterSpeed =
 		maxExposure * context_.configuration.sensor.lineDuration;
 
-	context_.configuration.sensor.minAnalogueGain = camHelper_->gain(minGainCode);
-	context_.configuration.sensor.maxAnalogueGain = camHelper_->gain(maxGainCode);
+	context_.configuration.sensor.minAnalogueGain =
+		camHelper_->gain(minGainCode);
+	context_.configuration.sensor.maxAnalogueGain =
+		camHelper_->gain(maxGainCode);
+
+	/* embedded data parameters */
+	context_.configuration.sensor.bpp = ipaConfig.sensorInfo.bitsPerPixel;
+	const CameraHelper::MdParams *mdParams = camHelper_->embeddedParams();
+	context_.configuration.sensor.mdControlInfoMap = &mdParams->controls;
 
 	for (auto const &a : algorithms()) {
 		Algorithm *algo = static_cast<Algorithm *>(a.get());
@@ -312,15 +323,36 @@ void IPANxpNeo::queueRequest(const uint32_t frame, const ControlList &controls)
 
 void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
 				 const uint32_t paramsBufferId,
-				 [[maybe_unused]] const uint32_t rawBufferId)
+				 const uint32_t rawBufferId)
 {
 	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
 
+	/* Metadata parsing */
+	const CameraHelper::MdParams *mdParams = camHelper_->embeddedParams();
+	const IPASessionConfiguration &sessionConfig = context_.configuration;
+
+	size_t bytepp;
+	if (sessionConfig.sensor.bpp <= 8)
+		bytepp = sizeof(uint8_t);
+	else
+		bytepp = sizeof(uint16_t);
+
+	size_t metadataSize =
+		mdParams->topLines * sessionConfig.sensor.size.width * bytepp;
+	uint8_t *metadata = mappedBuffers_.at(rawBufferId).planes()[0].data();
+	Span<uint8_t> mdBuffer(metadata, metadataSize);
+
+	const ControlInfoMap &mdControlInfoMap =
+		*context_.configuration.sensor.mdControlInfoMap;
+	ControlList &controls = frameContext.sensor.mdControls;
+	controls = ControlList(mdControlInfoMap);
+	camHelper_->parseEmbedded(mdBuffer, &controls);
+
+	/* Prepare parameters buffer. */
 	neoisp_meta_params_s *params =
 		reinterpret_cast<neoisp_meta_params_s *>(
 			mappedBuffers_.at(paramsBufferId).planes()[0].data());
 
-	/* Prepare parameters buffer. */
 	params->frame_id = 0;
 	params->features_cfg = {};
 
@@ -339,13 +371,23 @@ void IPANxpNeo::processStatsBuffer(const uint32_t frame, const uint32_t bufferId
 	stats = reinterpret_cast<neoisp_meta_stats_s *>(
 			mappedBuffers_.at(bufferId).planes()[0].data());
 
+	ControlList *mdControls = &frameContext.sensor.mdControls;
+
+	std::optional<int32_t> mdExposure = mdControls->get(md::Exposure);
 	uint32_t exposure;
-	exposure = camHelper_->controlListGetExposure(&sensorControls);
+	if (mdExposure.has_value())
+		exposure = static_cast<uint32_t>(mdExposure.value());
+	else
+		exposure = camHelper_->controlListGetExposure(&sensorControls);
 	frameContext.sensor.exposure = exposure;
 
+	std::optional<int32_t> mdAnalogueGain = mdControls->get(md::AnalogueGain);
 	uint32_t gainCode;
-	gainCode = camHelper_->controlListGetGain(&sensorControls);
-	frameContext.sensor.gain = camHelper_->gain(gainCode);;
+	if (mdAnalogueGain.has_value())
+		gainCode = static_cast<uint32_t>(mdAnalogueGain.value());
+	else
+		gainCode = camHelper_->controlListGetGain(&sensorControls);
+	frameContext.sensor.gain = camHelper_->gain(gainCode);
 
 	ControlList metadata(controls::controls);
 

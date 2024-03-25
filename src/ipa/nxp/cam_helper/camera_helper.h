@@ -26,6 +26,26 @@ namespace libcamera {
 
 namespace nxp {
 
+
+namespace md {
+
+/*
+ * Embedded data controls definition
+ */
+enum {
+	ANALOGUE_GAIN = 0,
+	DIGITAL_GAIN = 1,
+	EXPOSURE = 2,
+};
+
+extern const Control<int32_t> AnalogueGain;
+extern const Control<int32_t> DigitalGain;
+extern const Control<int32_t> Exposure;
+
+extern const ControlIdMap controlIdMap;
+
+} /* namespace md */
+
 class CameraHelper : public ipa::CameraSensorHelper
 {
 public:
@@ -50,8 +70,17 @@ public:
 
 	virtual std::map<int32_t, std::pair<uint32_t, bool>> delayedControlParams() const;
 
+	struct MdParams {
+		uint32_t topLines;
+		ControlInfoMap controls;
+	};
+	virtual const MdParams *embeddedParams() const;
+	virtual void parseEmbedded(Span<const uint8_t> buffer,
+				   ControlList *mdControls);
+
 protected:
 	virtual bool controlListHasId(const ControlList *ctrls, unsigned int id) const;
+	MdParams mdParams_ = {};
 
 private:
 	LIBCAMERA_DISABLE_COPY_AND_MOVE(CameraHelper)

@@ -10,6 +10,8 @@
  */
 #include "camera_helper.h"
 
+#include <limits>
+
 #include <linux/v4l2-controls.h>
 
 #include <libcamera/base/log.h>
@@ -34,19 +36,55 @@ LOG_DEFINE_CATEGORY(NxpCameraHelper)
 
 namespace nxp {
 
+namespace md {
+
+/*
+ * Embedded data controls definition
+ * Controls represent the embedded data values that are parsed and reported in a
+ * common format to the IPA.
+ */
+
+/**
+ * \var AnalogueGain
+ * \brief Analogue gain code applied by the sensor, in the same format as
+ * reported by controlListGetGain().
+ */
+const Control<int32_t> AnalogueGain(ANALOGUE_GAIN, "AnalogueGain");
+
+/**
+ * \var DigitalGain
+ * \brief DigitalGain gain code applied by the sensor.
+ */
+const Control<int32_t> DigitalGain(DIGITAL_GAIN, "DigitalGain");
+
+/**
+ * \var Exposure
+ * \brief Exposure applied by the sensor, in same format as reported by
+ *  controlListGetExposure().
+ */
+const Control<int32_t> Exposure(EXPOSURE, "Exposure");
+
+const ControlIdMap controlIdMap{
+	{ ANALOGUE_GAIN, &AnalogueGain },
+	{ DIGITAL_GAIN, &DigitalGain },
+	{ EXPOSURE, &Exposure },
+};
+
+} /* namespace md */
+
 /**
  * \class CameraHelper
  * \brief Base class for computing sensor tuning parameters using
  * sensor-specific constants
  *
- * Instances derived from CameraSensorHelper class are sensor-specific.
+ * Instances derived from CameraHelper class are sensor-specific.
  * Each supported sensor will have an associated base class defined.
  */
 
 /**
  * \brief Construct a CameraHelper instance
  *
- * NXpCameraSensorHelper derived class instances shall never be constructed
+ * CameraHelper derived class instances shall never be constructed
  * manually but always through the CameraHelperFactoryBase::create()
  * function.
  */
@@ -259,6 +297,26 @@ CameraHelper::delayedControlParams() const
 	};
 
 	return params;
+}
+
+/**
+ * \brief Report embedded data parameters
+ * \return The embedded data parameters structure
+ */
+const CameraHelper::MdParams *CameraHelper::embeddedParams() const
+{
+	return &mdParams_;
+}
+
+/**
+ * \brief Parse the embedded data buffer to extract metadata
+ * \param[in] buffer The buffer with the embedded data
+ * \param[out] controls The controlList to store the extracted metadata
+ */
+void CameraHelper::parseEmbedded([[maybe_unused]] Span<const uint8_t> buffer,
+				 [[maybe_unused]] ControlList *controls)
+{
+	/* Nothing to do when no metadata provided by the sensor */
 }
 
 /**

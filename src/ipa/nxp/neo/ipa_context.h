@@ -14,6 +14,7 @@
 
 #include <libcamera/base/utils.h>
 
+#include <libcamera/controls.h>
 #include <libcamera/geometry.h>
 
 #include <libipa/fc_queue.h>
@@ -41,6 +42,8 @@ struct IPASessionConfiguration {
 		int32_t defVBlank;
 		utils::Duration lineDuration;
 		Size size;
+		uint32_t bpp;
+		const ControlInfoMap *mdControlInfoMap;
 	} sensor;
 
 	struct {
@@ -102,6 +105,7 @@ struct IPAFrameContext : public FrameContext {
 	struct {
 		uint32_t exposure;
 		double gain;
+		ControlList mdControls;
 	} sensor;
 };
 
