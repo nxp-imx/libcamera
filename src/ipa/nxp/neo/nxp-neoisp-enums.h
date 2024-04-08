@@ -71,4 +71,3 @@ enum neo_isp_ctemp_ibpp {
 } /* namespace ipa::nxpneo */
 
 } /* namespace libcamera*/
-

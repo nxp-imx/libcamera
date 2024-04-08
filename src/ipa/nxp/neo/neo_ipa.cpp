@@ -186,8 +186,8 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 		auto k = kv.first;
 		auto v = kv.second;
 		ipaDelayParams.emplace(std::piecewise_construct,
-			std::forward_as_tuple(k),
-			std::forward_as_tuple(v.first, v.second));
+				       std::forward_as_tuple(k),
+				       std::forward_as_tuple(v.first, v.second));
 	}
 
 	const CameraHelper::MdParams *mdParams = camHelper_->embeddedParams();
@@ -369,7 +369,7 @@ void IPANxpNeo::processStatsBuffer(const uint32_t frame, const uint32_t bufferId
 
 	const neoisp_meta_stats_s *stats;
 	stats = reinterpret_cast<neoisp_meta_stats_s *>(
-			mappedBuffers_.at(bufferId).planes()[0].data());
+		mappedBuffers_.at(bufferId).planes()[0].data());
 
 	ControlList *mdControls = &frameContext.sensor.mdControls;
 
@@ -416,7 +416,7 @@ void IPANxpNeo::updateControls(const IPACameraSensorInfo &sensorInfo,
 	double lineDuration = context_.configuration.sensor.lineDuration.get<std::micro>();
 	uint32_t minExposure, maxExposure, defExposure;
 	camHelper_->controlInfoMapGetExposureRange(&sensorControls,
-			&minExposure, &maxExposure, &defExposure);
+						   &minExposure, &maxExposure, &defExposure);
 	minExposure *= lineDuration;
 	maxExposure *= lineDuration;
 	defExposure *= lineDuration;
@@ -430,7 +430,7 @@ void IPANxpNeo::updateControls(const IPACameraSensorInfo &sensorInfo,
 	/* Compute the analogue gain limits. */
 	uint32_t minGainCode, maxGainCode, defGainCode;
 	camHelper_->controlInfoMapGetGainRange(&sensorControls,
-			&minGainCode, &maxGainCode, &defGainCode);
+					       &minGainCode, &maxGainCode, &defGainCode);
 
 	float minGain = camHelper_->gain(minGainCode);
 	float maxGain = camHelper_->gain(maxGainCode);

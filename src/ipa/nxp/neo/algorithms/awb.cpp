@@ -35,7 +35,7 @@ namespace ipa::nxpneo::algorithms {
 
 LOG_DEFINE_CATEGORY(NxpNeoAwb)
 
-  /**
+/**
  * \class Awb
  * \brief A Grey world white balance correction algorithm
  *
@@ -151,13 +151,13 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 	/* Update the WB gains. */
 	params->features_cfg.obwb2_cfg = 1;
 	params->regs.obwb[NEO_OBWB_MERGE_PATH].r_ctrl_gain =
-					gainDouble2Param(frameContext.awb.gains.red);
+		gainDouble2Param(frameContext.awb.gains.red);
 	params->regs.obwb[NEO_OBWB_MERGE_PATH].gr_ctrl_gain =
-					gainDouble2Param(frameContext.awb.gains.green);
+		gainDouble2Param(frameContext.awb.gains.green);
 	params->regs.obwb[NEO_OBWB_MERGE_PATH].gb_ctrl_gain =
-					gainDouble2Param(frameContext.awb.gains.green);
+		gainDouble2Param(frameContext.awb.gains.green);
 	params->regs.obwb[NEO_OBWB_MERGE_PATH].b_ctrl_gain =
-					gainDouble2Param(frameContext.awb.gains.blue);
+		gainDouble2Param(frameContext.awb.gains.blue);
 
 	/* If we have already set the CTEMP measurement parameters, return. */
 	if (frame > 0)
@@ -182,9 +182,9 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 	 * reach this maximum sum value.
 	 */
 	params->regs.ctemp.stat_blk_size0_xsize =
-				params->regs.ctemp.roi.width / NEO_CTEMP_BLOCK_NB_X;
+		params->regs.ctemp.roi.width / NEO_CTEMP_BLOCK_NB_X;
 	params->regs.ctemp.stat_blk_size0_ysize =
-				params->regs.ctemp.roi.height / NEO_CTEMP_BLOCK_NB_X;
+		params->regs.ctemp.roi.height / NEO_CTEMP_BLOCK_NB_X;
 
 	/* Enable the CTEMP unit parameter update */
 	params->features_cfg.ctemp_cfg = 1;
@@ -319,17 +319,15 @@ void Awb::process(IPAContext &context,
 	frameContext.awb.temperatureK = activeState.awb.temperatureK;
 
 	metadata.set(controls::AwbEnable, frameContext.awb.autoEnabled);
-	metadata.set(controls::ColourGains, {
-			static_cast<float>(frameContext.awb.gains.red),
-			static_cast<float>(frameContext.awb.gains.blue)
-		});
+	metadata.set(controls::ColourGains, { static_cast<float>(frameContext.awb.gains.red),
+					      static_cast<float>(frameContext.awb.gains.blue) });
 	metadata.set(controls::ColourTemperature, frameContext.awb.temperatureK);
 
 	LOG(NxpNeoAwb, Debug) << std::showpoint
-		<< "AWB Gains [" << activeState.awb.gains.automatic.red << ", "
-		<< activeState.awb.gains.automatic.green << ", "
-		<< activeState.awb.gains.automatic.blue << "], temp "
-		<< frameContext.awb.temperatureK << "K";
+			      << "AWB Gains [" << activeState.awb.gains.automatic.red << ", "
+			      << activeState.awb.gains.automatic.green << ", "
+			      << activeState.awb.gains.automatic.blue << "], temp "
+			      << frameContext.awb.temperatureK << "K";
 }
 
 REGISTER_IPA_ALGORITHM(Awb, "Awb")

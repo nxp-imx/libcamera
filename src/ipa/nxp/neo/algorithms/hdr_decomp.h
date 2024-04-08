@@ -28,8 +28,8 @@ public:
 	void prepare(IPAContext &context, const uint32_t frame,
 		     IPAFrameContext &frameContext,
 		     neoisp_meta_params_s *params) override;
-private:
 
+private:
 	static constexpr size_t kNumPoints = 4;
 	static constexpr size_t kNumOffsets = 5;
 	static constexpr size_t kNumNewPoints = 5;

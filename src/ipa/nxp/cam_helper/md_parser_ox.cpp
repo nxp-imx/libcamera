@@ -6,11 +6,11 @@
  * Copyright 2024 NXP
  */
 
+#include "md_parser_ox.h"
+
 #include <cmath>
 
 #include <libcamera/base/log.h>
-
-#include "md_parser_ox.h"
 
 namespace libcamera {
 

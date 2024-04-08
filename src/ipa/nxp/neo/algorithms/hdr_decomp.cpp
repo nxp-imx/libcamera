@@ -12,8 +12,8 @@
 #include <libcamera/base/utils.h>
 
 #include <libcamera/control_ids.h>
-#include <libcamera/ipa/core_ipa_interface.h>
 
+#include <libcamera/ipa/core_ipa_interface.h>
 
 /**
  * \file hdr_decomp.cpp
@@ -34,11 +34,10 @@ namespace ipa::nxpneo::algorithms {
 
 LOG_DEFINE_CATEGORY(NxpNeoHdrDecomp)
 
-HdrDecomp::HdrDecomp() :
-	input0_({}), input1_({})
+HdrDecomp::HdrDecomp()
+	: input0_({}), input1_({})
 {
 }
-
 
 /**
  * \copydoc libcamera::ipa::Algorithm::init
@@ -90,7 +89,6 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 
 	input0_.enabled = true;
 
-
 	/*
 	 * Input1 calibration parsing
 	 */
@@ -138,7 +136,6 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 	return 0;
 }
 
-
 /**
  * \copydoc libcamera::ipa::Algorithm::prepare
  */
@@ -156,7 +153,7 @@ void HdrDecomp::prepare([[maybe_unused]] IPAContext &context, const uint32_t fra
 		params->features_cfg.hdr_decompress_input0_cfg = 1;
 
 		neoisp_hdr_decompress0_cfg_s *hd0 =
-				&params->regs.decompress_input0;
+			&params->regs.decompress_input0;
 		hd0->ctrl_enable = 1;
 
 		hd0->knee_point1 = input0_.points[0];
@@ -187,7 +184,7 @@ void HdrDecomp::prepare([[maybe_unused]] IPAContext &context, const uint32_t fra
 		params->features_cfg.hdr_decompress_input1_cfg = 1;
 
 		neoisp_hdr_decompress1_cfg_s *hd1 =
-				&params->regs.decompress_input1;
+			&params->regs.decompress_input1;
 		hd1->ctrl_enable = 1;
 
 		hd1->knee_point1 = input1_.points[0];

@@ -26,7 +26,6 @@ namespace libcamera {
 
 namespace nxp {
 
-
 namespace md {
 
 /*
