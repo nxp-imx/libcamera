@@ -327,9 +327,25 @@ void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
 {
 	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
 
-	/* Metadata parsing */
+	/*
+	 * Metadata parsing is done when CameraHelper implementation for the
+	 * sensor reports that some top lines are used for embedded data.
+	 * A necessary condition for the top lines parsing to be possible is
+	 * that the raw buffer was mapped in the IPA with mapBuffer() call.
+	 * However, when a raw stream is active concurrently with a decoded
+	 * stream, the raw buffers used by the pipeline are provided by
+	 * the application instead of being internally allocated. Thus, raw
+	 * buffers are not known in advance by the pipeline, so they can not
+	 * be mapped in the IPA. In that case, embedded data parsing is not
+	 * doable.
+	 */
 	const CameraHelper::MdParams *mdParams = camHelper_->embeddedParams();
 	const IPASessionConfiguration &sessionConfig = context_.configuration;
+
+	const ControlInfoMap &mdControlInfoMap =
+		*context_.configuration.sensor.mdControlInfoMap;
+	ControlList &controls = frameContext.sensor.mdControls;
+	controls = ControlList(mdControlInfoMap);
 
 	size_t bytepp;
 	if (sessionConfig.sensor.bpp <= 8)
@@ -339,14 +355,12 @@ void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
 
 	size_t metadataSize =
 		mdParams->topLines * sessionConfig.sensor.size.width * bytepp;
-	uint8_t *metadata = mappedBuffers_.at(rawBufferId).planes()[0].data();
-	Span<uint8_t> mdBuffer(metadata, metadataSize);
 
-	const ControlInfoMap &mdControlInfoMap =
-		*context_.configuration.sensor.mdControlInfoMap;
-	ControlList &controls = frameContext.sensor.mdControls;
-	controls = ControlList(mdControlInfoMap);
-	camHelper_->parseEmbedded(mdBuffer, &controls);
+	if (metadataSize && mappedBuffers_.count(rawBufferId)) {
+		uint8_t *metadata = mappedBuffers_.at(rawBufferId).planes()[0].data();
+		Span<uint8_t> mdBuffer(metadata, metadataSize);
+		camHelper_->parseEmbedded(mdBuffer, &controls);
+	}
 
 	/* Prepare parameters buffer. */
 	neoisp_meta_params_s *params =
