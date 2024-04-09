@@ -85,24 +85,17 @@ public:
 	void ipaParamsBufferReady(unsigned int id);
 	void ipaSetSensorControls(unsigned int id, const ControlList &sensorControls);
 
-	unsigned int getRawMediaBusFormat(PixelFormat *pixelFormat) const;
-	int setupCameraFormat();
+	unsigned int getRawMediaBusFormat(PixelFormat *pixelFormat = nullptr) const;
 	int setupCameraIsiReserve();
-	int setupCameraStream(const std::vector<StreamLink> &streamLinks,
-			      V4L2SubdeviceFormat &sdFormat);
-	int setupCameraStreams(unsigned int mbusCodeInput0,
-			       Size sizeInput0,
-			       V4L2SubdeviceFormat *sdFormatInput0,
-			       V4L2SubdeviceFormat *sdFormatInput1,
-			       V4L2SubdeviceFormat *sdFormatEd);
-	int setupCameraEnableLinks() const;
-	int setupCameraConfigureIsi(
-		const V4L2SubdeviceFormat &sdFormatInput0,
-		const V4L2SubdeviceFormat &sdFormatInput1,
-		const V4L2SubdeviceFormat &sdFormatEd,
-		V4L2DeviceFormat *vdFormatInput0,
-		V4L2DeviceFormat *vdFormatInput1,
-		V4L2DeviceFormat *vdFormatEd);
+
+	int configureFrontend(const V4L2SubdeviceFormat &sensorFormat,
+			      Transform transform,
+			      V4L2DeviceFormat *vdFormatInput0,
+			      V4L2DeviceFormat *vdFormatInput1,
+			      V4L2DeviceFormat *vdFormatEd);
+	int configureFrontEndStream(const std::vector<StreamLink> &streamLinks,
+				    V4L2SubdeviceFormat &sdFormat);
+	int configureFrontEndLinks() const;
 
 	bool screenCancelledBuffer(FrameBuffer *buffer, NxpNeoFrames::Info *info);
 
@@ -112,10 +105,7 @@ public:
 	int allocateBuffers();
 	int freeBuffers();
 
-	std::string cameraName() const
-	{
-		return sensor_.get()->entity()->name();
-	}
+	std::string cameraName() const { return sensor_->entity()->name(); }
 
 private:
 	friend class PipelineHandlerNxpNeo;
@@ -153,13 +143,10 @@ private:
 
 	std::vector<IPABuffer> ipaBuffers_;
 
-	unsigned int mbusCode_ = 0;
 	unsigned int sequence_ = 0;
 	bool rawStreamOnly_ = false;
-	PixelFormat rawPixelFormat_;
-	V4L2SubdeviceFormat sdFormatInput0_;
-	V4L2SubdeviceFormat sdFormatInput1_;
-	V4L2SubdeviceFormat sdFormatEmbedded_;
+
+	/* Front end video device nodes format */
 	V4L2DeviceFormat vdFormatInput0_;
 	V4L2DeviceFormat vdFormatInput1_;
 	V4L2DeviceFormat vdFormatEmbedded_;
@@ -172,12 +159,12 @@ public:
 	static constexpr unsigned int kBufferCount = 6;
 	static constexpr unsigned int kMaxStreams = 3;
 
-	NxpNeoCameraConfiguration(NxpNeoCameraData *data);
+	NxpNeoCameraConfiguration(Camera *camera, NxpNeoCameraData *data);
 
 	Status validate() override;
 
-	/* Cache the combinedTransform_ that will be applied to the sensor */
-	Transform combinedTransform_;
+	const V4L2SubdeviceFormat &sensorFormat() { return sensorFormat_; }
+	const Transform &combinedTransform() { return combinedTransform_; }
 
 private:
 	/*
@@ -185,7 +172,11 @@ private:
 	 * corresponding Camera instance is valid. In order to borrow a
 	 * reference to the camera data, store a new reference to the camera.
 	 */
+	std::shared_ptr<Camera> camera_;
 	NxpNeoCameraData *data_;
+
+	V4L2SubdeviceFormat sensorFormat_;
+	Transform combinedTransform_;
 };
 
 class PipelineHandlerNxpNeo : public PipelineHandler
@@ -209,15 +200,8 @@ public:
 
 	bool match(DeviceEnumerator *enumerator) override;
 
-	unsigned int numCameras() const
-	{
-		return manager_->cameras().size();
-	}
-
-	bool multiCamera() const
-	{
-		return (numCameras() > 1);
-	}
+	unsigned int numCameras() const { return numCameras_; }
+	bool multiCamera() const { return numCameras_ > 1; }
 
 	std::unique_ptr<ISIDevice> isi_;
 	MediaDevice *isiMedia_ = nullptr;
@@ -238,6 +222,8 @@ private:
 	int setupCameraGraphs();
 	int loadPipelineConfig();
 	PipelineConfig pipelineConfig_;
+
+	unsigned int numCameras_ = 0;
 };
 
 PipelineHandlerNxpNeo *NxpNeoCameraData::pipe()
@@ -246,9 +232,11 @@ PipelineHandlerNxpNeo *NxpNeoCameraData::pipe()
 	return static_cast<PipelineHandlerNxpNeo *>(pipe);
 }
 
-NxpNeoCameraConfiguration::NxpNeoCameraConfiguration(NxpNeoCameraData *data)
+NxpNeoCameraConfiguration::NxpNeoCameraConfiguration(Camera *camera,
+						     NxpNeoCameraData *data)
 	: CameraConfiguration()
 {
+	camera_ = camera->shared_from_this();
 	data_ = data;
 }
 
@@ -263,9 +251,41 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 	 * Validate the requested transform against the sensor capabilities and
 	 * rotation and store the final combined transform that configure() will
 	 * need to apply to the sensor to save us working it out again.
+	 * In multicamera mode, the graphs format is statically configured, so
+	 * the only acceptable transform is the identity because applying other
+	 * type of transform may change the sensor format.
 	 */
 	Orientation requestedOrientation = orientation;
-	combinedTransform_ = data_->sensor_->computeTransform(&orientation);
+	if (!data_->pipe()->multiCamera()) {
+		combinedTransform_ = data_->sensor_->computeTransform(&orientation);
+	} else {
+		/*
+		 * Find which orientation corresponds to Identity transform
+		 * to update CameraConfiguration accordingly.
+		 * \todo May be replaced by a CameraSensor helper to get the
+		 * sensor mounting orientation directly.
+		 */
+		static const std::vector<Orientation> orientations = {
+			Orientation::Rotate0,
+			Orientation::Rotate0Mirror,
+			Orientation::Rotate180,
+			Orientation::Rotate180Mirror,
+			Orientation::Rotate90Mirror,
+			Orientation::Rotate270,
+			Orientation::Rotate270Mirror,
+			Orientation::Rotate90,
+		};
+		CameraSensor *sensor = data_->sensor_.get();
+		auto iter = std::find_if(orientations.begin(),
+					 orientations.end(),
+					 [&](const Orientation &o) {
+						 orientation = o;
+						 combinedTransform_ =
+							 sensor->computeTransform(&orientation);
+						 return combinedTransform_ == Transform::Identity;
+					 });
+		ASSERT(iter != orientations.end());
+	}
 	if (orientation != requestedOrientation)
 		status = Adjusted;
 
@@ -325,22 +345,30 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 	 * If no valid size is found in any stream, or in multi camera mode,
 	 * then fall back to the sensor max supported size.
 	 */
+	PixelFormat rawPixelFormat;
+	unsigned int rawCode = data_->getRawMediaBusFormat(&rawPixelFormat);
+	ASSERT(rawCode);
+
 	CameraSensor *sensor = data_->sensor_.get();
-	std::vector<Size> sizes = sensor->sizes(data_->mbusCode_);
+	std::vector<Size> sizes = sensor->sizes(rawCode);
 	Size size = sizes.back();
 	bool multiCamera = data_->pipe()->multiCamera();
 	if (!multiCamera) {
 		auto iter = std::find_if(config_.begin(),
 					 config_.end(),
 					 [&sizes](auto &cfg) {
-						return std::find(sizes.begin(),
-								 sizes.end(),
-								 cfg.size) !=
-							sizes.end();
+						 return std::find(sizes.begin(),
+								  sizes.end(),
+								  cfg.size) != sizes.end();
 					 });
 		if (iter != config_.end())
 			size = iter->size;
 	}
+
+	sensorFormat_ = {};
+	sensorFormat_.mbus_code = rawCode;
+	sensorFormat_.size = size;
+	LOG(NxpNeo, Debug) << "Sensor format " << sensorFormat_.toString();
 
 	for (unsigned int i = 0; i < config_.size(); ++i) {
 		const StreamConfiguration originalCfg = config_[i];
@@ -359,8 +387,7 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 			if (std::find_if(formats.begin(),
 					 formats.end(),
 					 [&](auto &format) {
-						 return format.toPixelFormat() ==
-							cfg->pixelFormat;
+						 return format.toPixelFormat() == cfg->pixelFormat;
 					 }) == formats.end())
 				cfg->pixelFormat = formats[0].toPixelFormat();
 			cfg->size = size;
@@ -374,7 +401,7 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 					   << (isFrame ? "frame" : "ir")
 					   << " stream";
 		} else if (isRaw) {
-			cfg->pixelFormat = data_->rawPixelFormat_;
+			cfg->pixelFormat = rawPixelFormat;
 			cfg->size = size;
 			const PixelFormatInfo &info =
 				PixelFormatInfo::info(cfg->pixelFormat);
@@ -408,7 +435,7 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 {
 	NxpNeoCameraData *data = cameraData(camera);
 	std::unique_ptr<NxpNeoCameraConfiguration> config =
-		std::make_unique<NxpNeoCameraConfiguration>(data);
+		std::make_unique<NxpNeoCameraConfiguration>(camera, data);
 
 	LOG(NxpNeo, Debug) << "Generate configuration " << data->cameraName();
 
@@ -420,7 +447,9 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 	bool rawOutputAvailable = true;
 
 	CameraSensor *sensor = data->sensor_.get();
-	std::vector<Size> sizes = sensor->sizes(data->mbusCode_);
+	PixelFormat rawPixelFormat;
+	unsigned int rawCode = data->getRawMediaBusFormat(&rawPixelFormat);
+	std::vector<Size> sizes = sensor->sizes(rawCode);
 	Size &maxSize = sizes.back();
 
 	/* Size configuration is possible only with a single camera */
@@ -475,7 +504,7 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 				LOG(NxpNeo, Error) << "Too many raw streams";
 				return nullptr;
 			}
-			pixelFormat = data->rawPixelFormat_;
+			pixelFormat = rawPixelFormat;
 			streamFormats[pixelFormat] = ranges;
 			rawOutputAvailable = false;
 			break;
@@ -517,35 +546,21 @@ int PipelineHandlerNxpNeo::configure(Camera *camera, CameraConfiguration *c)
 	 * Configurations have been through validate() so they can be applied
 	 * directly.
 	 */
-
-	V4L2SubdeviceFormat *sdFormatInput0 = &data->sdFormatInput0_;
-	V4L2SubdeviceFormat *sdFormatInput1 = &data->sdFormatInput1_;
-	V4L2SubdeviceFormat *sdFormatEd = &data->sdFormatEmbedded_;
-
 	V4L2DeviceFormat *vdFormatInput0 = &data->vdFormatInput0_;
 	V4L2DeviceFormat *vdFormatInput1 = &data->vdFormatInput1_;
 	V4L2DeviceFormat *vdFormatEd = &data->vdFormatEmbedded_;
 
 	/*
-	 * Camera graph media streams graph reconfiguration
-	 * (single-camera pipeline only)
+	 * Camera frontend graph reconfiguration is only applicable to
+	 * single camera case. For multicamera case, they have been statically
+	 * configured at pipeline creation time.
 	 */
+	CameraSensor *sensor = data->sensor_.get();
 	if (!multiCamera()) {
-		Size size = (*config)[0].size;
-		unsigned int mbusCode = data->mbusCode_;
-
-		/* Apply config format to each media pad streams */
-		ret = data->setupCameraStreams(mbusCode, size, sdFormatInput0,
-					       sdFormatInput1, sdFormatEd);
-		if (ret)
-			return ret;
-
-		/* ISI video video devices configuration */
-		ret = data->setupCameraConfigureIsi(
-			*sdFormatInput0, *sdFormatInput1,
-			*sdFormatEd,
-			vdFormatInput0, vdFormatInput1,
-			vdFormatEd);
+		ret = data->configureFrontend(config->sensorFormat(),
+					      config->combinedTransform(),
+					      vdFormatInput0, vdFormatInput1,
+					      vdFormatEd);
 		if (ret)
 			return ret;
 	}
@@ -585,14 +600,6 @@ int PipelineHandlerNxpNeo::configure(Camera *camera, CameraConfiguration *c)
 		if (ret)
 			return ret;
 	}
-
-	/*
-	 * Sensor transform configuration
-	 */
-	CameraSensor *sensor = data->sensor_.get();
-	ret = sensor->setFormat(sdFormatInput0, config->combinedTransform_);
-	if (ret)
-		return ret;
 
 	/*
 	 * IPA configuration
@@ -811,7 +818,7 @@ int PipelineHandlerNxpNeo::queueRequestDevice(Camera *camera, Request *request)
 
 /**
  * \brief Cancel a \a Request.
- * \request[in] The request to be cancelled
+ * \param[in] request The request to be cancelled
  *
  * Cancelling a request involves marking all its associated buffers as cancelled
  * before reporting them as complete with completeBuffer(). Finally, the request
@@ -829,15 +836,14 @@ void PipelineHandlerNxpNeo::cancelRequest(Request *request)
 }
 
 /**
- * \brief Get a Bayer media bus format compatible with the the \a pixelFormat.
- * \param[inout] pixelFormat requested pixelFormat, may be adjusted
+ * \brief Get raw media bus format compatible with the sensor, frontend and ISP
+ * \param[out] pixelFormat The associated pixel format for a raw stream
  *
- * Checks if the \a pixelFormat can be output by sensor via ISI and is also
- * compatible with NEO capabilities.
- * If not compatible, \a pixelFormat is adjusted to meet above requirements.
+ * Look for a raw mbus code supported by the sensor, that is compatible with
+ * frontend (ISI) and ISP format capabilities.
+ * If several formats are possible, report a format with the largest bit depth.
  *
- * \return The media bus format corresponding to the requested \a pixelFormat
- * or the adjusted one, and a value of zero if no alternative is found.
+ * \return The corresponding media bus format, or zero if none is found.
  */
 unsigned int NxpNeoCameraData::getRawMediaBusFormat(PixelFormat *pixelFormat) const
 {
@@ -849,58 +855,10 @@ unsigned int NxpNeoCameraData::getRawMediaBusFormat(PixelFormat *pixelFormat) co
 	const std::vector<V4L2PixelFormat> &neoPixelFormats =
 		NeoDevice::input0Formats();
 
-	/*
-	 * Make sure the requested PixelFormat is supported by sensor, ISI and
-	 * NEO devices
-	 */
-	bool isiSupport = false;
-
-	auto it = std::find_if(isiFormats.begin(), isiFormats.end(),
-			       [&](auto &isiFormat) {
-				       return isiFormat.second.toPixelFormat() == *pixelFormat;
-			       });
-	if (it != isiFormats.end()) {
-		isiSupport = true;
-		sensorCode = it->first;
-	}
-	if (!isiSupport)
-		LOG(NxpNeo, Debug) << *pixelFormat
-				   << " bayer format not supported by ISI";
-
-	bool sensorSupport = false;
-	if (std::find(mbusCodes.begin(),
-		      mbusCodes.end(), sensorCode) != mbusCodes.end())
-		sensorSupport = true;
-	else
-		LOG(NxpNeo, Debug) << sensorCode
-				   << " mbus format not supported by sensor";
-
-	bool neoSupport = false;
-	if (std::find_if(neoPixelFormats.begin(),
-			 neoPixelFormats.end(),
-			 [&](auto &neoPixelFormat) {
-				 return neoPixelFormat.toPixelFormat() == *pixelFormat;
-			 }) != neoPixelFormats.end())
-		neoSupport = true;
-	else
-		LOG(NxpNeo, Warning) << *pixelFormat
-				     << " bayer format not supported by NEO";
-
-	if (isiSupport && neoSupport && sensorSupport) {
-		LOG(NxpNeo, Debug)
-			<< "Format is supported by sensor code " << sensorCode
-			<< " pixel format " << pixelFormat->toString();
-		return sensorCode;
-	}
-
-	/*
-	 * The desired pixel format cannot be produced. Adjust it to the one
-	 * corresponding to the raw media bus format with the largest bit-depth
-	 * the sensor provides.
-	 */
 	unsigned int maxDepth = 0;
-	*pixelFormat = {};
 	sensorCode = 0;
+	if (pixelFormat)
+		*pixelFormat = {};
 
 	for (unsigned int code : mbusCodes) {
 		/* Make sure the media bus format is RAW Bayer. */
@@ -920,8 +878,8 @@ unsigned int NxpNeoCameraData::getRawMediaBusFormat(PixelFormat *pixelFormat) co
 		if (std::find_if(neoPixelFormats.begin(),
 				 neoPixelFormats.end(),
 				 [&](auto neoPixelFormat) {
-					 return neoPixelFormat.toPixelFormat() ==
-						isiFormats.at(code).toPixelFormat();
+					 return neoPixelFormat.fourcc() ==
+						isiFormats.at(code).fourcc();
 				 }) == neoPixelFormats.end())
 			continue;
 
@@ -929,16 +887,13 @@ unsigned int NxpNeoCameraData::getRawMediaBusFormat(PixelFormat *pixelFormat) co
 		if (bayerFormat.bitDepth > maxDepth) {
 			maxDepth = bayerFormat.bitDepth;
 			sensorCode = code;
-			*pixelFormat = isiFormats.at(code).toPixelFormat();
+			if (pixelFormat)
+				*pixelFormat = isiFormats.at(code).toPixelFormat();
 		}
 	}
 
-	if (!pixelFormat->isValid())
-		LOG(NxpNeo, Error) << "Cannot find a supported RAW format";
-
-	LOG(NxpNeo, Debug)
-		<< "Format adjusted for sensor code " << sensorCode
-		<< " pixel format " << pixelFormat->toString();
+	if (!sensorCode)
+		LOG(NxpNeo, Debug) << "Cannot find a supported RAW format";
 
 	return sensorCode;
 }
@@ -987,29 +942,91 @@ int NxpNeoCameraData::setupCameraIsiReserve()
 }
 
 /**
- * \brief Configure camera ISI pipes subdevices and nodes formats
- * \param[in] sdFormatInput0 subdevice format for input0 channel
- * \param[in] sdFormatInput1 subdevice format for input1 channel
- * \param[in] sdFormatEd subdevice format for embedded data channel
- * \param[out] vdFormatInput0 video device format for input0 channel
- * \param[out] vdFormatInput1 video device format for input1 channel
- * \param[out] vdFormatEd video device format for embedded data channel
+ * \brief Configure the front end media controller device
+ * \param[in] sensorFormat The sensor subdevice format
+ * \param[in] transform The sensor transform
+ * \param[out] vdFormatInput0 The input0 front end's capture video device format
+ * \param[out] vdFormatInput1 The input1 front end's capture video device format
+ * \param[out] vdFormatEd The embedded data front end's capture video device
+ * format
  *
  * \return 0 in case of success or a negative error code.
  */
-int NxpNeoCameraData::setupCameraConfigureIsi(
-	const V4L2SubdeviceFormat &sdFormatInput0,
-	const V4L2SubdeviceFormat &sdFormatInput1,
-	const V4L2SubdeviceFormat &sdFormatEd,
-	V4L2DeviceFormat *vdFormatInput0,
-	V4L2DeviceFormat *vdFormatInput1,
-	V4L2DeviceFormat *vdFormatEd)
+int NxpNeoCameraData::configureFrontend(const V4L2SubdeviceFormat &sensorFormat,
+					Transform transform,
+					V4L2DeviceFormat *vdFormatInput0,
+					V4L2DeviceFormat *vdFormatInput1,
+					V4L2DeviceFormat *vdFormatEd)
 {
+	int ret;
+	CameraSensor *sensor = sensor_.get();
+
+	/* Configure entities media links */
+	ret = configureFrontEndLinks();
+	if (ret)
+		return ret;
+
+	/* Configure entities pad formats for each stream present */
+	V4L2SubdeviceFormat sdFormatInput0 = sensorFormat;
+	ret = sensor->setFormat(&sdFormatInput0, transform);
+	if (ret)
+		return ret;
+
+	const CameraMediaStream *streamInput0 = cameraInfo_->getStreamInput0();
+	ASSERT(streamInput0);
+	const std::vector<StreamLink> &streamLinksInput0 =
+		streamInput0->streamLinks();
+	ret = configureFrontEndStream(streamLinksInput0, sdFormatInput0);
+	if (ret)
+		return ret;
+
+	V4L2SubdeviceFormat sdFormatInput1 = {};
+	if (cameraInfo_->hasStreamInput1()) {
+		const CameraMediaStream *streamInput1 =
+			cameraInfo_->getStreamInput1();
+		ASSERT(streamInput1);
+		/*
+		 * \todo Retrieve input1 format from sensor when we support
+		 * camera stream api.
+		 */
+		unsigned int code = streamInput1->mbusCode();
+		sdFormatInput1.mbus_code = code;
+		sdFormatInput1.size = sensorFormat.size;
+		const std::vector<StreamLink> &streamLinksInput1 =
+			streamInput1->streamLinks();
+		ret = configureFrontEndStream(streamLinksInput1, sdFormatInput1);
+		if (ret)
+			return ret;
+	}
+
+	V4L2SubdeviceFormat sdFormatEd = {};
+	if (cameraInfo_->hasStreamEmbedded()) {
+		const CameraMediaStream *streamEmbedded =
+			cameraInfo_->getStreamEmbedded();
+		ASSERT(streamEmbedded);
+		/*
+		 * \todo Retrieve embedded format from sensor when we support
+		 * camera stream api.
+		 */
+		unsigned int code =
+			streamEmbedded->mbusCode();
+		sdFormatEd.mbus_code = code;
+		unsigned int lines =
+			streamEmbedded->embeddedLines();
+		sdFormatEd.size = Size(sensorFormat.size.width, lines);
+		const std::vector<StreamLink> &streamLinksEmbedded =
+			streamEmbedded->streamLinks();
+		ret = configureFrontEndStream(streamLinksEmbedded, sdFormatEd);
+		if (ret)
+			return ret;
+	}
+
+	/* Configure ISI capture video devices */
 	*vdFormatInput0 = {};
 	*vdFormatInput1 = {};
 	*vdFormatEd = {};
 
-	int ret = pipeInput0_->configure(sdFormatInput0, vdFormatInput0);
+	ret = pipeInput0_->configure(sdFormatInput0, vdFormatInput0);
 	if (cameraInfo_->hasStreamInput1())
 		ret |= pipeInput1_->configure(sdFormatInput1, vdFormatInput1);
 	if (cameraInfo_->hasStreamEmbedded())
@@ -1028,7 +1045,7 @@ int NxpNeoCameraData::setupCameraConfigureIsi(
  *
  * \return 0 in case of success or a negative error code.
  */
-int NxpNeoCameraData::setupCameraStream(
+int NxpNeoCameraData::configureFrontEndStream(
 	const std::vector<StreamLink> &streamLinks,
 	V4L2SubdeviceFormat &sdFormat)
 {
@@ -1095,79 +1112,10 @@ int NxpNeoCameraData::setupCameraStream(
 }
 
 /**
- * \brief Setup format for each media pad stream belonging to a camera
- * \param[in] mbusCodeInput0 The mbus code to set on input0 media stream
- * \param[in] SizeInput0 The size to set on input0 media stream
- * \param[out] sdFormatInput0 The resulting V4L2 format applied on input0 pads
- * \param[out] sdFormatInput1 The resulting V4L2 format applied on input1 pads
- * \param[out] sdFormatEd The resulting V4L2 format applied on embedded pads
-
- * Format for input0 media stream is defined by parameters as it can be
- * defined by application. Formats for input1 and embedded media streams
- * are derived from both the input0 values and configuration file.
- *
- * \return 0 on success or a negative error code otherwise.
- */
-int NxpNeoCameraData::setupCameraStreams(
-	unsigned int mbusCodeInput0, Size sizeInput0,
-	V4L2SubdeviceFormat *sdFormatInput0,
-	V4L2SubdeviceFormat *sdFormatInput1,
-	V4L2SubdeviceFormat *sdFormatEd)
-{
-	int ret;
-
-	/* All streams share the same size */
-	*sdFormatInput0 = {};
-	sdFormatInput0->mbus_code = mbusCodeInput0;
-	sdFormatInput0->size = sizeInput0;
-	const CameraMediaStream *streamInput0 = cameraInfo_->getStreamInput0();
-	ASSERT(streamInput0);
-	const std::vector<StreamLink> &streamLinksInput0 =
-		streamInput0->streamLinks();
-	ret = setupCameraStream(streamLinksInput0, *sdFormatInput0);
-	if (ret)
-		return ret;
-
-	*sdFormatInput1 = {};
-	if (cameraInfo_->hasStreamInput1()) {
-		const CameraMediaStream *streamInput1 =
-			cameraInfo_->getStreamInput1();
-		ASSERT(streamInput1);
-		unsigned int code = streamInput1->mbusCode();
-		sdFormatInput1->mbus_code = code;
-		sdFormatInput1->size = sizeInput0;
-		const std::vector<StreamLink> &streamLinksInput1 =
-			streamInput1->streamLinks();
-		ret = setupCameraStream(streamLinksInput1, *sdFormatInput1);
-		if (ret)
-			return ret;
-	}
-
-	*sdFormatEd = {};
-	if (cameraInfo_->hasStreamEmbedded()) {
-		const CameraMediaStream *streamEmbedded =
-			cameraInfo_->getStreamEmbedded();
-		unsigned int code =
-			streamEmbedded->mbusCode();
-		sdFormatEd->mbus_code = code;
-		unsigned int lines =
-			streamEmbedded->embeddedLines();
-		sdFormatEd->size = Size(sizeInput0.width, lines);
-		const std::vector<StreamLink> &streamLinksEmbedded =
-			streamEmbedded->streamLinks();
-		ret = setupCameraStream(streamLinksEmbedded, *sdFormatEd);
-		if (ret)
-			return ret;
-	}
-
-	return ret;
-}
-
-/**
  * \brief Enable media links from the camera graph
  * \return 0 in case of success or a negative error code.
  */
-int NxpNeoCameraData::setupCameraEnableLinks() const
+int NxpNeoCameraData::configureFrontEndLinks() const
 {
 	int ret;
 
@@ -1222,36 +1170,6 @@ int NxpNeoCameraData::setupCameraEnableLinks() const
 	}
 
 	return ret;
-}
-
-/**
- * \brief Retrieve camera sensor format and sizes
- * \return 0 in case of success or a negative error code.
- */
-int NxpNeoCameraData::setupCameraFormat()
-{
-	/*
-	 * Arbitrary Bayer format with high resolution requested.
-	 * Actual best format supported by the sensor will be adjusted.
-	 **/
-	rawPixelFormat_ = formats::SBGGR16;
-	mbusCode_ = getRawMediaBusFormat(&rawPixelFormat_);
-	if (!mbusCode_)
-		return -ENODEV;
-
-	std::vector<Size> sizes = sensor_->sizes(mbusCode_);
-	if (!sizes.size())
-		return -ENODEV;
-
-	std::string sizesString;
-	for (Size size : sizes)
-		sizesString += size.toString() + " ";
-	LOG(NxpNeo, Debug)
-		<< "Sensor mbus code " << mbusCode_
-		<< " pixel format " << rawPixelFormat_.toString()
-		<< " sizes " << sizesString;
-
-	return 0;
 }
 
 /**
@@ -1447,9 +1365,11 @@ int PipelineHandlerNxpNeo::createCamera(MediaEntity *sensorEntity,
 		return -EINVAL;
 	}
 
-	ret = data->setupCameraFormat();
-	if (ret)
-		return ret;
+	unsigned rawCode = data->getRawMediaBusFormat();
+	if (!rawCode) {
+		LOG(NxpNeo, Warning) << "No supported format for " << name;
+		return -EINVAL;
+	}
 
 	data->neo_ = std::make_unique<NeoDevice>(neoInstance);
 	ret = data->neo_->init(neoMedia);
@@ -1588,14 +1508,22 @@ int PipelineHandlerNxpNeo::setupRouting() const
 }
 
 /**
- * \brief Initialize the camera graphs in the media device
+ * \brief Initialize the camera graphs from the media controller device
  *
  * Cameras managed by the pipeline operate on different streams of the media
- * device. Those streams share subdevice pads common to multiple cameras.
+ * controller device. Those streams share subdevice pads common to multiple
+ * cameras.
  * A given stream to be started requires a valid format to be configured
- * for every other streams sharing the same media device pads.
- * Thus, a default config is applied at startup to all media devices streams
- * used by every camera, so that any selected stream can be started later.
+ * for every other stream sharing a media entity pad.
+ * Also, a stream can not be reconfigured for a subdevice that has an other
+ * stream active.
+ * In multicamera case, it prevents from configuring the graph at configure()
+ * time, because an other camera may already be streaming at that time. Thus,
+ * for multicamera, frontend graph is staticallly configured at pipeline
+ * creation time.
+ * Configuration of the ISP device will still be done at configure() time as
+ * there is one device instance per camera, so there is no issue of sharing
+ * streams on common entity pad.
  *
  * \return 0 on success or a negative error code otherwise.
  */
@@ -1603,39 +1531,41 @@ int PipelineHandlerNxpNeo::setupCameraGraphs()
 {
 	int ret = 0;
 
+	if (!multiCamera())
+		return 0;
+
 	for (auto const &camera : manager_->cameras()) {
+		/* Make sure this camera is controlled by our pipeline */
+		if (camera->_d()->pipe() != this) {
+			LOG(NxpNeo, Debug)
+				<< "Skip setup for " << camera->id();
+			continue;
+		}
+
 		NxpNeoCameraData *data = cameraData(camera.get());
 		LOG(NxpNeo, Debug)
 			<< "Setup graph for camera " << data->cameraName();
-
-		V4L2SubdeviceFormat *sdFormatInput0 = &data->sdFormatInput0_;
-		V4L2SubdeviceFormat *sdFormatInput1 = &data->sdFormatInput1_;
-		V4L2SubdeviceFormat *sdFormatEd = &data->sdFormatEmbedded_;
 
 		V4L2DeviceFormat *vdFormatInput0 = &data->vdFormatInput0_;
 		V4L2DeviceFormat *vdFormatInput1 = &data->vdFormatInput1_;
 		V4L2DeviceFormat *vdFormatEd = &data->vdFormatEmbedded_;
 
-		/* Enable media link between entities */
-		ret = data->setupCameraEnableLinks();
-		if (ret)
-			return ret;
+		/* Apply default format and transform to each media pad streams */
+		unsigned int rawCode = data->getRawMediaBusFormat();
+		ASSERT(rawCode);
 
-		/* Apply default format to each media pad streams */
-		unsigned int mbusCode = data->mbusCode_;
 		CameraSensor *sensor = data->sensor_.get();
-		std::vector<Size> sizes = sensor->sizes(mbusCode);
+		std::vector<Size> sizes = sensor->sizes(rawCode);
 		Size size = sizes.back();
-		ret = data->setupCameraStreams(mbusCode, size, sdFormatInput0,
-					       sdFormatInput1, sdFormatEd);
-		if (ret)
-			return ret;
 
-		/* ISI video video devices configuration */
-		ret = data->setupCameraConfigureIsi(*sdFormatInput0, *sdFormatInput1,
-						    *sdFormatEd,
-						    vdFormatInput0, vdFormatInput1,
-						    vdFormatEd);
+		V4L2SubdeviceFormat sensorFormat = {};
+		sensorFormat.mbus_code = rawCode;
+		sensorFormat.size = size;
+
+		ret = data->configureFrontend(sensorFormat,
+					      Transform::Identity,
+					      vdFormatInput0, vdFormatInput1,
+					      vdFormatEd);
 		if (ret)
 			return ret;
 	}
@@ -1670,8 +1600,8 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 	constexpr unsigned int kMaxNeoDevices = 4;
 
 	/*
-	 * Prerequisite for pipeline operation is that ISI media device is
-	 * present.
+	 * Prerequisite for pipeline operation is that frontend media controller
+	 * device is present.
 	 */
 	DeviceMatch isi(ISIDevice::kDriverName());
 	isi.add(ISIDevice::kSDevCrossBarEntityName());
@@ -1692,7 +1622,7 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 		return false;
 
 	/*
-	 * Discover Neo ISP media devices
+	 * Discover Neo ISP media controller devices
 	 */
 	std::queue<MediaDevice *> neos;
 	MediaDevice *neoDev;
@@ -1714,10 +1644,10 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 		return false;
 
 	/*
-	 * Discover camera entities from the ISI media device
+	 * Discover camera entities from the frontend media controller device
 	 * Bind each camera to an ISP entity
 	 */
-	unsigned int numCameras = 0;
+	numCameras_ = 0;
 	for (MediaEntity *entity : isiMedia_->entities()) {
 		if (entity->function() != MEDIA_ENT_F_CAM_SENSOR)
 			continue;
@@ -1725,26 +1655,23 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 		if (!neos.size())
 			break;
 
-		ret = createCamera(entity, neos.front(), numCameras);
+		ret = createCamera(entity, neos.front(), numCameras_);
 		if (ret) {
 			LOG(NxpNeo, Warning) << "Failed to probe camera "
 					     << entity->name() << ": " << ret;
 		} else {
-			numCameras++;
+			numCameras_++;
 			neos.pop();
 		}
 	}
 
-	if (numCameras < 1)
+	if (numCameras_ < 1)
 		return false;
 
-	/*
-	 * Apply global routing and setup camera media device streams
-	 */
+	/* Apply global routing and setup cameras frontend graphs */
 	ret = setupRouting();
 	if (ret)
 		return ret;
-
 	ret = setupCameraGraphs();
 	if (ret)
 		return ret;
@@ -1823,26 +1750,9 @@ int NxpNeoCameraData::loadIPA()
 	ipa_->paramsBufferReady.connect(this, &NxpNeoCameraData::ipaParamsBufferReady);
 	ipa_->metadataReady.connect(this, &NxpNeoCameraData::ipaMetadataReady);
 
-	/*
-	 * Pass the sensor info to the IPA to initialize controls.
-	 *
-	 * \todo Find a way to initialize IPA controls without basing their
-	 * limits on a particular sensor mode. We currently pass sensor
-	 * information corresponding to the largest sensor resolution, and the
-	 * IPA uses this to compute limits for supported controls. There's a
-	 * discrepancy between the need to compute IPA control limits at init
-	 * time, and the fact that those limits may depend on the sensor mode.
-	 * Research is required to find out to handle this issue.
-	 */
-	CameraSensor *sensor = this->sensor_.get();
-	V4L2SubdeviceFormat sensorFormat = {};
-	sensorFormat.size = sensor->resolution();
-	int ret = sensor->setFormat(&sensorFormat);
-	if (ret)
-		return ret;
-
 	IPACameraSensorInfo sensorInfo{};
-	ret = sensor->sensorInfo(&sensorInfo);
+	CameraSensor *sensor = this->sensor_.get();
+	int ret = sensor->sensorInfo(&sensorInfo);
 	if (ret)
 		return ret;
 

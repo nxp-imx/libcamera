@@ -104,7 +104,7 @@ const CameraInfo *PipelineConfig::getCameraInfo(std::string name) const
 }
 
 /**
- * \brief Report the global routes for the backend media device
+ * \brief Report the global routes for the frontend media controller device
  *
  * Routing is to be configured for entities that support streams.
  * RoutingMap is a <subdevice, routing> map that associates to each relevant
@@ -169,7 +169,6 @@ int PipelineConfig::loadAutoDetectRouting(MediaEntity *entity,
 
 /**
  * \brief Extract camera media device graph to the capture video device
- * \param[in] media The backend media device (CSI, ISI, sensors).
  * \param[in] entity The media device entity of the sensor.
  *
  * Discover the camera graph going through a very basic walk-through strategy,
@@ -261,7 +260,7 @@ int PipelineConfig::loadAutoDetectEntity(MediaEntity *entity)
 
 /**
  * \brief Discover a valid camera graph to the capture video device
- * \param[in] media The backend media device (CSI, ISI, sensors).
+ * \param[in] media The frontend media controller device.
  *
  * \return 0 on success or a negative error code otherwise.
  */
@@ -283,7 +282,7 @@ int PipelineConfig::loadAutoDetect(MediaDevice *media)
 /**
  * \brief Parse match entries in a platform node
  * \param[in] platform The platform entry node in yaml file.
- * \param[in] media The backend media device (CSI, ISI, sensors).
+ * \param[in] media The frontend media controller device.
  * \return 0 in case of match or a negative error code otherwise.
  */
 int PipelineConfig::parseMatch(const YamlObject &platform, MediaDevice *media)
@@ -315,7 +314,7 @@ int PipelineConfig::parseMatch(const YamlObject &platform, MediaDevice *media)
 /**
  * \brief Parse route entries in a platform node
  * \param[in] platform The platform entry node in yaml file.
- * \param[in] media The backend media device (CSI, ISI, sensors).
+ * \param[in] media The frontend media controller device.
  * \return 0 on success or a negative error code otherwise.
  */
 int PipelineConfig::parseRoutings(const YamlObject &platform)
@@ -376,7 +375,7 @@ int PipelineConfig::parseRoutings(const YamlObject &platform)
  * \brief Parse a stream within a camera node
  * \param[in] camera The camera stream node in yaml file.
  * \param[in] key The key of the actual stream for the camera.
- * \param[in] media The backend media device (CSI, ISI, sensors).
+ * \param[in] media The frontend media controller device.
  * \return The optional CameraMediaStream if found, otherwise nullopt.
  */
 
@@ -504,7 +503,7 @@ PipelineConfig::parseMediaStream(const YamlObject &camera,
 /**
  * \brief Parse camera entries in a platform node
  * \param[in] platform The platform entry node in yaml file.
- * \param[in] media The backend media device (CSI, ISI, sensors).
+ * \param[in] media The frontend media controller device.
  * \return 0 on success or a negative error code otherwise.
  */
 int PipelineConfig::parseCameras(const YamlObject &platform, MediaDevice *media)
@@ -561,7 +560,7 @@ int PipelineConfig::parseCameras(const YamlObject &platform, MediaDevice *media)
 /**
  * \brief Parse a platform entry in yaml configuration file
  * \param[in] platform The platform entry node in yaml file.
- * \param[in] media The backend media device (CSI, ISI, sensors).
+ * \param[in] media The frontend media controller device.
  * \return 0 on success or a negative error code otherwise.
  */
 int PipelineConfig::parsePlatform(const YamlObject &platform,
@@ -592,7 +591,7 @@ int PipelineConfig::parsePlatform(const YamlObject &platform,
 /**
  * \brief Load the pipeline configuration from a pipeline configuration file
  * \param[in] filename The path to configuration file.
- * \param[in] media The backend media device (CSI, ISI, sensors).
+ * \param[in] media The frontend media controller device.
  * \return 0 on success or a negative error code otherwise.
  */
 int PipelineConfig::loadFromFile(std::string filename, MediaDevice *media)
@@ -641,13 +640,12 @@ int PipelineConfig::loadFromFile(std::string filename, MediaDevice *media)
 /**
  * \brief Load the pipeline configuration
  * \param[in] file The path to the pipeline configuration file.
- * \param[in] media The backend media device (CSI, ISI, sensors).
+ * \param[in] media The frontend media controller device.
  *
  * Build the pipeline configuration from either the config file
- * if it exists and lists a setup corresponding to the backend
- * media device. In case no such predefined is available, default
- * to automatic detection mode that works for pipelines that can
- * be automatically discovered.
+ * if it exists and lists a setup corresponding to the frontend media controller
+ * device. In case no such predefined is available, default to automatic
+ * detection mode that works for pipelines that can be automatically discovered.
  *
  * \return 0 on success or a negative error code otherwise.
  */
