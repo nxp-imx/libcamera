@@ -231,8 +231,7 @@ void ISIPipe::freeBuffers()
 }
 
 /**
- * \brief Return the table of raw Bayer and monochrome formats supported by ISI
- * channels
+ * \brief Return the table of raw Bayer formats supported by ISI channels
  * \return A map of media bus code and corresponding capture device pixel
  *  formats
  */
@@ -266,16 +265,6 @@ const std::map<uint32_t, V4L2PixelFormat> &ISIPipe::mediaBusToPixelFormats()
 		{ MEDIA_BUS_FMT_SGBRG16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_SGBRG16) },
 		{ MEDIA_BUS_FMT_SGRBG16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_SGRBG16) },
 		{ MEDIA_BUS_FMT_SRGGB16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_SRGGB16) },
-
-		/* Gray formats (IR) */
-		{ MEDIA_BUS_FMT_Y8_1X8, V4L2PixelFormat(V4L2_PIX_FMT_GREY) },
-		{ MEDIA_BUS_FMT_Y10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_Y10) },
-		{ MEDIA_BUS_FMT_Y12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_Y12) },
-		{ MEDIA_BUS_FMT_Y14_1X14, V4L2PixelFormat(V4L2_PIX_FMT_Y14) },
-
-		/* \todo MEDIA_BUS_FMT_Y16_1X16 not defined in libcamera headers yet
-			{ MEDIA_BUS_FMT_Y16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_Y16) },
-		*/
 	};
 
 	return formats;
