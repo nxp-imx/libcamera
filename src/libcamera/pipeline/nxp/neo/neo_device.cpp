@@ -559,12 +559,15 @@ int NeoDevice::configure(V4L2DeviceFormat &formatInput0,
 
 const std::vector<V4L2PixelFormat> &NeoDevice::frameFormats()
 {
-	/* \todo update per actual driver capability */
 	static const std::vector<V4L2PixelFormat> formats = {
 		V4L2PixelFormat(V4L2_PIX_FMT_RGB24),
+		V4L2PixelFormat(V4L2_PIX_FMT_BGR24),
+		V4L2PixelFormat(V4L2_PIX_FMT_RGBX32),
+		V4L2PixelFormat(V4L2_PIX_FMT_BGRX32),
+		V4L2PixelFormat(V4L2_PIX_FMT_YUVX32),
 		V4L2PixelFormat(V4L2_PIX_FMT_YUYV),
+		V4L2PixelFormat(V4L2_PIX_FMT_UYVY),
 		V4L2PixelFormat(V4L2_PIX_FMT_NV12),
-		V4L2PixelFormat(V4L2_PIX_FMT_NV16),
 	};
 
 	return formats;
@@ -572,11 +575,8 @@ const std::vector<V4L2PixelFormat> &NeoDevice::frameFormats()
 
 const std::vector<V4L2PixelFormat> &NeoDevice::irFormats()
 {
-	/* \todo update per actual driver capability */
 	static const std::vector<V4L2PixelFormat> formats = {
 		V4L2PixelFormat(V4L2_PIX_FMT_GREY),
-		V4L2PixelFormat(V4L2_PIX_FMT_Y10),
-		V4L2PixelFormat(V4L2_PIX_FMT_Y12),
 	};
 
 	return formats;
@@ -584,7 +584,6 @@ const std::vector<V4L2PixelFormat> &NeoDevice::irFormats()
 
 const std::vector<V4L2PixelFormat> &NeoDevice::input0Formats()
 {
-	/* \todo update per actual driver capability */
 	static const std::vector<V4L2PixelFormat> formats = {
 		V4L2PixelFormat(V4L2_PIX_FMT_SBGGR8),
 		V4L2PixelFormat(V4L2_PIX_FMT_SGBRG8),
@@ -613,7 +612,6 @@ const std::vector<V4L2PixelFormat> &NeoDevice::input0Formats()
 
 const std::vector<V4L2PixelFormat> &NeoDevice::input1Formats()
 {
-	/* \todo update per actual driver capability */
 	static const std::vector<V4L2PixelFormat> formats = {
 		V4L2PixelFormat(V4L2_PIX_FMT_SBGGR8),
 		V4L2PixelFormat(V4L2_PIX_FMT_SGBRG8),
