@@ -40,6 +40,10 @@ using namespace std;
 
 #define MYDBG LOG(ISI, Info) << "==== " << __FILE__ << ": " << __LINE__;
 #define EVK95_CAMERA_ISI_IDEX 2
+
+#define AP1302_OUTPUT_WIDTH 1920
+#define AP1302_OUTPUT_HEIGHT 1080
+
 namespace libcamera {
 
 LOG_DEFINE_CATEGORY(ISI)
@@ -77,6 +81,7 @@ public:
 
 	std::unique_ptr<CameraSensor> sensor_;
 	std::unique_ptr<V4L2Subdevice> csis_;
+	std::unique_ptr<V4L2Subdevice> formatter_;
 
 	std::vector<Stream> streams_;
 
@@ -131,7 +136,7 @@ protected:
 	int queueRequestDevice(Camera *camera, Request *request) override;
 
 private:
-	static constexpr Size kPreviewSize = { 1280, 800 };
+	static constexpr Size kPreviewSize = { AP1302_OUTPUT_WIDTH, AP1302_OUTPUT_HEIGHT };
 	static constexpr Size kMinISISize = { 1, 1 };
 
 	struct Pipe {
@@ -179,6 +184,10 @@ int ISICameraData::init(V4L2VideoDevice *video)
 		return ret;
 
 	ret = csis_->open();
+	if (ret)
+		return ret;
+
+	ret = formatter_->open();
 	if (ret)
 		return ret;
 
@@ -730,8 +739,8 @@ CameraConfiguration::Status ISICameraConfiguration::validate()
 	sensorFormat.mbus_code = data_->getMediaBusFormat(&pixelFormat);
 	sensorFormat.size = maxSize;
 
-	LOG(ISI, Debug) << "Computed sensor configuration: " << sensorFormat;
-
+	LOG(ISI, Info) << "Computed sensor configuration: " << sensorFormat;
+	LOG(ISI, Info) << "maxResolution " << maxResolution.width << " x " << maxResolution.height;
 	/*
 	 * We can't use CameraSensor::getFormat() as it might return a
 	 * format larger than our strict width limit, as that function
@@ -742,36 +751,10 @@ CameraConfiguration::Status ISICameraConfiguration::validate()
 	 * the smallest larger format without considering the aspect ratio
 	 * as the ISI can freely scale.
 	 */
-	auto sizes = sensor->sizes(sensorFormat.mbus_code);
-	Size bestSize;
-
-	for (const Size &s : sizes) {
-		/* Ignore smaller sizes. */
-		if (s.width < sensorFormat.size.width ||
-		    s.height < sensorFormat.size.height)
-			continue;
-
-		/* Make sure the width stays in the limits. */
-		if (s.width > maxResolution.width)
-			continue;
-
-		bestSize = s;
-		break;
-	}
-
-	/*
-	 * This should happen only if the sensor can only produce formats that
-	 * exceed the maximum allowed input width.
-	 */
-	if (bestSize.isNull()) {
-		LOG(ISI, Error) << "Unable to find a suitable sensor format";
-		return Invalid;
-	}
-
 	sensorFormat_.mbus_code = sensorFormat.mbus_code;
-	sensorFormat_.size = bestSize;
+	sensorFormat_.size = maxResolution;
 
-	LOG(ISI, Debug) << "Selected sensor format: " << sensorFormat_;
+	LOG(ISI, Info) << "Selected sensor format: " << sensorFormat_;
 
 	return status;
 }
@@ -1076,6 +1059,10 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 	if (ret)
 		return ret;
 
+	ret = data->formatter_->setFormat(0, &format);
+	if (ret)
+		return ret;
+
 	ret = crossbar_->setFormat(data->xbarSink_, &format);
 	if (ret)
 		return ret;
@@ -1338,6 +1325,21 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 		 */
 		numSinks++;
 
+		// formatter
+		MediaEntity *formatter = pad->links()[0]->source()->entity();
+		if (formatter->pads().size() != 2) {
+			LOG(ISI, Debug) << "Skip unsupported formatter " << formatter->name();
+			continue;
+		}
+
+		pad = formatter->pads()[0];
+		LOG(ISI, Info) << "formatter pad flag " + std::to_string(pad->flags()) +
+					  ", links num " + std::to_string(pad->links().size());
+		if (!(pad->flags() & MEDIA_PAD_FL_SINK) || pad->links().empty()) {
+			continue;
+		}
+
+		// CSI
 		MediaEntity *csi = pad->links()[0]->source()->entity();
 		if (csi->pads().size() != 2) {
 			LOG(ISI, Debug) << "Skip unsupported CSI-2 receiver "
@@ -1346,11 +1348,12 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 		}
 
 		pad = csi->pads()[0];
-    LOG(ISI, Info) << "csi pad flag " + std::to_string(pad->flags()) + ", links num " + std::to_string(pad->links().size()); 
+		LOG(ISI, Info) << "csi pad flag " + std::to_string(pad->flags()) + ", links num " + std::to_string(pad->links().size());
 		if (!(pad->flags() & MEDIA_PAD_FL_SINK) || pad->links().empty()) {
 			continue;
-    }
+		}
 
+		// ap1302
 		MediaEntity *sensor = pad->links()[0]->source()->entity();
 		if (sensor->function() != MEDIA_ENT_F_CAM_SENSOR) {
 				LOG(ISI, Warning) << "==== sensor " << sensor->name() << " function " << utils::hex(sensor->function()) << " is not MEDIA_ENT_F_CAM_SENSOR";
@@ -1362,6 +1365,7 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 
 		data->sensor_ = std::make_unique<CameraSensor>(sensor);
 		data->csis_ = std::make_unique<V4L2Subdevice>(csi);
+		data->formatter_ = std::make_unique<V4L2Subdevice>(formatter);
 		data->xbarSink_ = xbarSink; //EVK95_CAMERA_ISI_IDEX; //sink;
 
 		V4L2VideoDevice *video = pipes_[EVK95_CAMERA_ISI_IDEX + numCameras].capture.get();

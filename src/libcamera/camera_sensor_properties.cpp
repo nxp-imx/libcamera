@@ -247,7 +247,7 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
 			},
 		} },
 		{ "ap130x.2-003c", {
-			.unitCellSize = { 1280, 800 },
+			.unitCellSize = { 3000, 3000 },
 			.testPatternModes =  {
 				{ controls::draft::TestPatternModeOff, 0 },
 				{ controls::draft::TestPatternModeColorBars, 1 },

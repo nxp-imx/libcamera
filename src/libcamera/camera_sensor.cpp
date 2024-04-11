@@ -132,6 +132,16 @@ int CameraSensor::init()
 
 	for (const auto &format : formats_) {
 		const std::vector<SizeRange> &ranges = format.second;
+		LOG(CameraSensor, Info)
+			<< "format " << format.first << " size range begin, min "
+			<< ranges.begin()->min.width << " x " << ranges.begin()->min.height
+			<< ", max " << ranges.begin()->max.width << " x "
+			<< ranges.begin()->max.height << " hStep " << ranges.begin()->hStep
+			<< ", vstep " << ranges.begin()->vStep << " size range end, min "
+			<< ranges.end()->min.width << " x " << ranges.end()->min.height << ", max "
+			<< ranges.end()->max.width << " x " << ranges.end()->max.height << " hStep "
+			<< ranges.end()->hStep << ", vstep " << ranges.end()->vStep;
+
 		std::transform(ranges.begin(), ranges.end(), std::back_inserter(sizes_),
 			       [](const SizeRange &range) { return range.max; });
 	}
@@ -303,6 +313,8 @@ int CameraSensor::validateSensorDriver()
 			<< activeArea_;
 		err = -EINVAL;
 	}
+	LOG(CameraSensor, Info)
+		<< "activeArea_ " << activeArea_.width << " x " << activeArea_.height;
 
 	ret = subdev_->getSelection(pad_, V4L2_SEL_TGT_CROP, &rect);
 	if (ret) {
@@ -371,6 +383,8 @@ void CameraSensor::initStaticProperties()
 	if (!staticProps_)
 		return;
 
+	LOG(CameraSensor, Info) << "==== unitCellSize " << staticProps_->unitCellSize.width << " x "
+				<< staticProps_->unitCellSize.height;
 	/* Register the properties retrieved from the sensor database. */
 	properties_.set(properties::UnitCellSize, staticProps_->unitCellSize);
 
@@ -620,6 +634,11 @@ std::vector<Size> CameraSensor::sizes(unsigned int mbusCode) const
  */
 Size CameraSensor::resolution() const
 {
+#define AP1302_OUTPUT_WIDTH 1920
+#define AP1302_OUTPUT_HEIGHT 1080
+	if (strstr(model_.c_str(), "ap130"))
+		return { AP1302_OUTPUT_WIDTH, AP1302_OUTPUT_HEIGHT };
+
 	return std::min(sizes_.back(), activeArea_.size());
 }
 
