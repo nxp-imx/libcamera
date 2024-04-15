@@ -568,6 +568,7 @@ const std::vector<V4L2PixelFormat> &NeoDevice::frameFormats()
 		V4L2PixelFormat(V4L2_PIX_FMT_YUYV),
 		V4L2PixelFormat(V4L2_PIX_FMT_UYVY),
 		V4L2PixelFormat(V4L2_PIX_FMT_NV12),
+		V4L2PixelFormat(V4L2_PIX_FMT_NV21),
 	};
 
 	return formats;
