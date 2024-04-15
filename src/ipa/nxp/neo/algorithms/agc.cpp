@@ -37,7 +37,7 @@ namespace ipa::nxpneo::algorithms {
  * \brief A mean-based auto-exposure algorithm
  */
 
-LOG_DEFINE_CATEGORY(NxpNeoAgc)
+LOG_DEFINE_CATEGORY(NxpNeoAlgoAgc)
 
 /* Minimum limit for analogue gain value */
 static constexpr double kMinAnalogueGain = 1.0;
@@ -90,7 +90,7 @@ void Agc::queueRequest(IPAContext &context,
 	if (agcEnable && *agcEnable != agc.autoEnabled) {
 		agc.autoEnabled = *agcEnable;
 
-		LOG(NxpNeoAgc, Debug)
+		LOG(NxpNeoAlgoAgc, Debug)
 			<< (agc.autoEnabled ? "Enabling" : "Disabling")
 			<< " AGC";
 	}
@@ -100,7 +100,7 @@ void Agc::queueRequest(IPAContext &context,
 		agc.manual.exposure = *exposure * 1.0us
 				    / context.configuration.sensor.lineDuration;
 
-		LOG(NxpNeoAgc, Debug)
+		LOG(NxpNeoAlgoAgc, Debug)
 			<< "Set exposure to " << agc.manual.exposure;
 	}
 
@@ -108,7 +108,7 @@ void Agc::queueRequest(IPAContext &context,
 	if (gain && !agc.autoEnabled) {
 		agc.manual.gain = *gain;
 
-		LOG(NxpNeoAgc, Debug) << "Set gain to " << agc.manual.gain;
+		LOG(NxpNeoAlgoAgc, Debug) << "Set gain to " << agc.manual.gain;
 	}
 
 	frameContext.agc.autoEnabled = agc.autoEnabled;
@@ -166,7 +166,7 @@ utils::Duration Agc::filterExposure(utils::Duration exposureValue)
 	filteredExposure_ = speed * exposureValue +
 			    filteredExposure_ * (1.0 - speed);
 
-	LOG(NxpNeoAgc, Debug) << "After filtering, exposure " << filteredExposure_;
+	LOG(NxpNeoAlgoAgc, Debug) << "After filtering, exposure " << filteredExposure_;
 
 	return filteredExposure_;
 }
@@ -214,7 +214,7 @@ void Agc::computeExposure(IPAContext &context, IPAFrameContext &frameContext,
 	 */
 	utils::Duration effectiveExposureValue = currentShutter * analogueGain;
 
-	LOG(NxpNeoAgc, Debug) << "Actual total exposure " << currentShutter * analogueGain
+	LOG(NxpNeoAlgoAgc, Debug) << "Actual total exposure " << currentShutter * analogueGain
 			      << " Shutter speed " << currentShutter
 			      << " Gain " << analogueGain
 			      << " Needed ev gain " << evGain;
@@ -228,7 +228,7 @@ void Agc::computeExposure(IPAContext &context, IPAFrameContext &frameContext,
 	/* Clamp the exposure value to the min and max authorized. */
 	utils::Duration maxTotalExposure = maxShutterSpeed * maxAnalogueGain;
 	exposureValue = std::min(exposureValue, maxTotalExposure);
-	LOG(NxpNeoAgc, Debug) << "Target total exposure " << exposureValue
+	LOG(NxpNeoAlgoAgc, Debug) << "Target total exposure " << exposureValue
 			      << ", maximum is " << maxTotalExposure;
 
 	/*
@@ -245,7 +245,7 @@ void Agc::computeExposure(IPAContext &context, IPAFrameContext &frameContext,
 								  minShutterSpeed, maxShutterSpeed);
 	double stepGain = std::clamp(exposureValue / shutterTime,
 				     minAnalogueGain, maxAnalogueGain);
-	LOG(NxpNeoAgc, Debug) << "Divided up shutter and gain are "
+	LOG(NxpNeoAlgoAgc, Debug) << "Divided up shutter and gain are "
 			      << shutterTime << " and "
 			      << stepGain;
 

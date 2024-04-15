@@ -26,6 +26,10 @@ struct StreamConfiguration;
 class NeoDevice
 {
 public:
+	struct PipeConfig {
+		unsigned int topLines;
+	};
+
 	NeoDevice(unsigned int index)
 		: index_(index) {}
 
@@ -34,15 +38,17 @@ public:
 	int allocateBuffers(unsigned int bufferCount);
 	void freeBuffers();
 
-	int configure(V4L2DeviceFormat &formatInput0,
-		      V4L2DeviceFormat &formatInput1,
-		      V4L2DeviceFormat &formatFrame,
-		      V4L2DeviceFormat &formatIr);
+	int configure(PipeConfig &pipeConfig,
+		      V4L2DeviceFormat *formatInput0,
+		      V4L2DeviceFormat *formatInput1,
+		      V4L2DeviceFormat *formatFrame,
+		      V4L2DeviceFormat *formatIr);
 
 	int start();
 	int stop();
 
-	int enableLinks(bool enable);
+	int enableLinks(bool input1, bool frame, bool ir,
+			bool params, bool stats);
 
 	std::unique_ptr<V4L2Subdevice> isp_;
 	std::unique_ptr<V4L2VideoDevice> input0_;
@@ -55,45 +61,14 @@ public:
 	std::vector<std::unique_ptr<FrameBuffer>> paramsBuffers_;
 	std::vector<std::unique_ptr<FrameBuffer>> statsBuffers_;
 
-	static std::string kDriverName()
-	{
-		return "neoisp";
-	}
-
-	static std::string kSDevNeoEntityName()
-	{
-		return "neoisp";
-	}
-
-	static std::string kVDevInput0EntityName()
-	{
-		return "neoisp-input0";
-	}
-
-	static std::string kVDevInput1EntityName()
-	{
-		return "neoisp-input1";
-	}
-
-	static std::string kVDevEntityParamsName()
-	{
-		return "neoisp-params";
-	}
-
-	static std::string kVDevEntityFrameName()
-	{
-		return "neoisp-frame";
-	}
-
-	static std::string kVDevEntityIrName()
-	{
-		return "neoisp-ir";
-	}
-
-	static std::string kVDevEntityStatsName()
-	{
-		return "neoisp-stats";
-	}
+	static std::string kDriverName() { return "neoisp"; }
+	static std::string kSDevNeoEntityName() { return "neoisp"; }
+	static std::string kVDevInput0EntityName() { return "neoisp-input0"; }
+	static std::string kVDevInput1EntityName() { return "neoisp-input1"; }
+	static std::string kVDevEntityParamsName() { return "neoisp-params"; }
+	static std::string kVDevEntityFrameName() { return "neoisp-frame"; }
+	static std::string kVDevEntityIrName() { return "neoisp-ir"; }
+	static std::string kVDevEntityStatsName() { return "neoisp-stats"; }
 
 	std::string logPrefix() const
 	{
@@ -124,24 +99,13 @@ private:
 		      const std::string &sink, unsigned int sinkPad,
 		      bool enable);
 	int configureVideoDevice(V4L2VideoDevice *dev, unsigned int pad,
-				 V4L2DeviceFormat &format);
+				 V4L2DeviceFormat *format);
 	int configureVideoDeviceMeta(V4L2VideoDevice *dev,
 				     unsigned int pad, uint32_t fourcc);
 
-	bool padActiveInput1() const
-	{
-		return configInput1_;
-	}
-
-	bool padActiveFrame() const
-	{
-		return configFrame_;
-	}
-
-	bool padActiveIr() const
-	{
-		return configIr_;
-	}
+	bool padActiveInput1() const { return configInput1_; }
+	bool padActiveFrame() const { return configFrame_; }
+	bool padActiveIr() const { return configIr_; }
 
 	unsigned int index_;
 	MediaDevice *media_ = nullptr;

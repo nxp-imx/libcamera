@@ -19,7 +19,7 @@
 
 namespace libcamera {
 
-LOG_DECLARE_CATEGORY(NxpNeo)
+LOG_DECLARE_CATEGORY(NxpNeoPipe)
 
 NxpNeoFrames::NxpNeoFrames()
 {
@@ -76,27 +76,27 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly,
 	FrameBuffer *statsBuffer = nullptr;
 
 	if (availableInput0Buffers_.empty()) {
-		LOG(NxpNeo, Warning) << "Input0 buffer underrun";
+		LOG(NxpNeoPipe, Warning) << "Input0 buffer underrun";
 		return nullptr;
 	}
 
 	if (hasInput1_ && availableInput1Buffers_.empty()) {
-		LOG(NxpNeo, Warning) << "Input1 buffer underrun";
+		LOG(NxpNeoPipe, Warning) << "Input1 buffer underrun";
 		return nullptr;
 	}
 
 	if (hasEmbedded_ && availableEmbeddedBuffers_.empty()) {
-		LOG(NxpNeo, Warning) << "Input1 buffer underrun";
+		LOG(NxpNeoPipe, Warning) << "Input1 buffer underrun";
 		return nullptr;
 	}
 
 	if (availableParamsBuffers_.empty()) {
-		LOG(NxpNeo, Warning) << "Parameters buffer underrun";
+		LOG(NxpNeoPipe, Warning) << "Parameters buffer underrun";
 		return nullptr;
 	}
 
 	if (availableStatsBuffers_.empty()) {
-		LOG(NxpNeo, Warning) << "Statistics buffer underrun";
+		LOG(NxpNeoPipe, Warning) << "Statistics buffer underrun";
 		return nullptr;
 	}
 
@@ -186,7 +186,7 @@ NxpNeoFrames::Info *NxpNeoFrames::find(unsigned int id)
 	if (itInfo != frameInfo_.end())
 		return itInfo->second.get();
 
-	LOG(NxpNeo, Info) << "Can't find tracking information for frame " << id;
+	LOG(NxpNeoPipe, Info) << "Can't find tracking information for frame " << id;
 
 	return nullptr;
 }
@@ -206,7 +206,7 @@ NxpNeoFrames::Info *NxpNeoFrames::find(FrameBuffer *buffer)
 			return info;
 	}
 
-	LOG(NxpNeo, Info) << "Can't find tracking information from buffer";
+	LOG(NxpNeoPipe, Info) << "Can't find tracking information from buffer";
 
 	return nullptr;
 }

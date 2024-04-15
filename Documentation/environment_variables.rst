@@ -32,15 +32,25 @@ LIBCAMERA_IPA_FORCE_ISOLATION
 
    Example value: ``1``
 
+LIBCAMERA_IPA_DISABLE_ISOLATION
+   When set to a non-empty string, disable process isolation of all IPA modules.
+   If isolation is disabled, all IPA modules run in non-isolated mode and
+   the environment variable LIBCAMERA_IPA_FORCE_ISOLATION is not taking effect.
+
+   Example value: ``1``
+
 LIBCAMERA_IPA_MODULE_PATH
    Define custom search locations for IPA modules (`more <IPA module_>`__).
 
    Example value: ``${HOME}/.libcamera/lib:/opt/libcamera/vendor/lib``
 
 LIBCAMERA_PIPELINES_MATCH_LIST
-   Define ordered list of pipelines to be used to match the media devices.
+   Define an ordered list of pipeline names to be used to match the media
+   devices in the system. The pipeline handler names used to populate the
+   variable are the ones passed to the REGISTER_PIPELINE_HANDLER() macro in the
+   source code.
 
-   Example value: ``PipelineHandlerRkISP1,SimplePipelineHandler``
+   Example value: ``rkisp1,simple``
 
 LIBCAMERA_RPI_CONFIG_FILE
    Define a custom configuration file to use in the Raspberry Pi pipeline handler.

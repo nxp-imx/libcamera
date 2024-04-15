@@ -32,28 +32,13 @@ public:
 		  isiPipe_(pipe), mbusCode_(code), embeddedLines_(lines) {}
 	virtual ~CameraMediaStream() {}
 
-	const std::vector<StreamLink> &streamLinks() const
-	{
-		return streamLinks_;
-	}
-
-	unsigned int pipe() const
-	{
-		return isiPipe_;
-	}
-
+	const std::vector<StreamLink> &streamLinks() const { return streamLinks_; }
+	unsigned int pipe() const { return isiPipe_; }
 	std::string toString() const;
 
 	/* \todo remove those methods */
-	unsigned int mbusCode() const
-	{
-		return mbusCode_;
-	}
-
-	unsigned int embeddedLines() const
-	{
-		return embeddedLines_;
-	}
+	unsigned int mbusCode() const { return mbusCode_; }
+	unsigned int embeddedLines() const { return embeddedLines_; }
 
 private:
 	std::vector<StreamLink> streamLinks_;
@@ -71,20 +56,9 @@ public:
 	virtual ~CameraInfo() {}
 
 	bool hasStream(unsigned int id) const;
-	bool hasStreamInput0() const
-	{
-		return hasStream(STREAM_INPUT0);
-	}
-
-	bool hasStreamInput1() const
-	{
-		return hasStream(STREAM_INPUT1);
-	}
-
-	bool hasStreamEmbedded() const
-	{
-		return hasStream(STREAM_EMBEDDED);
-	}
+	bool hasStreamInput0() const { return hasStream(STREAM_INPUT0); }
+	bool hasStreamInput1() const { return hasStream(STREAM_INPUT1); }
+	bool hasStreamEmbedded() const { return hasStream(STREAM_EMBEDDED); }
 
 	const CameraMediaStream *getStream(unsigned int id) const
 	{
@@ -93,20 +67,10 @@ public:
 		else
 			return nullptr;
 	}
-	const CameraMediaStream *getStreamInput0() const
-	{
-		return getStream(STREAM_INPUT0);
-	}
 
-	const CameraMediaStream *getStreamInput1() const
-	{
-		return getStream(STREAM_INPUT1);
-	}
-
-	const CameraMediaStream *getStreamEmbedded() const
-	{
-		return getStream(STREAM_EMBEDDED);
-	}
+	const CameraMediaStream *getStreamInput0() const { return getStream(STREAM_INPUT0); }
+	const CameraMediaStream *getStreamInput1() const { return getStream(STREAM_INPUT1); }
+	const CameraMediaStream *getStreamEmbedded() const { return getStream(STREAM_EMBEDDED); }
 
 private:
 	enum {

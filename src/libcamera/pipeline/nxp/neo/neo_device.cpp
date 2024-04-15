@@ -27,7 +27,7 @@
 
 namespace libcamera {
 
-LOG_DEFINE_CATEGORY(NeoDev)
+LOG_DEFINE_CATEGORY(NxpNeoDev)
 
 /**
  * \brief Initialize components of the NEO instance
@@ -53,49 +53,49 @@ int NeoDevice::init(MediaDevice *media)
 	isp_ = V4L2Subdevice::fromEntityName(media, kSDevNeoEntityName());
 	ret = isp_->open();
 	if (ret) {
-		LOG(NeoDev, Error) << logPrefix() << "Failed to open NEO";
+		LOG(NxpNeoDev, Error) << logPrefix() << "Failed to open NEO";
 		return ret;
 	}
 
 	input0_ = V4L2VideoDevice::fromEntityName(media, kVDevInput0EntityName());
 	ret = input0_->open();
 	if (ret) {
-		LOG(NeoDev, Error) << logPrefix() << "Failed to open NEO input0";
+		LOG(NxpNeoDev, Error) << logPrefix() << "Failed to open NEO input0";
 		return ret;
 	}
 
 	input1_ = V4L2VideoDevice::fromEntityName(media, kVDevInput1EntityName());
 	ret = input1_->open();
 	if (ret) {
-		LOG(NeoDev, Error) << logPrefix() << "Failed to open NEO input1";
+		LOG(NxpNeoDev, Error) << logPrefix() << "Failed to open NEO input1";
 		return ret;
 	}
 
 	params_ = V4L2VideoDevice::fromEntityName(media, kVDevEntityParamsName());
 	ret = params_->open();
 	if (ret) {
-		LOG(NeoDev, Error) << logPrefix() << "Failed to open NEO params";
+		LOG(NxpNeoDev, Error) << logPrefix() << "Failed to open NEO params";
 		return ret;
 	}
 
 	frame_ = V4L2VideoDevice::fromEntityName(media, kVDevEntityFrameName());
 	ret = frame_->open();
 	if (ret) {
-		LOG(NeoDev, Error) << logPrefix() << "Failed to open NEO frame";
+		LOG(NxpNeoDev, Error) << logPrefix() << "Failed to open NEO frame";
 		return ret;
 	}
 
 	ir_ = V4L2VideoDevice::fromEntityName(media, kVDevEntityIrName());
 	ret = ir_->open();
 	if (ret) {
-		LOG(NeoDev, Error) << logPrefix() << "Failed to open NEO ir";
+		LOG(NxpNeoDev, Error) << logPrefix() << "Failed to open NEO ir";
 		return ret;
 	}
 
 	stats_ = V4L2VideoDevice::fromEntityName(media, kVDevEntityStatsName());
 	ret = stats_->open();
 	if (ret) {
-		LOG(NeoDev, Error) << logPrefix() << "Failed to open NEO stats";
+		LOG(NxpNeoDev, Error) << logPrefix() << "Failed to open NEO stats";
 		return ret;
 	}
 
@@ -123,7 +123,7 @@ int NeoDevice::allocateBuffers(unsigned int bufferCount)
 	/* Share buffers between ISI outputs and NEO input0/input1 inputs. */
 	ret = input0_->importBuffers(bufferCount);
 	if (ret) {
-		LOG(NeoDev, Error)
+		LOG(NxpNeoDev, Error)
 			<< logPrefix()
 			<< "Failed to import NEO input0 input buffers";
 		return ret;
@@ -132,7 +132,7 @@ int NeoDevice::allocateBuffers(unsigned int bufferCount)
 	if (padActiveInput1()) {
 		ret = input1_->importBuffers(bufferCount);
 		if (ret) {
-			LOG(NeoDev, Error)
+			LOG(NxpNeoDev, Error)
 				<< logPrefix()
 				<< "Failed to import NEO input1 input buffers";
 			return ret;
@@ -142,7 +142,7 @@ int NeoDevice::allocateBuffers(unsigned int bufferCount)
 	/* Params/stats buffers allocated internally */
 	ret = params_->allocateBuffers(bufferCount, &paramsBuffers_);
 	if (ret < 0) {
-		LOG(NeoDev, Error)
+		LOG(NxpNeoDev, Error)
 			<< logPrefix()
 			<< "Failed to allocate NEO params buffers";
 		goto error;
@@ -150,7 +150,7 @@ int NeoDevice::allocateBuffers(unsigned int bufferCount)
 
 	ret = stats_->allocateBuffers(bufferCount, &statsBuffers_);
 	if (ret < 0) {
-		LOG(NeoDev, Error)
+		LOG(NxpNeoDev, Error)
 			<< logPrefix()
 			<< "Failed to allocate NEO stats buffers";
 		goto error;
@@ -160,7 +160,7 @@ int NeoDevice::allocateBuffers(unsigned int bufferCount)
 	if (padActiveFrame()) {
 		ret = frame_->importBuffers(bufferCount);
 		if (ret < 0) {
-			LOG(NeoDev, Error)
+			LOG(NxpNeoDev, Error)
 				<< logPrefix()
 				<< "Failed to import NEO frame buffers";
 			goto error;
@@ -170,7 +170,7 @@ int NeoDevice::allocateBuffers(unsigned int bufferCount)
 	if (padActiveIr()) {
 		ret = ir_->importBuffers(bufferCount);
 		if (ret < 0) {
-			LOG(NeoDev, Error)
+			LOG(NxpNeoDev, Error)
 				<< logPrefix()
 				<< "Failed to import NEO ir buffers";
 			goto error;
@@ -197,34 +197,34 @@ void NeoDevice::freeBuffers()
 
 	ret = input0_->releaseBuffers();
 	if (ret)
-		LOG(NeoDev, Error)
+		LOG(NxpNeoDev, Error)
 			<< logPrefix()
 			<< "Failed to release NEO input0 buffers";
 
 	if (padActiveInput1()) {
 		ret = input1_->releaseBuffers();
 		if (ret)
-			LOG(NeoDev, Error)
+			LOG(NxpNeoDev, Error)
 				<< logPrefix()
 				<< "Failed to release NEO input1 buffers";
 	}
 
 	ret = params_->releaseBuffers();
 	if (ret)
-		LOG(NeoDev, Error)
+		LOG(NxpNeoDev, Error)
 			<< logPrefix()
 			<< "Failed to release NEO params buffers";
 
 	ret = stats_->releaseBuffers();
 	if (ret)
-		LOG(NeoDev, Error)
+		LOG(NxpNeoDev, Error)
 			<< logPrefix()
 			<< "Failed to release NEO stats buffers";
 
 	if (padActiveFrame()) {
 		ret = frame_->releaseBuffers();
 		if (ret)
-			LOG(NeoDev, Error)
+			LOG(NxpNeoDev, Error)
 				<< logPrefix()
 				<< "Failed to release NEO frame buffers";
 	}
@@ -232,7 +232,7 @@ void NeoDevice::freeBuffers()
 	if (padActiveIr()) {
 		ret = ir_->releaseBuffers();
 		if (ret)
-			LOG(NeoDev, Error)
+			LOG(NxpNeoDev, Error)
 				<< logPrefix()
 				<< "Failed to release NEO ir buffers";
 	}
@@ -250,7 +250,7 @@ int NeoDevice::start()
 	if (padActiveFrame()) {
 		ret = frame_->streamOn();
 		if (ret) {
-			LOG(NeoDev, Error)
+			LOG(NxpNeoDev, Error)
 				<< logPrefix()
 				<< "Failed to start NEO frame";
 			return ret;
@@ -260,7 +260,7 @@ int NeoDevice::start()
 	if (padActiveIr()) {
 		ret = ir_->streamOn();
 		if (ret) {
-			LOG(NeoDev, Error)
+			LOG(NxpNeoDev, Error)
 				<< logPrefix()
 				<< "Failed to start NEO ir";
 			return ret;
@@ -270,7 +270,7 @@ int NeoDevice::start()
 	/* Start the NEO params and stats devices. */
 	ret = params_->streamOn();
 	if (ret) {
-		LOG(NeoDev, Error)
+		LOG(NxpNeoDev, Error)
 			<< logPrefix()
 			<< "Failed to start NEO params";
 		return ret;
@@ -278,7 +278,7 @@ int NeoDevice::start()
 
 	ret = stats_->streamOn();
 	if (ret) {
-		LOG(NeoDev, Error)
+		LOG(NxpNeoDev, Error)
 			<< logPrefix()
 			<< "Failed to start NEO stats";
 		return ret;
@@ -287,7 +287,7 @@ int NeoDevice::start()
 	/* Start the NEO input video devices. */
 	ret = input0_->streamOn();
 	if (ret) {
-		LOG(NeoDev, Error)
+		LOG(NxpNeoDev, Error)
 			<< logPrefix()
 			<< "Failed to start NEO input0";
 		return ret;
@@ -296,7 +296,7 @@ int NeoDevice::start()
 	if (padActiveInput1()) {
 		ret = input1_->streamOn();
 		if (ret) {
-			LOG(NeoDev, Error)
+			LOG(NxpNeoDev, Error)
 				<< logPrefix()
 				<< "Failed to start NEO input1";
 			return ret;
@@ -305,7 +305,7 @@ int NeoDevice::start()
 
 	ret = isp_->setFrameStartEnabled(true);
 	if (ret) {
-		LOG(NeoDev, Error) << "FrameStart failure ret";
+		LOG(NxpNeoDev, Error) << "FrameStart failure ret";
 		return ret;
 	}
 
@@ -333,7 +333,7 @@ int NeoDevice::stop()
 		ret |= input1_->streamOff();
 
 	if (ret)
-		LOG(NeoDev, Error) << logPrefix() << "Failed to stop";
+		LOG(NxpNeoDev, Error) << logPrefix() << "Failed to stop";
 
 	return ret;
 }
@@ -354,7 +354,7 @@ int NeoDevice::linkSetup(const std::string &source, unsigned int sourcePad,
 
 	MediaLink *link = media_->link(source, sourcePad, sink, sinkPad);
 	if (!link) {
-		LOG(NeoDev, Error)
+		LOG(NxpNeoDev, Error)
 			<< logPrefix()
 			<< "Failed to get link: '" << source << "':"
 			<< sourcePad << " -> '" << sink << "':" << sinkPad;
@@ -363,7 +363,7 @@ int NeoDevice::linkSetup(const std::string &source, unsigned int sourcePad,
 
 	ret = link->setEnabled(enable);
 	if (ret) {
-		LOG(NeoDev, Error)
+		LOG(NxpNeoDev, Error)
 			<< logPrefix()
 			<< "Failed to enable/disable link (" << enable
 			<< ") : '" << source << "':"
@@ -375,52 +375,51 @@ int NeoDevice::linkSetup(const std::string &source, unsigned int sourcePad,
 }
 
 /**
- * \brief Enable or disable all media links in the NEO instance to prepare
- * for capture operations
+ * \brief Selectively enable or disable the media links of the NEO device
+ * \param[in] input1 The input1 link state (true to enable)
+ * \param[in] frame The frame link enablement state (true to enable)
+ * \param[in] ir The Ir link enablement state (true to enable)
+ * \param[in] params The params metadata link state (true to enable)
+ * \param[in] stats The stats metadata link state (true to enable)
+ *
+ * Neo ISP media controller device has 4 video and 2 meta devices nodes:
+ * - 2 video input (output) devices: input0, input1
+ * - 2 video output (capture) devices: frame, ir
+ * - 1 metadata input (output) device: params
+ * - 1 metadata output (capture) device: stats
+ * input0 video device link is immutable, other links are enabled or disabled
+ * depending on the required ISP usage.
  *
  * \return 0 on success or a negative error code otherwise
  */
-int NeoDevice::enableLinks(bool enable)
+int NeoDevice::enableLinks(bool input1, bool frame, bool ir,
+			   bool params, bool stats)
 {
-	int ret;
+	int ret = 0;
 
-	ret = linkSetup(kVDevInput0EntityName(), 0,
-			kSDevNeoEntityName(), PAD_INPUT0, enable);
+	ret = linkSetup(kVDevInput1EntityName(), 0,
+			kSDevNeoEntityName(), PAD_INPUT1, input1);
 	if (ret)
 		return ret;
 
-	if (padActiveInput1() || !enable) {
-		ret = linkSetup(kVDevInput1EntityName(), 0,
-				kSDevNeoEntityName(), PAD_INPUT1, enable);
-		if (ret)
-			return ret;
-	}
+	ret = linkSetup(kSDevNeoEntityName(), PAD_FRAME,
+			kVDevEntityFrameName(), 0, frame);
+	if (ret)
+		return ret;
+
+	ret = linkSetup(kSDevNeoEntityName(), PAD_IR,
+			kVDevEntityIrName(), 0, ir);
+	if (ret)
+		return ret;
 
 	ret = linkSetup(kVDevEntityParamsName(), 0,
-			kSDevNeoEntityName(), PAD_PARAMS, enable);
+			kSDevNeoEntityName(), PAD_PARAMS, params);
 	if (ret)
 		return ret;
-
-	if (padActiveFrame() || !enable) {
-		ret = linkSetup(kSDevNeoEntityName(), PAD_FRAME,
-				kVDevEntityFrameName(), 0, enable);
-		if (ret)
-			return ret;
-	}
-
-	if (padActiveIr() || !enable) {
-		ret = linkSetup(kSDevNeoEntityName(), PAD_IR,
-				kVDevEntityIrName(), 0, enable);
-		if (ret)
-			return ret;
-	}
 
 	ret = linkSetup(kSDevNeoEntityName(), PAD_STATS,
-			kVDevEntityStatsName(), 0, enable);
-	if (ret)
-		return ret;
-
-	return 0;
+			kVDevEntityStatsName(), 0, stats);
+	return ret;
 }
 
 /**
@@ -432,18 +431,18 @@ int NeoDevice::enableLinks(bool enable)
  * \return 0 on success or a negative error code otherwise
  */
 int NeoDevice::configureVideoDevice(V4L2VideoDevice *dev, unsigned int pad,
-				    V4L2DeviceFormat &format)
+				    V4L2DeviceFormat *format)
 {
 	int ret;
 
-	LOG(NeoDev, Debug)
+	LOG(NxpNeoDev, Debug)
 		<< logPrefix()
 		<< "Configure video device (" << pad << ") format "
-		<< format.toString();
+		<< format->toString();
 
-	ret = dev->setFormat(&format);
+	ret = dev->setFormat(format);
 	if (ret) {
-		LOG(NeoDev, Error)
+		LOG(NxpNeoDev, Error)
 			<< logPrefix()
 			<< "Failed to set device pad format";
 		return ret;
@@ -469,14 +468,14 @@ int NeoDevice::configureVideoDeviceMeta(V4L2VideoDevice *dev,
 	devFormat.fourcc = V4L2PixelFormat(fourcc);
 	ret = dev->setFormat(&devFormat);
 	if (ret) {
-		LOG(NeoDev, Error)
+		LOG(NxpNeoDev, Error)
 			<< logPrefix()
 			<< "Failed to set format for meta video device pad ("
 			<< pad << ")";
 		return ret;
 	}
 
-	LOG(NeoDev, Debug)
+	LOG(NxpNeoDev, Debug)
 		<< logPrefix()
 		<< "Configured meta video device format (" << pad << ") "
 		<< devFormat;
@@ -484,9 +483,9 @@ int NeoDevice::configureVideoDeviceMeta(V4L2VideoDevice *dev,
 	return 0;
 }
 
-
 /**
  * \brief Configure NEO video devices according to their formats
+ * \param[in] pipeConfig The ISP pipeline configuration
  * \param[in] formatInput0 INPUT0 video device format
  * \param[in] formatInput1 INPUT1 video device format
  * \param[in] formatFrame FRAME device node format
@@ -494,10 +493,11 @@ int NeoDevice::configureVideoDeviceMeta(V4L2VideoDevice *dev,
  *
  * \return 0 on success or a negative error code otherwise
  */
-int NeoDevice::configure(V4L2DeviceFormat &formatInput0,
-			 V4L2DeviceFormat &formatInput1,
-			 V4L2DeviceFormat &formatFrame,
-			 V4L2DeviceFormat &formatIr)
+int NeoDevice::configure(PipeConfig &pipeConfig,
+			 V4L2DeviceFormat *formatInput0,
+			 V4L2DeviceFormat *formatInput1,
+			 V4L2DeviceFormat *formatFrame,
+			 V4L2DeviceFormat *formatIr)
 {
 	int ret;
 
@@ -507,20 +507,22 @@ int NeoDevice::configure(V4L2DeviceFormat &formatInput0,
 #define V4L2_META_FMT_NEO_ISP_STATS v4l2_fourcc('N', 'N', 'I', 'S')
 #endif
 
-	configInput1_ = formatInput1.fourcc.isValid();
-	configFrame_ = formatFrame.fourcc.isValid();
-	configIr_ = formatIr.fourcc.isValid();
-
 	/*
-	 * \todo NEO driver currently defines immutable links.
-	 * When that is changed, dynamically enable relevant links to match
-	 * configuration and optional usage of INPUT1, INPUT0 and IR.
+	 * Record optional (mutable) pads usage for later reference and
+	 * configure their links accordingly.
+	 * Stats and params pads are always enabled for IPA operation.
 	 */
+	configInput1_ = formatInput1->fourcc.isValid();
+	configFrame_ = formatFrame->fourcc.isValid();
+	configIr_ = formatIr->fourcc.isValid();
 
-	/*
-	enableLinks(false);
-	enableLinks(true);
-	*/
+	bool enableInput1 = padActiveInput1();
+	bool enableFrame = padActiveFrame();
+	bool enableIr = padActiveIr();
+	bool enableParams = true;
+	bool enableStats = true;
+
+	enableLinks(enableInput1, enableFrame, enableIr, enableParams, enableStats);
 
 	ret = configureVideoDevice(input0_.get(), PAD_INPUT0, formatInput0);
 	if (ret)
@@ -554,7 +556,19 @@ int NeoDevice::configure(V4L2DeviceFormat &formatInput0,
 	if (ret)
 		return ret;
 
-	return 0;
+	/* Crop the top embedded data lines if any */
+	Size sizeInput = formatInput0->size;
+	int top = pipeConfig.topLines;
+	Rectangle rect{ 0, top, sizeInput.width, sizeInput.height - top };
+	ret = input0_->setSelection(V4L2_SEL_TGT_CROP, &rect);
+
+	if (padActiveInput1()) {
+		sizeInput = formatInput1->size;
+		rect = Rectangle{ 0, top, sizeInput.width, sizeInput.height - top };
+		ret |= input1_->setSelection(V4L2_SEL_TGT_CROP, &rect);
+	}
+
+	return ret;
 }
 
 const std::vector<V4L2PixelFormat> &NeoDevice::frameFormats()
@@ -563,7 +577,7 @@ const std::vector<V4L2PixelFormat> &NeoDevice::frameFormats()
 		V4L2PixelFormat(V4L2_PIX_FMT_RGB24),
 		V4L2PixelFormat(V4L2_PIX_FMT_BGR24),
 		V4L2PixelFormat(V4L2_PIX_FMT_RGBX32),
-		V4L2PixelFormat(V4L2_PIX_FMT_BGRX32),
+		V4L2PixelFormat(V4L2_PIX_FMT_XBGR32),
 		V4L2PixelFormat(V4L2_PIX_FMT_YUVX32),
 		V4L2PixelFormat(V4L2_PIX_FMT_YUYV),
 		V4L2PixelFormat(V4L2_PIX_FMT_UYVY),
@@ -580,6 +594,7 @@ const std::vector<V4L2PixelFormat> &NeoDevice::irFormats()
 {
 	static const std::vector<V4L2PixelFormat> formats = {
 		V4L2PixelFormat(V4L2_PIX_FMT_GREY),
+		V4L2PixelFormat(V4L2_PIX_FMT_Y16),
 	};
 
 	return formats;

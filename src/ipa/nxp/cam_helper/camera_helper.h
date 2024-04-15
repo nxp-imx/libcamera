@@ -48,16 +48,14 @@ extern const ControlIdMap controlIdMap;
 class CameraHelper : public ipa::CameraSensorHelper
 {
 public:
-	CameraHelper() = default;
+	CameraHelper();
 	virtual ~CameraHelper() = default;
 
 	virtual uint32_t controlListGetExposure(const ControlList *ctrls) const;
 	virtual uint32_t controlListGetGain(const ControlList *ctrls) const;
 
-	virtual void controlListSetExposure(
-		ControlList *ctrls, uint32_t exposure) const;
-	virtual void controlListSetGain(
-		ControlList *ctrls, uint32_t gainCode) const;
+	virtual void controlListSetAGC(
+		ControlList *ctrls, uint32_t exposure, double gain) const;
 
 	virtual void controlInfoMapGetExposureRange(
 		const ControlInfoMap *ctrls, uint32_t *minExposure,
@@ -67,19 +65,25 @@ public:
 		const ControlInfoMap *ctrls, uint32_t *minGainCode,
 		uint32_t *maxGainCode, uint32_t *defGainCode = nullptr) const;
 
-	virtual std::map<int32_t, std::pair<uint32_t, bool>> delayedControlParams() const;
+	struct Attributes {
+		struct MdParams {
+			uint32_t topLines;
+			ControlInfoMap controls;
+		};
 
-	struct MdParams {
-		uint32_t topLines;
-		ControlInfoMap controls;
+		std::map<int32_t, std::pair<uint32_t, bool>> delayedControlParams;
+		struct MdParams mdParams;
+		bool rgbIr;
 	};
-	virtual const MdParams *embeddedParams() const;
+
+	virtual const Attributes *attributes() const { return &attributes_; };
+
 	virtual void parseEmbedded(Span<const uint8_t> buffer,
 				   ControlList *mdControls);
 
 protected:
 	virtual bool controlListHasId(const ControlList *ctrls, unsigned int id) const;
-	MdParams mdParams_ = {};
+	Attributes attributes_;
 
 private:
 	LIBCAMERA_DISABLE_COPY_AND_MOVE(CameraHelper)

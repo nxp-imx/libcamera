@@ -33,7 +33,7 @@ namespace ipa::nxpneo::algorithms {
  * \brief A Grey world white balance correction algorithm
  */
 
-LOG_DEFINE_CATEGORY(NxpNeoAwb)
+LOG_DEFINE_CATEGORY(NxpNeoAlgoAwb)
 
 /**
  * \class Awb
@@ -89,7 +89,7 @@ void Awb::queueRequest(IPAContext &context,
 	if (awbEnable && *awbEnable != awb.autoEnabled) {
 		awb.autoEnabled = *awbEnable;
 
-		LOG(NxpNeoAwb, Debug)
+		LOG(NxpNeoAlgoAwb, Debug)
 			<< (*awbEnable ? "Enabling" : "Disabling") << " AWB";
 	}
 
@@ -98,7 +98,7 @@ void Awb::queueRequest(IPAContext &context,
 		awb.gains.manual.red = (*colourGains)[0];
 		awb.gains.manual.blue = (*colourGains)[1];
 
-		LOG(NxpNeoAwb, Debug)
+		LOG(NxpNeoAlgoAwb, Debug)
 			<< "Set colour gains to red: " << awb.gains.manual.red
 			<< ", blue: " << awb.gains.manual.blue;
 	}
@@ -244,7 +244,7 @@ void Awb::generateBlocks(const neoisp_meta_stats_s *stats)
 
 void Awb::awbGreyWorld(IPAActiveState &activeState, IPAFrameContext &frameContext)
 {
-	LOG(NxpNeoAwb, Debug) << "Grey world AWB";
+	LOG(NxpNeoAlgoAwb, Debug) << "Grey world AWB";
 	/*
 	 * Make a separate list of the derivatives for each of red and blue, so
 	 * that we can sort them to exclude the extreme gains.
@@ -323,7 +323,7 @@ void Awb::process(IPAContext &context,
 					      static_cast<float>(frameContext.awb.gains.blue) });
 	metadata.set(controls::ColourTemperature, frameContext.awb.temperatureK);
 
-	LOG(NxpNeoAwb, Debug) << std::showpoint
+	LOG(NxpNeoAlgoAwb, Debug) << std::showpoint
 			      << "AWB Gains [" << activeState.awb.gains.automatic.red << ", "
 			      << activeState.awb.gains.automatic.green << ", "
 			      << activeState.awb.gains.automatic.blue << "], temp "

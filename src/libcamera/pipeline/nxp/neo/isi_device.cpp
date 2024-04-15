@@ -28,7 +28,7 @@
 
 namespace libcamera {
 
-LOG_DEFINE_CATEGORY(IsiDev)
+LOG_DEFINE_CATEGORY(NxpNeoIsiDev)
 
 /*
  * -------------------------------- ISIPipe --------------------------------
@@ -53,7 +53,7 @@ int ISIPipe::init(const MediaDevice *media)
 
 	ret = pipe_->open();
 	if (ret)
-		LOG(IsiDev, Debug) << logPrefix() << "failed to open subdev";
+		LOG(NxpNeoIsiDev, Debug) << logPrefix() << "failed to open subdev";
 
 	std::string videoDevEntityName = ISIDevice::kVDevPipeEntityName(index_);
 	output_ = V4L2VideoDevice::fromEntityName(media, videoDevEntityName);
@@ -62,7 +62,7 @@ int ISIPipe::init(const MediaDevice *media)
 
 	ret = output_->open();
 	if (ret)
-		LOG(IsiDev, Debug) << logPrefix() << "failed to open videodev";
+		LOG(NxpNeoIsiDev, Debug) << logPrefix() << "failed to open videodev";
 
 	return ret;
 }
@@ -77,7 +77,7 @@ int ISIPipe::exportBuffers(unsigned int count,
 			   std::vector<std::unique_ptr<FrameBuffer>> *buffers)
 {
 	if (!stateConfigured()) {
-		LOG(IsiDev, Error)
+		LOG(NxpNeoIsiDev, Error)
 			<< logPrefix()
 			<< "Export buffer while not configured "
 			<< "(" << getState() << ")";
@@ -95,7 +95,7 @@ int ISIPipe::start()
 	int ret;
 
 	if (!stateConfigured()) {
-		LOG(IsiDev, Error)
+		LOG(NxpNeoIsiDev, Error)
 			<< logPrefix()
 			<< "Starting while not in configured state"
 			<< "(" << getState() << ")";
@@ -118,7 +118,7 @@ int ISIPipe::start()
 int ISIPipe::stop()
 {
 	if (!stateActive()) {
-		LOG(IsiDev, Error)
+		LOG(NxpNeoIsiDev, Error)
 			<< logPrefix()
 			<< "Stopping while not active "
 			<< "(" << getState() << ")";
@@ -144,18 +144,18 @@ int ISIPipe::configure(const V4L2SubdeviceFormat &sinkFormat,
 	int ret;
 
 	if (!(stateIdle() || stateConfigured())) {
-		LOG(IsiDev, Error)
+		LOG(NxpNeoIsiDev, Error)
 			<< logPrefix()
 			<< "Can't be configured in state " << getState();
 		return -ENODEV;
 	}
 
 	*sourceFormat = {};
-	uint32_t code = sinkFormat.mbus_code;
+	uint32_t code = sinkFormat.code;
 
 	const std::map<uint32_t, V4L2PixelFormat> &formats = mediaBusToPixelFormats();
 	if (!formats.count(code)) {
-		LOG(IsiDev, Error)
+		LOG(NxpNeoIsiDev, Error)
 			<< logPrefix()
 			<< "mbus code " << code << " not supported by ISI ";
 		return -ENOTSUP;
@@ -167,7 +167,7 @@ int ISIPipe::configure(const V4L2SubdeviceFormat &sinkFormat,
 	/* \todo Set stride and format. */
 	ret = output_->setFormat(sourceFormat);
 	if (ret) {
-		LOG(IsiDev, Error)
+		LOG(NxpNeoIsiDev, Error)
 			<< logPrefix()
 			<< "Failed to configure video device";
 		return ret;
@@ -175,7 +175,7 @@ int ISIPipe::configure(const V4L2SubdeviceFormat &sinkFormat,
 
 	setState(kStateConfigured);
 
-	LOG(IsiDev, Debug)
+	LOG(NxpNeoIsiDev, Debug)
 		<< logPrefix() << " Video device configured "
 		<< " dev fmt " << sourceFormat->toString();
 
@@ -190,7 +190,7 @@ int ISIPipe::configure(const V4L2SubdeviceFormat &sinkFormat,
 int ISIPipe::allocateBuffers(unsigned int bufferCount)
 {
 	if (!stateConfigured()) {
-		LOG(IsiDev, Error)
+		LOG(NxpNeoIsiDev, Error)
 			<< logPrefix()
 			<< "Can't allocate buffers in state " << getState();
 		return -ENODEV;
@@ -198,13 +198,13 @@ int ISIPipe::allocateBuffers(unsigned int bufferCount)
 
 	int ret = output_->exportBuffers(bufferCount, &buffers_);
 	if (ret < 0) {
-		LOG(IsiDev, Error) << logPrefix() << "failed to export buffers";
+		LOG(NxpNeoIsiDev, Error) << logPrefix() << "failed to export buffers";
 		return ret;
 	}
 
 	ret = output_->importBuffers(bufferCount);
 	if (ret < 0) {
-		LOG(IsiDev, Error) << logPrefix() << "failed to import buffers";
+		LOG(NxpNeoIsiDev, Error) << logPrefix() << "failed to import buffers";
 		freeBuffers();
 		return ret;
 	}
@@ -218,7 +218,7 @@ int ISIPipe::allocateBuffers(unsigned int bufferCount)
 void ISIPipe::freeBuffers()
 {
 	if (!stateConfigured()) {
-		LOG(IsiDev, Error)
+		LOG(NxpNeoIsiDev, Error)
 			<< logPrefix()
 			<< "Can't deallocate buffers in state " << getState();
 		return;
@@ -227,7 +227,7 @@ void ISIPipe::freeBuffers()
 	buffers_.clear();
 
 	if (output_->releaseBuffers())
-		LOG(IsiDev, Error) << logPrefix() << "failed to free buffers";
+		LOG(NxpNeoIsiDev, Error) << logPrefix() << "failed to free buffers";
 }
 
 /**
@@ -307,10 +307,10 @@ int ISIDevice::init(const MediaDevice *media)
 		xbarSinkPads_++;
 	}
 	if (!xbarSinkPads_) {
-		LOG(IsiDev, Error) << "No sink pads detected";
+		LOG(NxpNeoIsiDev, Error) << "No sink pads detected";
 		return -ENODEV;
 	} else {
-		LOG(IsiDev, Debug) << xbarSinkPads_ << " sink pads detected";
+		LOG(NxpNeoIsiDev, Debug) << xbarSinkPads_ << " sink pads detected";
 	}
 
 	/*
@@ -328,10 +328,10 @@ int ISIDevice::init(const MediaDevice *media)
 	}
 
 	if (pipeEntries_.empty()) {
-		LOG(IsiDev, Error) << "Unable to enumerate pipes";
+		LOG(NxpNeoIsiDev, Error) << "Unable to enumerate pipes";
 		return -ENODEV;
 	} else {
-		LOG(IsiDev, Debug) << pipeEntries_.size() << " pipes enumerated";
+		LOG(NxpNeoIsiDev, Debug) << pipeEntries_.size() << " pipes enumerated";
 	}
 
 	return 0;
@@ -351,7 +351,7 @@ ISIPipe *ISIDevice::allocPipe()
 			       });
 
 	if (it == pipeEntries_.end()) {
-		LOG(IsiDev, Error) << "No more ISI channel available";
+		LOG(NxpNeoIsiDev, Error) << "No more ISI channel available";
 		return nullptr;
 	}
 
@@ -369,13 +369,13 @@ ISIPipe *ISIDevice::allocPipe()
 ISIPipe *ISIDevice::allocPipe(unsigned int index)
 {
 	if (index >= pipeEntries_.size()) {
-		LOG(IsiDev, Error) << "Invalid ISI channel " << index;
+		LOG(NxpNeoIsiDev, Error) << "Invalid ISI channel " << index;
 		return nullptr;
 	}
 
 	auto &pipeEntry = pipeEntries_[index];
 	if (std::get<1>(pipeEntry) == true) {
-		LOG(IsiDev, Error) << "ISI channel already allocated" << index;
+		LOG(NxpNeoIsiDev, Error) << "ISI channel already allocated" << index;
 		return nullptr;
 	}
 
@@ -400,18 +400,18 @@ void ISIDevice::freePipe(ISIPipe *pipe)
 			       });
 
 	if (it == pipeEntries_.end()) {
-		LOG(IsiDev, Error) << "Unknown pipe to free";
+		LOG(NxpNeoIsiDev, Error) << "Unknown pipe to free";
 		return;
 	}
 
 	if (!std::get<1>(*it)) {
-		LOG(IsiDev, Error)
+		LOG(NxpNeoIsiDev, Error)
 			<< "Pipe " << pipe->index() << "Already freed";
 		return;
 	}
 
 	if (pipe->stateActive()) {
-		LOG(IsiDev, Error)
+		LOG(NxpNeoIsiDev, Error)
 			<< "Can't free pipe " << pipe->index() << " while active";
 		return;
 	}
