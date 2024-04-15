@@ -109,6 +109,45 @@ void CameraManager::Private::createPipelineHandlers()
 	const std::vector<PipelineHandlerFactoryBase *> &factories =
 		PipelineHandlerFactoryBase::factories();
 
+	auto pipeMatch = [=](const PipelineHandlerFactoryBase *_factory) {
+		while (1) {
+			std::shared_ptr<PipelineHandler> pipe = _factory->create(o);
+			if (!pipe->match(enumerator_.get()))
+				break;
+
+			LOG(Camera, Debug)
+				<< "Pipeline handler \"" << _factory->name()
+				<< "\" matched";
+		}
+	};
+
+	/*
+	 * When a list of preferred pipelines is defined, iterate through the
+	 * ordered list to match the devices enumerated.
+	 * Otherwise, devices matching is done in no specific order with each
+	 * pipeline handler registered.
+	 */
+	const char *pipesLists =
+			utils::secure_getenv("LIBCAMERA_PIPELINES_MATCH_LIST");
+	if (pipesLists) {
+		for (const auto &pipeName : utils::split(pipesLists, ",")) {
+			if (pipeName.empty())
+				continue;
+
+			auto iter = std::find_if(factories.begin(),
+						 factories.end(),
+				[=](auto &f) { return (f->name() == pipeName); });
+
+			if (iter != factories.end()) {
+				LOG(Camera, Debug)
+					<< "Found pipeline handler from list '"
+					<< (*iter)->name() << "'";
+				pipeMatch(*iter);
+			}
+		}
+		return;
+	}
+
 	for (const PipelineHandlerFactoryBase *factory : factories) {
 		LOG(Camera, Debug)
 			<< "Found registered pipeline handler '"
@@ -117,15 +156,7 @@ void CameraManager::Private::createPipelineHandlers()
 		 * Try each pipeline handler until it exhaust
 		 * all pipelines it can provide.
 		 */
-		while (1) {
-			std::shared_ptr<PipelineHandler> pipe = factory->create(o);
-			if (!pipe->match(enumerator_.get()))
-				break;
-
-			LOG(Camera, Debug)
-				<< "Pipeline handler \"" << factory->name()
-				<< "\" matched";
-		}
+		pipeMatch(factory);
 	}
 }
 

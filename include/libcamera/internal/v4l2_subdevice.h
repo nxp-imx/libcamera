@@ -36,7 +36,7 @@ struct V4L2SubdeviceCapability final : v4l2_subdev_capability {
 	}
 	bool hasStreams() const
 	{
-		return capabilities & V4L2_SUBDEV_CAP_MPLEXED;
+		return capabilities & V4L2_SUBDEV_CAP_STREAMS;
 	}
 };
 
@@ -84,6 +84,9 @@ public:
 	int getFormat(unsigned int pad, V4L2SubdeviceFormat *format,
 		      Whence whence = ActiveFormat);
 	int setFormat(unsigned int pad, V4L2SubdeviceFormat *format,
+		      Whence whence = ActiveFormat);
+	int setFormat(unsigned int pad, unsigned int stream,
+		      V4L2SubdeviceFormat *format,
 		      Whence whence = ActiveFormat);
 
 	int getRouting(Routing *routing, Whence whence = ActiveFormat);

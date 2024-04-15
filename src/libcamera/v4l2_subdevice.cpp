@@ -132,6 +132,15 @@ const std::map<uint32_t, V4L2SubdeviceFormatInfo> formatInfoMap = {
 	{ MEDIA_BUS_FMT_SGBRG12_1X12, { 12, "SGBRG12_1X12", PixelFormatInfo::ColourEncodingRAW } },
 	{ MEDIA_BUS_FMT_SGRBG12_1X12, { 12, "SGRBG12_1X12", PixelFormatInfo::ColourEncodingRAW } },
 	{ MEDIA_BUS_FMT_SRGGB12_1X12, { 12, "SRGGB12_1X12", PixelFormatInfo::ColourEncodingRAW } },
+	{ MEDIA_BUS_FMT_SBGGR14_1X14, { 14, "SBGGR14_1X14", PixelFormatInfo::ColourEncodingRAW } },
+	{ MEDIA_BUS_FMT_SGBRG14_1X14, { 14, "SGBRG14_1X14", PixelFormatInfo::ColourEncodingRAW } },
+	{ MEDIA_BUS_FMT_SGRBG14_1X14, { 14, "SGRBG14_1X14", PixelFormatInfo::ColourEncodingRAW } },
+	{ MEDIA_BUS_FMT_SRGGB14_1X14, { 14, "SRGGB14_1X14", PixelFormatInfo::ColourEncodingRAW } },
+	{ MEDIA_BUS_FMT_SBGGR16_1X16, { 16, "SBGGR16_1X16", PixelFormatInfo::ColourEncodingRAW } },
+	{ MEDIA_BUS_FMT_SGBRG16_1X16, { 16, "SGBRG16_1X16", PixelFormatInfo::ColourEncodingRAW } },
+	{ MEDIA_BUS_FMT_SGRBG16_1X16, { 16, "SGRBG16_1X16", PixelFormatInfo::ColourEncodingRAW } },
+	{ MEDIA_BUS_FMT_SRGGB16_1X16, { 16, "SRGGB16_1X16", PixelFormatInfo::ColourEncodingRAW } },
+
 	/* \todo Clarify colour encoding for HSV formats */
 	{ MEDIA_BUS_FMT_AHSV8888_1X32, { 32, "AHSV8888_1X32", PixelFormatInfo::ColourEncodingRGB } },
 	{ MEDIA_BUS_FMT_JPEG_1X8, { 8, "JPEG_1X8", PixelFormatInfo::ColourEncodingYUV } },
@@ -359,6 +368,21 @@ int V4L2Subdevice::open()
 		return ret;
 	}
 
+	/* If the subdev supports streams, enable the streams API. */
+	if (caps_.hasStreams()) {
+		struct v4l2_subdev_client_capability clientCaps{};
+		clientCaps.capabilities = V4L2_SUBDEV_CLIENT_CAP_STREAMS;
+
+		ret = ioctl(VIDIOC_SUBDEV_S_CLIENT_CAP, &clientCaps);
+		if (ret < 0) {
+			ret = -errno;
+			LOG(V4L2, Error)
+				<< "Unable to set client capabilities: "
+				<< strerror(-ret);
+			return ret;
+		}
+	}
+
 	return 0;
 }
 
@@ -543,6 +567,7 @@ int V4L2Subdevice::getFormat(unsigned int pad, V4L2SubdeviceFormat *format,
 /**
  * \brief Set an image format on one of the V4L2 subdevice pads
  * \param[in] pad The 0-indexed pad number the format is to be applied to
+ * \param[in] stream The 0-indexed stream number the format is to be applied to
  * \param[inout] format The image bus format to apply to the subdevice's pad
  * \param[in] whence The format to set, \ref V4L2Subdevice::ActiveFormat
  * "ActiveFormat" or \ref V4L2Subdevice::TryFormat "TryFormat"
@@ -552,12 +577,13 @@ int V4L2Subdevice::getFormat(unsigned int pad, V4L2SubdeviceFormat *format,
  *
  * \return 0 on success or a negative error code otherwise
  */
-int V4L2Subdevice::setFormat(unsigned int pad, V4L2SubdeviceFormat *format,
-			     Whence whence)
+int V4L2Subdevice::setFormat(unsigned int pad, unsigned int stream,
+			     V4L2SubdeviceFormat *format, Whence whence)
 {
 	struct v4l2_subdev_format subdevFmt = {};
 	subdevFmt.which = whence;
 	subdevFmt.pad = pad;
+	subdevFmt.stream = stream;
 	subdevFmt.format.width = format->size.width;
 	subdevFmt.format.height = format->size.height;
 	subdevFmt.format.code = format->mbus_code;
@@ -584,6 +610,24 @@ int V4L2Subdevice::setFormat(unsigned int pad, V4L2SubdeviceFormat *format,
 	format->colorSpace = toColorSpace(subdevFmt.format);
 
 	return 0;
+}
+
+/**
+ * \brief Set an image format on one of the V4L2 subdevice pads
+ * \param[in] pad The 0-indexed pad number the format is to be applied to
+ * \param[inout] format The image bus format to apply to the subdevice's pad
+ * \param[in] whence The format to set, \ref V4L2Subdevice::ActiveFormat
+ * "ActiveFormat" or \ref V4L2Subdevice::TryFormat "TryFormat"
+ *
+ * Apply the requested image format to the desired media pad and return the
+ * actually applied format parameters, as getFormat() would do.
+ *
+ * \return 0 on success or a negative error code otherwise
+ */
+int V4L2Subdevice::setFormat(unsigned int pad, V4L2SubdeviceFormat *format,
+			     Whence whence)
+{
+	return setFormat(pad, 0, format, whence);
 }
 
 /**

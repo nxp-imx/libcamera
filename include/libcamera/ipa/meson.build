@@ -63,6 +63,7 @@ libcamera_generated_ipa_headers += custom_target('core_ipa_serializer_h',
 # Mapping from pipeline handler name to mojom file
 pipeline_ipa_mojom_mapping = {
     'ipu3': 'ipu3.mojom',
+    'nxp/neo': 'nxpneo.mojom',
     'rkisp1': 'rkisp1.mojom',
     'rpi/vc4': 'raspberrypi.mojom',
     'vimc': 'vimc.mojom',
