@@ -3,67 +3,16 @@ NXP Software Content Register
 
 Package:                    libcamera.git
 Outgoing License:           LGPL-2.1-or-later
-License File:               COPYING.rst
-Type of content:            source
+License File:               LICENSES/LGPL-2.1-or-later.txt
+                            + other licenses for various components, including GPL for sample applications
+                            See COPYING.rst file for details, and LICENSES/ folder for a list of all licenses involved.
+Type of content:            source code
 Description and comments:   A Linux camera management framework
-                            This repository is adding NXP development on supported camera pipelines
+                            This repository is adding NXP development on supported camera pipelines, on top of libcamera upstream.
 Release Location:           https://github.com/nxp-imx/libcamera
 Origin:                     NXP (LGPL-2.1-or-later)
                             Libcamera (LGPL-2.1-or-later, and additional licenses. See libcamera's original COPYING.rst file for full list) - https://git.libcamera.org/libcamera/libcamera.git/
 
-
-This binary software package is built with below components:
-===========================================================
-
-Description:                Libcamera Core
-Location:                   include/libcamera/*
-                            src/libcamera/*
-License:                    LGPL-2.1-or-later
-Origin:                     Libcamera
-
---------------------------------------------
-
-Description:                IPA modules
-Location:                   src/ipa/*
-License:                    free software licenses
-Description and comments:   Licenses should be chosen by authors (LGPL-2.1-or-later recommended). Compiled as separated binaries.
-Origin:                     Libcamera
-
---------------------------------------------
-
-Description:                IPA module API
-Location:                   include/libcamera/ipa/*
-License:                    LGPL-2.1-or-later
-Origin:                     Libcamera
-
---------------------------------------------
-
-Description:                Libcamera Android camera HAL source codes
-Location:                   src/android/*
-Except:                     src/android/metadata/*
-License:                    LGPL-2.1-or-later
-Origin:                     Libcamera
-
---------------------------------------------
-
-Location:                   src/android/metadata/*
-License:                    Apache-2.0
-Origin:                     Libcamera
-
---------------------------------------------
-
-Description:                Libcamera Android camera HAL header files
-Location:                   include/android/*
-License:                    Apache-2.0
-Origin:                     Libcamera
-
---------------------------------------------
-
-Description:                Libcamera Gstreamer and V4L2 adaptation source code
-Location:                   src/gstreamer/*
-                            src/v4l2
-License:                    LGPL-2.1-or-later
-Origin:                     Libcamera
 
 --------------------------------------------
 
@@ -71,14 +20,5 @@ Description:                Libcamera cam and qcam sample applications and unit 
 Location:                   src/apps/cam/*
                             src/apps/qcam/*
                             test/
-Except:                     src/apps/qcam/assets/feathericons/*
-License:                    GPL-2.0-or-later
+License File:               LICENSES/GPL-2.0-or-later
 Origin:                     Libcamera
-
---------------------------------------------
-
-Location:                   src/apps/qcam/assets/feathericons/*
-License:                    MIT
-Origin:                     Libcamera
-
---------------------------------------------
