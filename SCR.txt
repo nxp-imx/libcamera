@@ -2,7 +2,7 @@ NXP Software Content Register
 ===========================================================
 
 Package:                    libcamera.git
-Version:                    next.imx
+Version:                    lf-6.6.23_2.0.0
 Outgoing License:           LGPL-2.1-or-later
 License File:               LICENSES/LGPL-2.1-or-later.txt
                             + other licenses for various components, including GPL for sample applications
@@ -10,7 +10,7 @@ License File:               LICENSES/LGPL-2.1-or-later.txt
 Type of content:            source code
 Description and comments:   A Linux camera management framework
                             This repository is adding NXP development on supported camera pipelines, on top of libcamera upstream.
-Release Location:           https://github.com/nxp-imx/libcamera -b imx/next
+Release Location:           https://github.com/nxp-imx/libcamera -b lf-6.6.23_2.0.0
 Origin:                     NXP (LGPL-2.1-or-later)
                             Libcamera (LGPL-2.1-or-later, and additional licenses. See libcamera's original COPYING.rst file for full list) - https://git.libcamera.org/libcamera/libcamera.git/
 
