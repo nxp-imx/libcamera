@@ -55,6 +55,9 @@ private:
 	double gGain_;
 	double bGain_;
 	std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> rgbTriples_;
+
+	static constexpr size_t kNumHist = 4;
+	std::vector<uint32_t> histScale_;
 };
 
 } /* namespace ipa::nxpneo::algorithms */

@@ -92,6 +92,34 @@ int Agc::init(IPAContext &context, const YamlObject &tuningData)
 
 	context.ctrlMap.merge(controls());
 
+	/*
+	 * Histogram scale parsing
+	 *
+	 * The scaling factor of the histogram is configured such that
+	 * the targetted value range of the image is covered among the 64 bins
+	 * of the linear histogram.
+	 * 4 histograms can be used from the STAT unit of the ISP.
+	 * The histScale_ list contains the histogram scaling factor to
+	 * program for each of the 4 histograms.
+	 */
+	const YamlObject &obj = tuningData["hist-scale"];
+	if (!obj.size()) {
+		LOG(NxpNeoAlgoAgc, Debug) << "Use default histogram scaling value: "
+					  << AGC_HIST_SCALE_DEFAULT;
+		for (unsigned int i = 0; i < kNumHist; ++i) {
+			histScale_.push_back(AGC_HIST_SCALE_DEFAULT);
+		}
+		return 0;
+	}
+
+	histScale_ = obj.getList<uint32_t>()
+			     .value_or(std::vector<uint32_t>{});
+	if (histScale_.size() != kNumHist) {
+		LOG(NxpNeoAlgoAgc, Error)
+			<< "histScale_ list size must be " << kNumHist;
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
@@ -205,7 +233,7 @@ void Agc::prepare(IPAContext &context, const uint32_t frame,
 	hist_red->hist_ctrl_pattern = 0;
 	hist_red->hist_ctrl_dir_input1_dif = 0;
 	hist_red->hist_ctrl_lin_input1_log = 0;
-	hist_red->hist_scale_scale = AGC_HIST_SCALE_DEFAULT;
+	hist_red->hist_scale_scale = histScale_[AGC_HIST_CFG_RED];
 	/* HIST for Gr+Gb */
 	neoisp_stat_hist_cfg_s *hist_green = &params->regs.stat.hists[AGC_HIST_CFG_GREEN];
 	hist_green->hist_ctrl_offset = 0;
@@ -213,7 +241,7 @@ void Agc::prepare(IPAContext &context, const uint32_t frame,
 	hist_green->hist_ctrl_pattern = 0;
 	hist_green->hist_ctrl_dir_input1_dif = 0;
 	hist_green->hist_ctrl_lin_input1_log = 0;
-	hist_green->hist_scale_scale = AGC_HIST_SCALE_DEFAULT;
+	hist_green->hist_scale_scale = histScale_[AGC_HIST_CFG_GREEN];
 	/* HIST for Blue */
 	neoisp_stat_hist_cfg_s *hist_blue = &params->regs.stat.hists[AGC_HIST_CFG_BLUE];
 	hist_blue->hist_ctrl_offset = 0;
@@ -221,7 +249,7 @@ void Agc::prepare(IPAContext &context, const uint32_t frame,
 	hist_blue->hist_ctrl_pattern = 0;
 	hist_blue->hist_ctrl_dir_input1_dif = 0;
 	hist_blue->hist_ctrl_lin_input1_log = 0;
-	hist_blue->hist_scale_scale = AGC_HIST_SCALE_DEFAULT;
+	hist_blue->hist_scale_scale = histScale_[AGC_HIST_CFG_BLUE];
 
 	/* Enable the STAT unit parameter update */
 	params->features_cfg.stat_cfg = 1;
