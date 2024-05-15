@@ -563,7 +563,7 @@ const std::vector<V4L2PixelFormat> &NeoDevice::frameFormats()
 		V4L2PixelFormat(V4L2_PIX_FMT_RGB24),
 		V4L2PixelFormat(V4L2_PIX_FMT_BGR24),
 		V4L2PixelFormat(V4L2_PIX_FMT_RGBX32),
-		V4L2PixelFormat(V4L2_PIX_FMT_BGRX32),
+		V4L2PixelFormat(V4L2_PIX_FMT_XBGR32),
 		V4L2PixelFormat(V4L2_PIX_FMT_YUVX32),
 		V4L2PixelFormat(V4L2_PIX_FMT_YUYV),
 		V4L2PixelFormat(V4L2_PIX_FMT_UYVY),
