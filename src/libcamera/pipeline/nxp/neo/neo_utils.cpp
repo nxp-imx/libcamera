@@ -150,18 +150,14 @@ int PipelineConfig::loadAutoDetectRouting(MediaEntity *entity,
 		return 0;
 
 	/* Create default route */
-	V4L2Subdevice::Routing routing;
-	struct v4l2_subdev_route route = {};
-	route.sink_pad = sinkPad,
-	route.sink_stream = 0,
-	route.source_pad = sourcePad,
-	route.source_stream = 0,
-	route.flags = V4L2_SUBDEV_ROUTE_FL_ACTIVE;
-	routing.push_back(route);
+	V4L2Subdevice::Routing routing = {};
+	routing.emplace_back(V4L2Subdevice::Stream{ sinkPad, 0 },
+			     V4L2Subdevice::Stream{ sourcePad, 0 },
+			     V4L2_SUBDEV_ROUTE_FL_ACTIVE);
 
 	LOG(NxpNeo, Debug)
 		<< "Default routing for " << entityName
-		<< " added " << routing.toString();
+		<< " added " << routing;
 
 	routingMap_[entityName] = routing;
 	return 0;
@@ -343,7 +339,7 @@ int PipelineConfig::parseRoutings(const YamlObject &platform)
 			continue;
 		}
 
-		V4L2Subdevice::Routing routing;
+		V4L2Subdevice::Routing routing = {};
 		for (const auto &route : routes.asList()) {
 			std::vector<unsigned int> v =
 				route.getList<unsigned int>().value_or(std::vector<unsigned int>{});
@@ -353,19 +349,15 @@ int PipelineConfig::parseRoutings(const YamlObject &platform)
 				return -EINVAL;
 			}
 
-			struct v4l2_subdev_route r = {};
-			r.sink_pad = v[ROUTE_SINK_PAD];
-			r.sink_stream = v[ROUTE_SINK_STREAM];
-			r.source_pad = v[ROUTE_SOURCE_PAD];
-			r.source_stream = v[ROUTE_SOURCE_STREAM];
-			r.flags = v[ROUTE_FLAGS];
-
-			routing.emplace_back(std::move(r));
+			routing.emplace_back(
+				V4L2Subdevice::Stream{ v[ROUTE_SINK_PAD], v[ROUTE_SINK_STREAM] },
+				V4L2Subdevice::Stream{ v[ROUTE_SOURCE_PAD], v[ROUTE_SOURCE_STREAM] },
+				v[ROUTE_FLAGS]);
 		}
 
 		routingMap_[entityName] = routing;
 		LOG(NxpNeo, Debug) << "Entity name " << entityName
-				   << " routing " << routing.toString();
+				   << " routing " << routing;
 	}
 
 	return 0;

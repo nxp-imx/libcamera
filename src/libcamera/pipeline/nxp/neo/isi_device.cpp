@@ -151,7 +151,7 @@ int ISIPipe::configure(const V4L2SubdeviceFormat &sinkFormat,
 	}
 
 	*sourceFormat = {};
-	uint32_t code = sinkFormat.mbus_code;
+	uint32_t code = sinkFormat.code;
 
 	const std::map<uint32_t, V4L2PixelFormat> &formats = mediaBusToPixelFormats();
 	if (!formats.count(code)) {

@@ -367,7 +367,7 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 	}
 
 	sensorFormat_ = {};
-	sensorFormat_.mbus_code = rawCode;
+	sensorFormat_.code = rawCode;
 	sensorFormat_.size = size;
 	LOG(NxpNeo, Debug) << "Sensor format " << sensorFormat_.toString();
 
@@ -747,7 +747,7 @@ int PipelineHandlerNxpNeo::setupRouting() const
 	for (const auto &[name, routing] : routingMap) {
 		LOG(NxpNeo, Debug)
 			<< "Configure routing for entity " << name
-			<< " routing " << routing.toString();
+			<< " routing " << routing;
 
 		std::unique_ptr<V4L2Subdevice> sdev =
 			V4L2Subdevice::fromEntityName(isiMedia_, name);
@@ -827,7 +827,7 @@ int PipelineHandlerNxpNeo::setupCameraGraphs()
 		Size size = sizes.back();
 
 		V4L2SubdeviceFormat sensorFormat = {};
-		sensorFormat.mbus_code = rawCode;
+		sensorFormat.code = rawCode;
 		sensorFormat.size = size;
 
 		ret = data->configureFrontend(sensorFormat,
@@ -1327,7 +1327,7 @@ int NxpNeoCameraData::configureFrontend(const V4L2SubdeviceFormat &sensorFormat,
 		 * camera stream api.
 		 */
 		unsigned int code = streamInput1->mbusCode();
-		sdFormatInput1.mbus_code = code;
+		sdFormatInput1.code = code;
 		sdFormatInput1.size = sensorFormat.size;
 		const std::vector<StreamLink> &streamLinksInput1 =
 			streamInput1->streamLinks();
@@ -1347,7 +1347,7 @@ int NxpNeoCameraData::configureFrontend(const V4L2SubdeviceFormat &sensorFormat,
 		 */
 		unsigned int code =
 			streamEmbedded->mbusCode();
-		sdFormatEd.mbus_code = code;
+		sdFormatEd.code = code;
 		unsigned int lines =
 			streamEmbedded->embeddedLines();
 		sdFormatEd.size = Size(sensorFormat.size.width, lines);
@@ -1698,7 +1698,7 @@ int NxpNeoCameraData::configureFrontEndStream(
 				<< "Error opening subdev " << sourceName;
 			return ret;
 		}
-		ret = subDev->setFormat(sourcePad, sourceStream, &sdFormat);
+		ret = subDev->setFormat({ sourcePad, sourceStream }, &sdFormat);
 		if (ret) {
 			LOG(NxpNeo, Warning)
 				<< "Error setting format " << sourceName;
@@ -1720,7 +1720,7 @@ int NxpNeoCameraData::configureFrontEndStream(
 				<< "Error opening subdev " << sinkName;
 			return ret;
 		}
-		ret = subDev->setFormat(sinkPad, sinkStream, &sdFormat);
+		ret = subDev->setFormat({ sinkPad, sinkStream }, &sdFormat);
 		if (ret) {
 			LOG(NxpNeo, Warning)
 				<< "Error setting format " << sinkName;
@@ -2132,6 +2132,6 @@ void NxpNeoCameraData::ipaSetSensorControls([[maybe_unused]] unsigned int id,
 	delayedCtrls_->push(sensorControls);
 }
 
-REGISTER_PIPELINE_HANDLER(PipelineHandlerNxpNeo)
+REGISTER_PIPELINE_HANDLER(PipelineHandlerNxpNeo, "nxp/neo")
 
 } /* namespace libcamera */
