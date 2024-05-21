@@ -513,7 +513,7 @@ extern "C" {
 const struct IPAModuleInfo ipaModuleInfo = {
 	IPA_MODULE_API_VERSION,
 	1,
-	"PipelineHandlerNxpNeo",
+	"nxp/neo",
 	"nxp/neo",
 };
 
