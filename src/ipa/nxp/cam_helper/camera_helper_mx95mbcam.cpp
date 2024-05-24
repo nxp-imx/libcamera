@@ -167,10 +167,8 @@ public:
 	uint32_t controlListGetExposure(const ControlList *ctrls) const override;
 	uint32_t controlListGetGain(const ControlList *ctrls) const override;
 
-	void controlListSetExposure(
-		ControlList *ctrls, uint32_t exposure) const override;
-	void controlListSetGain(
-		ControlList *ctrls, uint32_t gainCode) const override;
+	void controlListSetAGC(
+		ControlList *ctrls, uint32_t exposure, double gain) const override;
 
 	void controlInfoMapGetExposureRange(
 		const ControlInfoMap *ctrls, uint32_t *minExposure,
@@ -186,6 +184,25 @@ public:
 private:
 	/* total number of raws per frame from driver init sequence (unit double-raw) */
 	static constexpr unsigned int kVts = 0x2AEU;
+	/* gain conversion ratio of HCG/LCG \todo should get from OTP sensor data */
+	static constexpr double kConvGain = 7.32;
+	/* total exposure ratio between Long (HCG) and Short (DCG) captures */
+	static constexpr uint16_t kRatioL2S = 32;
+	/* total exposure ratio between Long (HCG) and Very Short (VS) captures */
+	static constexpr uint16_t kRatioL2VS = 1024;
+	/* min/max exposure values in double row time */
+	static constexpr uint16_t kMinExposureDCG = 2;
+	static constexpr uint16_t kMinExposureVS = 1;
+	/*
+	 * \todo Documented value set to 34 gives improper image
+	 * use max exposure for VS set to 4 as a workaround
+	 */
+	static constexpr uint16_t kMaxExposureVS = 4;
+	/* min/max analog real gain value */
+	static constexpr double kMinAnalogGain = 1.0;
+	static constexpr double kMaxAnalogGain = 15.5;
+	static constexpr double kDefAnalogGain = 5.0;
+
 	std::unique_ptr<MdParser> parser_;
 };
 
@@ -223,10 +240,10 @@ CameraHelperMx95mbcam::CameraHelperMx95mbcam()
 uint32_t CameraHelperMx95mbcam::gainCode(double gain) const
 {
 	/* Analog gain is Q4.4 with variable fractional resolution */
-	if (gain >= 15.5)
-		gain = 15.5;
-	else if (gain < 1.0)
-		gain = 1.0;
+	if (gain >= kMaxAnalogGain)
+		gain = kMaxAnalogGain;
+	else if (gain < kMinAnalogGain)
+		gain = kMinAnalogGain;
 
 	uint32_t code;
 	if (gain >= 8.0)
@@ -271,6 +288,7 @@ CameraHelperMx95mbcam::controlListGetExposure(const ControlList *ctrls) const
 		const struct ox03c10_exposure *payload;
 		payload = reinterpret_cast<const struct ox03c10_exposure *>(data.data());
 
+		/* DCG exposure is used for the AGC algorithm */
 		/* Exposure is reported in rows, sensor uses double-row unit */
 		exposure = payload->dcg * 2;
 	} else {
@@ -304,6 +322,7 @@ uint32_t CameraHelperMx95mbcam::controlListGetGain(const ControlList *ctrls) con
 		const struct ox03c10_analog_gain *payload;
 		payload = reinterpret_cast<const struct ox03c10_analog_gain *>(data.data());
 
+		/* HCG gain is used for the AGC algorithm */
 		gain = payload->hcg;
 	} else {
 		/* Keep debug level for now as root cause occurence is logged */
@@ -313,61 +332,105 @@ uint32_t CameraHelperMx95mbcam::controlListGetGain(const ControlList *ctrls) con
 	return gain;
 }
 
-void CameraHelperMx95mbcam::controlListSetExposure(
-	ControlList *ctrls, uint32_t exposure) const
+void CameraHelperMx95mbcam::controlListSetAGC(
+	ControlList *ctrls, uint32_t exposure, double gain) const
 {
 	if (!controlListHasId(ctrls, V4L2_CID_OX03C10_EXPOSURE)) {
 		LOG(NxpCameraHelper, Error)
 			<< "V4L2_CID_OX03C10_EXPOSURE cannot be set";
 		return;
 	}
-
-	/*
-	 * unit is double row
-	 * HDR3: dcg_exp + vs_exp < vts - 12
-	 *       vs_exp <= 5 (empirical - documented value is 34)
-	 *       dcg_exp >= 2, vs_exp >= 2, spd_exp >= 1
-	 */
-	uint16_t dcg = exposure / 2;
-	uint16_t vs = 4;
-	if (dcg <= 2)
-		dcg = 2;
-	if ((dcg + vs) >= (kVts - 12))
-		dcg = kVts - 12 - vs - 1;
-	uint16_t spd = dcg + vs;
-
-	struct ox03c10_exposure exposures;
-	exposures.dcg = dcg;
-	exposures.spd = spd;
-	exposures.vs = vs;
-	Span<uint8_t> data(reinterpret_cast<uint8_t *>(&exposures),
-			   sizeof(ox03c10_exposure));
-
-	ctrls->set(V4L2_CID_OX03C10_EXPOSURE, data);
-}
-
-void CameraHelperMx95mbcam::controlListSetGain(
-	ControlList *ctrls, uint32_t gainCode) const
-{
 	if (!controlListHasId(ctrls, V4L2_CID_OX03C10_ANALOGUE_GAIN)) {
 		LOG(NxpCameraHelper, Error)
 			<< "V4L2_CID_OX03C10_ANALOGUE_GAIN cannot be set";
 		return;
 	}
+	if (!controlListHasId(ctrls, V4L2_CID_OX03C10_DIGITAL_GAIN)) {
+		LOG(NxpCameraHelper, Error)
+			<< "V4L2_CID_OX03C10_DIGITAL_GAIN cannot be set";
+		return;
+	}
 
+	/* converted ratio with conversion gain */
+	double convertedRatioL2S = kRatioL2S / kConvGain;
+	double convertedRatioL2VS = kRatioL2VS / kConvGain;
+	/* min analog gain for HCG capture */
+	double minAgainHCG = kMinAnalogGain * convertedRatioL2S;
+	/* max exposure for DCG capture - HDR3: dcg_exp + vs_exp < vts - 12 */
+	static constexpr uint16_t maxExposureDCG = kVts - 12 - kMaxExposureVS - 1;
+
+	/*
+	 * Set DCG exposure and HCG gain
+	 */
+
+	/* set DCG exposure to the AGC exposure decision */
+	/* exposure unit is double row */
+	uint16_t exposureDCG = std::clamp<uint16_t>(exposure / 2,
+						    kMinExposureDCG,
+						    maxExposureDCG);
+
+	/* set HCG gain to the AGC gain decision */
+	double againHCG = gain;
+	if (againHCG < minAgainHCG) {
+		/* decrease exposure by againHCG/minAgain */
+		exposureDCG = std::round((exposureDCG * againHCG) / minAgainHCG);
+		/* set HCG gain  */
+		againHCG = minAgainHCG;
+		/* clamp exposure value to the minimum value */
+		exposureDCG = std::max<uint16_t>(kMinExposureDCG, exposureDCG);
+	}
+
+	/*
+	 * Set LCG analog gain
+	 */
+	double againLCG = againHCG / convertedRatioL2S;
+
+	/*
+	 * Set VS exposure to maximum value
+	 */
+	uint16_t exposureVS = kMaxExposureVS;
+
+	/*
+	 * Set VS analog gain
+	 */
+	/* ratioL2VS: ratio between total exposure of Long capture with VS capture */
+	double againVS = (exposureDCG * againHCG) / (exposureVS * convertedRatioL2VS);
+	if (againVS < kMinAnalogGain) {
+		againVS = kMinAnalogGain;
+		/* decrease exposure according to minimal gain */
+		exposureVS = (exposureDCG * againHCG) / (againVS * convertedRatioL2VS);
+		/* clamp exposure value to the minimum value */
+		exposureVS = std::max<uint16_t>(kMinExposureVS, exposureVS);
+	}
+
+	LOG(NxpCameraHelper, Debug) << "exposure[DCG,VS]="
+				    << exposureDCG << ", " << exposureVS;
+	LOG(NxpCameraHelper, Debug) << "gain[HCG,LCG,VS]=" << againHCG
+				    << ", " << againLCG << ", " << againVS;
+
+	/* Set ctrls for exposure */
+	struct ox03c10_exposure exposures;
+	exposures.dcg = exposureDCG;
+	exposures.spd = exposureDCG + exposureVS;
+	exposures.vs = exposureVS;
+	Span<uint8_t> data(reinterpret_cast<uint8_t *>(&exposures),
+			   sizeof(ox03c10_exposure));
+
+	ctrls->set(V4L2_CID_OX03C10_EXPOSURE, data);
+
+	/* Set ctrls for analog gain - use default value for SPD */
 	struct ox03c10_analog_gain again;
-	uint8_t gainCode8 = static_cast<uint8_t>(gainCode);
-	again.hcg = gainCode8;
-	again.lcg = gainCode8;
-	again.spd = gainCode8;
-	again.vs = gainCode8;
+	again.hcg = static_cast<uint8_t>(gainCode(againHCG));
+	again.lcg = static_cast<uint8_t>(gainCode(againLCG));
+	again.spd = 0x10U;
+	again.vs = static_cast<uint8_t>(gainCode(againVS));
 
 	Span<uint8_t> adata(reinterpret_cast<uint8_t *>(&again),
 			    sizeof(ox03c10_analog_gain));
 
 	ctrls->set(V4L2_CID_OX03C10_ANALOGUE_GAIN, adata);
 
-	/* Set unitary digital gain for now (Q4.10) */
+	/* Set ctrls for unitary digital gain for now (Q4.10) */
 	struct ox03c10_digital_gain dgain;
 	dgain.hcg = 0x400U;
 	dgain.lcg = 0x400U;
@@ -415,12 +478,12 @@ void CameraHelperMx95mbcam::controlInfoMapGetGainRange(
 
 	/* Analog gain is Q4.4 */
 	if (minGainCode)
-		*minGainCode = 0x10U; // 1.0
+		*minGainCode = gainCode(kMinAnalogGain);
 	if (maxGainCode)
-		*maxGainCode = 0xF8U; // 15.5
+		*maxGainCode = gainCode(kMaxAnalogGain);
 	if (defGainCode)
 		/* Default hcg init value from driver */
-		*defGainCode = 0x50U; // 5.0
+		*defGainCode = gainCode(kDefAnalogGain);
 }
 
 std::map<int32_t, std::pair<uint32_t, bool>>
