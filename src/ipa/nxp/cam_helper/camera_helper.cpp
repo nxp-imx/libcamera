@@ -160,35 +160,16 @@ uint32_t CameraHelper::controlListGetGain(const ControlList *ctrls) const
 }
 
 /**
- * \brief Update sensor control list with exposure configuration
+ * \brief Update sensor control list with AGC configuration
  * \param[inout] ctrls The control list to be updated
- * \param[in] exposure The exposure value - unit is horizontal line duration
+ * \param[in] exposure The AGC exposure decision - unit is horizontal line number
+ * \param[in] gain The AGC real gain decision
  *
- * This function aims to abstract the exposure control for sensor having
+ * This function aims to abstract the AGC control for sensor having
  * a proprietary programming model.
  */
-void CameraHelper::controlListSetExposure(
-	ControlList *ctrls, uint32_t exposure) const
-{
-	if (!controlListHasId(ctrls, V4L2_CID_EXPOSURE)) {
-		LOG(NxpCameraHelper, Error)
-			<< "V4L2_CID_EXPOSURE cannot be set";
-		return;
-	}
-
-	ctrls->set(V4L2_CID_EXPOSURE, static_cast<int32_t>(exposure));
-}
-
-/**
- * \brief Update sensor control list with exposure configuration
- * \param[inout] ctrls The control list to be updated
- * \param[in] gainCode The gain code in sensor format
- *
- * This function aims to abstract the gain control for sensor having
- * a proprietary programming model.
- */
-void CameraHelper::controlListSetGain(
-	ControlList *ctrls, uint32_t gainCode) const
+void CameraHelper::controlListSetAGC(
+	ControlList *ctrls, uint32_t exposure, double gain) const
 {
 	if (!controlListHasId(ctrls, V4L2_CID_ANALOGUE_GAIN)) {
 		LOG(NxpCameraHelper, Error)
@@ -196,7 +177,15 @@ void CameraHelper::controlListSetGain(
 		return;
 	}
 
-	ctrls->set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gainCode));
+	ctrls->set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gainCode(gain)));
+
+	if (!controlListHasId(ctrls, V4L2_CID_EXPOSURE)) {
+		LOG(NxpCameraHelper, Error)
+			<< "V4L2_CID_EXPOSURE cannot be set";
+		return;
+	}
+
+	ctrls->set(V4L2_CID_EXPOSURE, static_cast<int32_t>(exposure));
 }
 
 /**

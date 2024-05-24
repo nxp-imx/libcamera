@@ -54,10 +54,8 @@ public:
 	virtual uint32_t controlListGetExposure(const ControlList *ctrls) const;
 	virtual uint32_t controlListGetGain(const ControlList *ctrls) const;
 
-	virtual void controlListSetExposure(
-		ControlList *ctrls, uint32_t exposure) const;
-	virtual void controlListSetGain(
-		ControlList *ctrls, uint32_t gainCode) const;
+	virtual void controlListSetAGC(
+		ControlList *ctrls, uint32_t exposure, double gain) const;
 
 	virtual void controlInfoMapGetExposureRange(
 		const ControlInfoMap *ctrls, uint32_t *minExposure,

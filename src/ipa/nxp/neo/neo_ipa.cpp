@@ -494,11 +494,9 @@ void IPANxpNeo::setControls(unsigned int frame)
 
 	ControlList ctrls(sensorControls_);
 
-	uint32_t exposure = frameContext.agc.exposure;
-	camHelper_->controlListSetExposure(&ctrls, exposure);
-
-	uint32_t gainCode = camHelper_->gainCode(frameContext.agc.gain);
-	camHelper_->controlListSetGain(&ctrls, gainCode);
+	camHelper_->controlListSetAGC(&ctrls,
+				      frameContext.agc.exposure,
+				      frameContext.agc.gain);
 
 	setSensorControls.emit(frame, ctrls);
 }
