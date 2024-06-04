@@ -48,7 +48,7 @@ extern const ControlIdMap controlIdMap;
 class CameraHelper : public ipa::CameraSensorHelper
 {
 public:
-	CameraHelper() = default;
+	CameraHelper();
 	virtual ~CameraHelper() = default;
 
 	virtual uint32_t controlListGetExposure(const ControlList *ctrls) const;
@@ -65,19 +65,24 @@ public:
 		const ControlInfoMap *ctrls, uint32_t *minGainCode,
 		uint32_t *maxGainCode, uint32_t *defGainCode = nullptr) const;
 
-	virtual std::map<int32_t, std::pair<uint32_t, bool>> delayedControlParams() const;
+	struct Attributes {
+		struct MdParams {
+			uint32_t topLines;
+			ControlInfoMap controls;
+		};
 
-	struct MdParams {
-		uint32_t topLines;
-		ControlInfoMap controls;
+		std::map<int32_t, std::pair<uint32_t, bool>> delayedControlParams;
+		struct MdParams mdParams;
 	};
-	virtual const MdParams *embeddedParams() const;
+
+	virtual const Attributes *attributes() const { return &attributes_; };
+
 	virtual void parseEmbedded(Span<const uint8_t> buffer,
 				   ControlList *mdControls);
 
 protected:
 	virtual bool controlListHasId(const ControlList *ctrls, unsigned int id) const;
-	MdParams mdParams_ = {};
+	Attributes attributes_;
 
 private:
 	LIBCAMERA_DISABLE_COPY_AND_MOVE(CameraHelper)

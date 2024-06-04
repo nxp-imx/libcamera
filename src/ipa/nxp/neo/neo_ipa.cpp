@@ -178,8 +178,10 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 	updateControls(sensorInfo, sensorControls, ipaControls);
 
 	/* Initialize SensorConfig parameters */
-	std::map<int32_t, std::pair<uint32_t, bool>> camHelperDelayParams =
-		camHelper_->delayedControlParams();
+	const CameraHelper::Attributes *attributes = camHelper_->attributes();
+	const std::map<int32_t, std::pair<uint32_t, bool>> &camHelperDelayParams =
+		attributes->delayedControlParams;
+
 	std::map<int32_t, ipa::nxpneo::DelayedControlsParams> &ipaDelayParams =
 		sensorConfig->delayedControlsParams;
 	for (const auto &kv : camHelperDelayParams) {
@@ -190,8 +192,7 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 				       std::forward_as_tuple(v.first, v.second));
 	}
 
-	const CameraHelper::MdParams *mdParams = camHelper_->embeddedParams();
-	sensorConfig->embeddedTopLines = mdParams->topLines;
+	sensorConfig->embeddedTopLines = attributes->mdParams.topLines;
 
 	return 0;
 }
@@ -262,8 +263,8 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 
 	/* embedded data parameters */
 	context_.configuration.sensor.bpp = ipaConfig.sensorInfo.bitsPerPixel;
-	const CameraHelper::MdParams *mdParams = camHelper_->embeddedParams();
-	context_.configuration.sensor.mdControlInfoMap = &mdParams->controls;
+	context_.configuration.sensor.mdControlInfoMap =
+		&camHelper_->attributes()->mdParams.controls;
 
 	for (auto const &a : algorithms()) {
 		Algorithm *algo = static_cast<Algorithm *>(a.get());
@@ -339,7 +340,7 @@ void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
 	 * be mapped in the IPA. In that case, embedded data parsing is not
 	 * doable.
 	 */
-	const CameraHelper::MdParams *mdParams = camHelper_->embeddedParams();
+
 	const IPASessionConfiguration &sessionConfig = context_.configuration;
 
 	const ControlInfoMap &mdControlInfoMap =
@@ -353,8 +354,9 @@ void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
 	else
 		bytepp = sizeof(uint16_t);
 
+	uint32_t topLines = camHelper_->attributes()->mdParams.topLines;
 	size_t metadataSize =
-		mdParams->topLines * sessionConfig.sensor.size.width * bytepp;
+		topLines * sessionConfig.sensor.size.width * bytepp;
 
 	if (metadataSize && mappedBuffers_.count(rawBufferId)) {
 		uint8_t *metadata = mappedBuffers_.at(rawBufferId).planes()[0].data();

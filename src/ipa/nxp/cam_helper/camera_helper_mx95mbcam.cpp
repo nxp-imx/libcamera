@@ -178,7 +178,6 @@ public:
 		const ControlInfoMap *ctrls, uint32_t *minGainCode,
 		uint32_t *maxGainCode, uint32_t *defGainCode = nullptr) const override;
 
-	std::map<int32_t, std::pair<uint32_t, bool>> delayedControlParams() const override;
 	void parseEmbedded(Span<const uint8_t> buffer, ControlList *mdControls) override;
 
 private:
@@ -208,12 +207,19 @@ private:
 
 CameraHelperMx95mbcam::CameraHelperMx95mbcam()
 {
+	/* Adapt the default delayedControls for the ox03c10 custom controls */
+	attributes_.delayedControlParams = {
+		{ V4L2_CID_OX03C10_ANALOGUE_GAIN, { 2, false } },
+		{ V4L2_CID_OX03C10_DIGITAL_GAIN, { 2, false } },
+		{ V4L2_CID_OX03C10_EXPOSURE, { 2, false } },
+	};
+
 	/*
 	 * Setup embedded data params
 	 * \todo setup actual min/max values
 	 */
 #if ENABLE_EMBEDDED_DATA
-	mdParams_.topLines = 2;
+	attributes_.mdParams.topLines = 2;
 #endif
 	int32_t minInt32 = std::numeric_limits<int32_t>::min();
 	int32_t maxInt32 = std::numeric_limits<int32_t>::max();
@@ -229,7 +235,7 @@ CameraHelperMx95mbcam::CameraHelperMx95mbcam()
 			std::forward_as_tuple(&md::Exposure),
 			std::forward_as_tuple(minInt32, maxInt32));
 
-	mdParams_.controls =
+	attributes_.mdParams.controls =
 		ControlInfoMap(std::move(ctrlMap), md::controlIdMap);
 
 	parser_ = std::make_unique<MdParserOmniOx>(registerList);
@@ -484,18 +490,6 @@ void CameraHelperMx95mbcam::controlInfoMapGetGainRange(
 	if (defGainCode)
 		/* Default hcg init value from driver */
 		*defGainCode = gainCode(kDefAnalogGain);
-}
-
-std::map<int32_t, std::pair<uint32_t, bool>>
-CameraHelperMx95mbcam::delayedControlParams() const
-{
-	static const std::map<int32_t, std::pair<uint32_t, bool>> params = {
-		{ V4L2_CID_OX03C10_ANALOGUE_GAIN, { 2, false } },
-		{ V4L2_CID_OX03C10_DIGITAL_GAIN, { 2, false } },
-		{ V4L2_CID_OX03C10_EXPOSURE, { 2, false } },
-	};
-
-	return params;
 }
 
 void CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,

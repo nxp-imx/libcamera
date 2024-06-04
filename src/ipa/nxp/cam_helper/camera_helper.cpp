@@ -90,6 +90,63 @@ const ControlIdMap controlIdMap{
  */
 
 /**
+ * \struct Attributes
+ * \brief Attributes of the camera sensor
+ *
+ * Attributes describe all the static attributes related to that sensor.
+ */
+
+/**
+ * \struct Attributes::MdParams
+ * \brief The metadata parameters
+ *
+ * Metadata parameters describe the optional meta data support of that sensor.
+ */
+
+/**
+ * \var Attributes::MdParams::topLines
+ * \brief The number of top lines
+ *
+ * Metadata may be prepended as the first lines of the image. This field reports
+ * the number of embedded lines, zero if none.
+ */
+
+/**
+ * \var Attributes::MdParams::controls
+ * \brief The ControlIdMap of the controls reported by the metadata parser
+ */
+
+/**
+ * \var Attributes::delayedControlParams
+ * \brief The delayedControls parameters
+ *
+ * the map of (delay, priority) pair definitions for the camera controls handled
+ * by 3A. It is used to initialise the DelayedControls object instanciated
+ * by the pipeline. The delay corresponds to the latency in number of frames for
+ * the control value to be applied.
+ * Priority indicate that the control must be applied ahead of, and separately
+ * from other controls.
+ *
+ */
+
+/**
+ * \brief The CameraHelper constructor
+ */
+CameraHelper::CameraHelper()
+	: attributes_{
+		  {
+			  { V4L2_CID_ANALOGUE_GAIN, { 1, false } },
+			  { V4L2_CID_EXPOSURE, { 2, false } },
+		  }, /* delayedControlParams */
+		  {
+			  0, /* topLines */
+			  {}, /*controls */
+		  } /* MdParams */,
+	  }
+{
+}
+
+/**
  * \brief Retrieve exposure from the control list
  * \param[in] ctrls The control list to use
  *
@@ -260,41 +317,6 @@ void CameraHelper::controlInfoMapGetGainRange(
 		*maxGainCode = max;
 	if (defGainCode)
 		*defGainCode = def;
-}
-
-/**
- * \brief Report the delay for a control to be applied in sensor
- *
- * This function returns a vector of map of (delay, priority) pair definitions
- * for the camera controls handled by 3A.
- * That is typically used to initialise the DelayedControls object instanciated
- * by the pipeline.
- * Delay corresponds to the latency in number of frames for the control value to
- * be applied.
- * Priority indicate that the control must be applied ahead of, and separately
- * from other controls.
- *
- * \return The map of (delay, priority) pairs
- */
-std::map<int32_t, std::pair<uint32_t, bool>>
-CameraHelper::delayedControlParams() const
-{
-	/* Common default values used in libcamera code base */
-	static const std::map<int32_t, std::pair<uint32_t, bool>> params = {
-		{ V4L2_CID_ANALOGUE_GAIN, { 1, false } },
-		{ V4L2_CID_EXPOSURE, { 2, false } },
-	};
-
-	return params;
-}
-
-/**
- * \brief Report embedded data parameters
- * \return The embedded data parameters structure
- */
-const CameraHelper::MdParams *CameraHelper::embeddedParams() const
-{
-	return &mdParams_;
 }
 
 /**
