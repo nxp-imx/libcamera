@@ -82,7 +82,7 @@ public:
 	int init();
 	PipelineHandlerNxpNeo *pipe();
 
-	bool sensorIsRgbIr() const;
+	bool sensorIsRgbIr() const { return sensorIsRgbIr_; }
 	unsigned int getRawMediaBusFormat(PixelFormat *pixelFormat = nullptr) const;
 	int configureFrontend(const V4L2SubdeviceFormat &sensorFormat,
 			      Transform transform,
@@ -160,6 +160,7 @@ private:
 	std::unique_ptr<DelayedControls> delayedCtrls_;
 
 	unsigned int sequence_ = 0;
+	bool sensorIsRgbIr_ = false;
 };
 
 class NxpNeoCameraConfiguration : public CameraConfiguration
@@ -1205,17 +1206,6 @@ PipelineHandlerNxpNeo *NxpNeoCameraData::pipe()
 }
 
 /**
- * \brief Report sensor RGB-Ir capability
- *
- * \return True if sensor has RGB-Ir support.
- */
-bool NxpNeoCameraData::sensorIsRgbIr() const
-{
-	/* \todo get information from IPA about IR support */
-	return false;
-}
-
-/**
  * \brief Get raw media bus format compatible with the sensor, frontend and ISP
  * \param[out] pixelFormat The associated pixel format for a raw stream
  *
@@ -1467,6 +1457,8 @@ int NxpNeoCameraData::loadIPA()
 		LOG(NxpNeo, Error) << "Failed to initialise the NxpNeo IPA";
 		return ret;
 	}
+
+	sensorIsRgbIr_ = sensorConfig.rgbIr;
 
 	std::map<int32_t, ipa::nxpneo::DelayedControlsParams> &ipaDelayParams =
 		sensorConfig.delayedControlsParams;
