@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: CC0-1.0
+%YAML 1.1
+---
+version: 1
+algorithms:
+  - Agc:
+  - Awb:
+  - RgbIr:
+      ccm: [ 256, 256, 256 ]
+      crosstalk-threshold: [ 1044480, 1044480, 1044480 ]
+      # No compression is applied for this sensor, thus a single knee point is
+      # used to apply a unique gain slope.
+      ir-compression-8b:
+        # max input pixel value is (1 << 20) -1
+        points: [ 1048575, 0, 0, 0 ]
+        offsets: [ 0, 0, 0, 0, 0 ]
+        newpoints: [ 0, 0, 0, 0, 0 ]
+        # ratio (s1.15) is 2^(8-20) * 2^15
+        ratios: [ 8, 0, 0, 0, 0 ]
+      ir-compression-16b:
+        # max input pixel value is (1 << 20) -1
+        points: [ 1048575, 0, 0, 0 ]
+        offsets: [ 0, 0, 0, 0, 0 ]
+        newpoints: [ 0, 0, 0, 0, 0 ]
+        # ratio (s1.15) is 2^(16-20) * 2^15
+        ratios: [ 2048, 0, 0, 0, 0 ]
+...
