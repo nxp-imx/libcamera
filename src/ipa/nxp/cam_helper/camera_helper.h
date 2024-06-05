@@ -73,6 +73,7 @@ public:
 
 		std::map<int32_t, std::pair<uint32_t, bool>> delayedControlParams;
 		struct MdParams mdParams;
+		bool rgbIr;
 	};
 
 	virtual const Attributes *attributes() const { return &attributes_; };
