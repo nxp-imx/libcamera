@@ -42,7 +42,8 @@ public:
 	int start();
 	int stop();
 
-	int enableLinks(bool enable);
+	int enableLinks(bool input1, bool frame, bool ir,
+			bool params, bool stats);
 
 	std::unique_ptr<V4L2Subdevice> isp_;
 	std::unique_ptr<V4L2VideoDevice> input0_;

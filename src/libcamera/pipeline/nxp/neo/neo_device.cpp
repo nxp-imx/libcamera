@@ -375,52 +375,51 @@ int NeoDevice::linkSetup(const std::string &source, unsigned int sourcePad,
 }
 
 /**
- * \brief Enable or disable all media links in the NEO instance to prepare
- * for capture operations
+ * \brief Selectively enable or disable the media links of the NEO device
+ * \param[in] input1 The input1 link state (true to enable)
+ * \param[in] frame The frame link enablement state (true to enable)
+ * \param[in] ir The Ir link enablement state (true to enable)
+ * \param[in] params The params metadata link state (true to enable)
+ * \param[in] stats The stats metadata link state (true to enable)
+ *
+ * Neo ISP media controller device has 4 video and 2 meta devices nodes:
+ * - 2 video input (output) devices: input0, input1
+ * - 2 video output (capture) devices: frame, ir
+ * - 1 metadata input (output) device: params
+ * - 1 metadata output (capture) device: stats
+ * input0 video device link is immutable, other links are enabled or disabled
+ * depending on the required ISP usage.
  *
  * \return 0 on success or a negative error code otherwise
  */
-int NeoDevice::enableLinks(bool enable)
+int NeoDevice::enableLinks(bool input1, bool frame, bool ir,
+			   bool params, bool stats)
 {
-	int ret;
+	int ret = 0;
 
-	ret = linkSetup(kVDevInput0EntityName(), 0,
-			kSDevNeoEntityName(), PAD_INPUT0, enable);
+	ret = linkSetup(kVDevInput1EntityName(), 0,
+			kSDevNeoEntityName(), PAD_INPUT1, input1);
 	if (ret)
 		return ret;
 
-	if (padActiveInput1() || !enable) {
-		ret = linkSetup(kVDevInput1EntityName(), 0,
-				kSDevNeoEntityName(), PAD_INPUT1, enable);
-		if (ret)
-			return ret;
-	}
+	ret = linkSetup(kSDevNeoEntityName(), PAD_FRAME,
+			kVDevEntityFrameName(), 0, frame);
+	if (ret)
+		return ret;
+
+	ret = linkSetup(kSDevNeoEntityName(), PAD_IR,
+			kVDevEntityIrName(), 0, ir);
+	if (ret)
+		return ret;
 
 	ret = linkSetup(kVDevEntityParamsName(), 0,
-			kSDevNeoEntityName(), PAD_PARAMS, enable);
+			kSDevNeoEntityName(), PAD_PARAMS, params);
 	if (ret)
 		return ret;
-
-	if (padActiveFrame() || !enable) {
-		ret = linkSetup(kSDevNeoEntityName(), PAD_FRAME,
-				kVDevEntityFrameName(), 0, enable);
-		if (ret)
-			return ret;
-	}
-
-	if (padActiveIr() || !enable) {
-		ret = linkSetup(kSDevNeoEntityName(), PAD_IR,
-				kVDevEntityIrName(), 0, enable);
-		if (ret)
-			return ret;
-	}
 
 	ret = linkSetup(kSDevNeoEntityName(), PAD_STATS,
-			kVDevEntityStatsName(), 0, enable);
-	if (ret)
-		return ret;
-
-	return 0;
+			kVDevEntityStatsName(), 0, stats);
+	return ret;
 }
 
 /**
@@ -484,7 +483,6 @@ int NeoDevice::configureVideoDeviceMeta(V4L2VideoDevice *dev,
 	return 0;
 }
 
-
 /**
  * \brief Configure NEO video devices according to their formats
  * \param[in] formatInput0 INPUT0 video device format
@@ -507,20 +505,22 @@ int NeoDevice::configure(V4L2DeviceFormat &formatInput0,
 #define V4L2_META_FMT_NEO_ISP_STATS v4l2_fourcc('N', 'N', 'I', 'S')
 #endif
 
+	/*
+	 * Record optional (mutable) pads usage for later reference and
+	 * configure their links accordingly.
+	 * Stats and params pads are always enabled for IPA operation.
+	 */
 	configInput1_ = formatInput1.fourcc.isValid();
 	configFrame_ = formatFrame.fourcc.isValid();
 	configIr_ = formatIr.fourcc.isValid();
 
-	/*
-	 * \todo NEO driver currently defines immutable links.
-	 * When that is changed, dynamically enable relevant links to match
-	 * configuration and optional usage of INPUT1, INPUT0 and IR.
-	 */
+	bool enableInput1 = padActiveInput1();
+	bool enableFrame = padActiveFrame();
+	bool enableIr = padActiveIr();
+	bool enableParams = true;
+	bool enableStats = true;
 
-	/*
-	enableLinks(false);
-	enableLinks(true);
-	*/
+	enableLinks(enableInput1, enableFrame, enableIr, enableParams, enableStats);
 
 	ret = configureVideoDevice(input0_.get(), PAD_INPUT0, formatInput0);
 	if (ret)
