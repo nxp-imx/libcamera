@@ -142,6 +142,7 @@ CameraHelper::CameraHelper()
 			  0, /* topLines */
 			  {}, /*controls */
 		  } /* MdParams */,
+		  false, /* rgbIr */
 	  }
 {
 }
