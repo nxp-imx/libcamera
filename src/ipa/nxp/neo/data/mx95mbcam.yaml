@@ -15,4 +15,5 @@ algorithms:
         newpoints: [ 0, 0, 0, 0, 31 ]
         # KNEE_RATIO[0-4] u12
         ratios: [ 32, 64, 256, 3584, 3584 ]
+  - Drc:
 ...
