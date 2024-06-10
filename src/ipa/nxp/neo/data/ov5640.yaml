@@ -5,5 +5,4 @@ version: 1
 algorithms:
   - Agc:
   - Awb:
-  - HdrDecomp:
 ...
