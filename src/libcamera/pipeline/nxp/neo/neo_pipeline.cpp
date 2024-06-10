@@ -472,22 +472,33 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 		case StreamRole::Viewfinder:
 		case StreamRole::VideoRecording: {
 			/*
-			 * Propose resolutions supported by sensor with output
-			 * formats supported by the ISP.
+			 * Propose the resolutions supported by the sensor with
+			 * all output formats supported by the ISP, including
+			 * Infrared (gray) if supported by the sensor.
+			 */
+			const std::vector<V4L2PixelFormat> &frameFormats =
+				NeoDevice::frameFormats();
+			pixelFormat = frameFormats[0].toPixelFormat();
+			for (const V4L2PixelFormat &format : frameFormats)
+				streamFormats[format.toPixelFormat()] = ranges;
+
+			const std::vector<V4L2PixelFormat> &irFormats =
+				NeoDevice::irFormats();
+			if (data->sensorIsRgbIr()) {
+				for (const V4L2PixelFormat &format : irFormats)
+					streamFormats[format.toPixelFormat()] = ranges;
+			}
+
+			/*
+			 * Select only one format per ISP capture node so that
+			 * the resulting stream configuration passes validate()
+			 * check.
 			 */
 			if (frameOutputAvailable) {
-				const std::vector<V4L2PixelFormat> &formats =
-					NeoDevice::frameFormats();
-				pixelFormat = formats[0].toPixelFormat();
-				for (const V4L2PixelFormat &format : formats)
-					streamFormats[format.toPixelFormat()] = ranges;
+				pixelFormat = frameFormats[0].toPixelFormat();
 				frameOutputAvailable = false;
 			} else if (irOutputAvailable) {
-				const std::vector<V4L2PixelFormat> &formats =
-					NeoDevice::irFormats();
-				pixelFormat = formats[0].toPixelFormat();
-				for (const V4L2PixelFormat &format : formats)
-					streamFormats[format.toPixelFormat()] = ranges;
+				pixelFormat = irFormats[0].toPixelFormat();
 				irOutputAvailable = false;
 			} else {
 				LOG(NxpNeo, Error) << "Too many yuv/rgb streams";
