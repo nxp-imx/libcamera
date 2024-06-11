@@ -183,6 +183,10 @@ int CameraSensor::init()
 	if (ret)
 		return ret;
 
+#ifdef AP1302_ON_EVK95
+		return 0;
+#endif
+
 	/*
 	 * Set HBLANK to the minimum to start with a well-defined line length,
 	 * allowing IPA modules that do not modify HBLANK to use the sensor
@@ -617,6 +621,12 @@ std::vector<Size> CameraSensor::sizes(unsigned int mbusCode) const
  */
 Size CameraSensor::resolution() const
 {
+#ifdef AP1302_ON_EVK95
+#define AP1302_OUTPUT_WIDTH 1920
+#define AP1302_OUTPUT_HEIGHT 1080
+		return { AP1302_OUTPUT_WIDTH, AP1302_OUTPUT_HEIGHT };
+#endif
+
 	return std::min(sizes_.back(), activeArea_.size());
 }
 
