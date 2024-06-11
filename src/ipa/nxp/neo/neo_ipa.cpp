@@ -267,6 +267,11 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	context_.configuration.sensor.mdControlInfoMap =
 		&camHelper_->attributes()->mdParams.controls;
 
+	/* Active streams */
+	std::vector<IPAStream> &streams = context_.configuration.streams;
+	for (auto it = streamConfig.begin(); it != streamConfig.end(); it++)
+		streams.push_back(it->second);
+
 	for (auto const &a : algorithms()) {
 		Algorithm *algo = static_cast<Algorithm *>(a.get());
 

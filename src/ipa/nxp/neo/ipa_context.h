@@ -17,11 +17,14 @@
 #include <libcamera/controls.h>
 #include <libcamera/geometry.h>
 
+#include <libcamera/ipa/core_ipa_interface.h>
+
 #include <libipa/fc_queue.h>
 
 namespace libcamera {
 
 namespace ipa::nxpneo {
+
 
 struct IPASessionConfiguration {
 	struct {
@@ -49,6 +52,8 @@ struct IPASessionConfiguration {
 	struct {
 		uint32_t revision;
 	} hw;
+
+	std::vector<IPAStream> streams;
 };
 
 struct IPAActiveState {
