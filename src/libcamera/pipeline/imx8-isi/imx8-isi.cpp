@@ -31,6 +31,12 @@
 
 #include "linux/media-bus-format.h"
 
+#ifdef AP1302_ON_EVK95
+#define EVK95_CROSSBAR_SINK_PAD_NUM 5
+#define EVK95_CROSSBAR_SOURCE_PAD_NUM 8
+#define EVK95_CROSSBAR_FIRST_SOURCE_PAD EVK95_CROSSBAR_SINK_PAD_NUM
+#endif
+
 namespace libcamera {
 
 LOG_DEFINE_CATEGORY(ISI)
@@ -47,7 +53,11 @@ public:
 		 * \todo Assume 2 channels only for now, as that's the number of
 		 * available channels on i.MX8MP.
 		 */
+#ifdef AP1302_ON_EVK95
+		streams_.resize(EVK95_CROSSBAR_SOURCE_PAD_NUM);
+#else
 		streams_.resize(2);
+#endif
 	}
 
 	PipelineHandlerISI *pipe();
@@ -66,6 +76,9 @@ public:
 	std::unique_ptr<CameraSensor> sensor_;
 	std::unique_ptr<V4L2Subdevice> csis_;
 
+#ifdef AP1302_ON_EVK95
+	std::unique_ptr<V4L2Subdevice> formatter_;
+#endif
 	std::vector<Stream> streams_;
 
 	std::vector<Stream *> enabledStreams_;
@@ -164,6 +177,12 @@ int ISICameraData::init()
 	ret = csis_->open();
 	if (ret)
 		return ret;
+
+#ifdef AP1302_ON_EVK95
+	ret = formatter_->open();
+	if (ret)
+		return ret;
+#endif
 
 	properties_ = sensor_->properties();
 
@@ -569,6 +588,11 @@ CameraConfiguration::Status ISICameraConfiguration::validate()
 	 * the smallest larger format without considering the aspect ratio
 	 * as the ISI can freely scale.
 	 */
+
+#ifdef AP1302_ON_EVK95
+	sensorFormat_.mbus_code = sensorFormat.mbus_code;
+	sensorFormat_.size = maxResolution;
+#else
 	auto sizes = sensor->sizes(sensorFormat.mbus_code);
 	Size bestSize;
 
@@ -597,6 +621,7 @@ CameraConfiguration::Status ISICameraConfiguration::validate()
 
 	sensorFormat_.mbus_code = sensorFormat.mbus_code;
 	sensorFormat_.size = bestSize;
+#endif
 
 	LOG(ISI, Debug) << "Selected sensor format: " << sensorFormat_;
 
@@ -813,7 +838,11 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 	ISICameraData *data = cameraData(camera);
 
 	/* All links are immutable except the sensor -> csis link. */
+#ifdef AP1302_ON_EVK95
+	const MediaPad *sensorSrc = data->sensor_->entity()->getPadByIndex(2);
+#else
 	const MediaPad *sensorSrc = data->sensor_->entity()->getPadByIndex(0);
+#endif
 	sensorSrc->links()[0]->setEnabled(true);
 
 	/*
@@ -824,7 +853,11 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 	 * routing table instead of resetting it.
 	 */
 	V4L2Subdevice::Routing routing = {};
+#ifdef AP1302_ON_EVK95
+	unsigned int xbarFirstSource = EVK95_CROSSBAR_FIRST_SOURCE_PAD;
+#else
 	unsigned int xbarFirstSource = crossbar_->entity()->pads().size() / 2 + 1;
+#endif
 
 	for (const auto &[idx, config] : utils::enumerate(*c)) {
 		struct v4l2_subdev_route route = {
@@ -852,6 +885,12 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 	ret = data->csis_->setFormat(0, &format);
 	if (ret)
 		return ret;
+
+#ifdef AP1302_ON_EVK95
+	ret = data->formatter_->setFormat(0, &format);
+	if (ret)
+		return ret;
+#endif
 
 	ret = crossbar_->setFormat(data->xbarSink_, &format);
 	if (ret)
@@ -1032,15 +1071,40 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 	for (MediaPad *pad : crossbar_->entity()->pads()) {
 		unsigned int sink = numSinks;
 
+		// If links num is 0, also need numSinks++.
+#ifdef AP1302_ON_EVK95
+		if (pad->flags() & MEDIA_PAD_FL_SINK)
+				numSinks++;
+#endif
+
 		if (!(pad->flags() & MEDIA_PAD_FL_SINK) || pad->links().empty())
 			continue;
 
+#ifndef AP1302_ON_EVK95
 		/*
 		 * Count each crossbar sink pad to correctly configure
 		 * routing and format for this camera.
 		 */
 		numSinks++;
+#endif
 
+#ifdef AP1302_ON_EVK95
+		// formatter
+		MediaEntity *formatter = pad->links()[0]->source()->entity();
+		if (formatter->pads().size() != 2) {
+			LOG(ISI, Debug) << "Skip unsupported formatter " << formatter->name();
+			continue;
+		}
+
+		pad = formatter->pads()[0];
+		LOG(ISI, Info) << "formatter pad flag " + std::to_string(pad->flags()) +
+					  ", links num " + std::to_string(pad->links().size());
+		if (!(pad->flags() & MEDIA_PAD_FL_SINK) || pad->links().empty()) {
+			continue;
+		}
+#endif
+
+		// CSI
 		MediaEntity *csi = pad->links()[0]->source()->entity();
 		if (csi->pads().size() != 2) {
 			LOG(ISI, Debug) << "Skip unsupported CSI-2 receiver "
@@ -1052,11 +1116,17 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 		if (!(pad->flags() & MEDIA_PAD_FL_SINK) || pad->links().empty())
 			continue;
 
+		// ap1302
 		MediaEntity *sensor = pad->links()[0]->source()->entity();
 		if (sensor->function() != MEDIA_ENT_F_CAM_SENSOR) {
+#ifdef AP1302_ON_EVK95
+			LOG(ISI, Warning) << __func__ << ", sensor " << sensor->name() << " function " << \
+				utils::hex(sensor->function()) << " is not MEDIA_ENT_F_CAM_SENSOR";
+#else
 			LOG(ISI, Debug) << "Skip unsupported subdevice "
 					<< sensor->name();
 			continue;
+#endif
 		}
 
 		/* Create the camera data. */
@@ -1066,6 +1136,10 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 		data->sensor_ = std::make_unique<CameraSensor>(sensor);
 		data->csis_ = std::make_unique<V4L2Subdevice>(csi);
 		data->xbarSink_ = sink;
+
+#ifdef AP1302_ON_EVK95
+		data->formatter_ = std::make_unique<V4L2Subdevice>(formatter);
+#endif
 
 		ret = data->init();
 		if (ret) {
