@@ -1,0 +1,35 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+/*
+ * Copyright 2024 NXP
+*/
+
+cc_library_shared {
+    name: "libcamera-base",
+    rtti: true,
+    proprietary: true,
+    srcs: [
+        "*.cpp",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-DLIBCAMERA_BASE_PRIVATE",
+        "-DHAVE_LOCALE_T=1",
+    ],
+
+    static_libs: [
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "libutils",
+        "liblog",
+    ],
+    include_dirs: [
+        "system/core/libcutils/include",
+        "external/libcamera/include",
+        "external/libcamera/build/include",
+    ],
+}
