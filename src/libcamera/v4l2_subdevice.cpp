@@ -706,11 +706,14 @@ const std::string &V4L2Subdevice::model()
 	 */
 	std::string entityName = entity_->name();
 	std::regex i2cRegex{ " [0-9]+-[0-9a-f]{4}" };
+	std::regex i2cDotRegex{ ".[0-9]+-[0-9a-f]{4}" };
 	std::smatch match;
 
 	std::string model;
 	if (std::regex_search(entityName, match, i2cRegex))
 		model_ = entityName.substr(0, entityName.find(' '));
+	else if (std::regex_search(entityName, match, i2cDotRegex))
+		model_ = entityName.substr(0, entityName.find('.'));
 	else
 		model_ = entityName;
 
