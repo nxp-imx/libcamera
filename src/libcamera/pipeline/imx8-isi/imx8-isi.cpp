@@ -65,6 +65,7 @@ public:
 
 	std::unique_ptr<CameraSensor> sensor_;
 	std::unique_ptr<V4L2Subdevice> csis_;
+	std::unique_ptr<V4L2Subdevice> formatter_;
 
 	std::vector<Stream> streams_;
 
@@ -164,6 +165,13 @@ int ISICameraData::init()
 	ret = csis_->open();
 	if (ret)
 		return ret;
+
+	if (formatter_) {
+		ret = formatter_->open();
+
+		if (ret)
+			return ret;
+	}
 
 	properties_ = sensor_->properties();
 
@@ -851,6 +859,13 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 	if (ret)
 		return ret;
 
+	if (data->formatter_) {
+		ret = data->formatter_->setFormat(0, &format);
+
+		if (ret)
+			return ret;
+	}
+
 	/* Now configure the ISI and video node instances, one per stream. */
 	data->enabledStreams_.clear();
 	for (const auto &config : *c) {
@@ -1035,6 +1050,21 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 		 */
 		numSinks++;
 
+		if (pad->links().empty())
+			continue;
+
+		/* formatter (optional, not present on all i.MX platforms) */
+		MediaEntity *formatter = pad->links()[0]->source()->entity();
+		if (formatter->pads().size() != 2 || formatter->function() != MEDIA_ENT_F_PROC_VIDEO_PIXEL_FORMATTER) {
+			LOG(ISI, Debug) << "Bypass formatter "
+					<< formatter->name();
+			formatter = nullptr;
+		} else {
+			/* jump to next entity */
+			pad = formatter->pads()[0];
+		}
+
+		/* CSI */
 		MediaEntity *csi = pad->links()[0]->source()->entity();
 		if (csi->pads().size() != 2) {
 			LOG(ISI, Debug) << "Skip unsupported CSI-2 receiver "
@@ -1060,6 +1090,13 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 		data->sensor_ = std::make_unique<CameraSensor>(sensor);
 		data->csis_ = std::make_unique<V4L2Subdevice>(csi);
 		data->xbarSink_ = sink;
+
+		/*
+		 * Formatter is optional.
+		 * Some i.MX SOCs such as i.MX8 doesn't have any formatter, while i.MX9 has one.
+		 */
+		if (formatter)
+			data->formatter_ = std::make_unique<V4L2Subdevice>(formatter);
 
 		ret = data->init();
 		if (ret) {
