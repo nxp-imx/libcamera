@@ -72,6 +72,7 @@ public:
 	std::vector<Stream *> enabledStreams_;
 
 	unsigned int xbarSink_;
+	unsigned int sensorSourcePadIdx_;
 };
 
 class ISICameraConfiguration : public CameraConfiguration
@@ -820,8 +821,10 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 	ISICameraConfiguration *camConfig = static_cast<ISICameraConfiguration *>(c);
 	ISICameraData *data = cameraData(camera);
 
-	/* All links are immutable except the sensor -> csis link. */
-	const MediaPad *sensorSrc = data->sensor_->entity()->getPadByIndex(0);
+	/*
+	 * All links are immutable except the sensor/isp -> csis link.
+	 */
+	const MediaPad *sensorSrc = data->sensor_->entity()->getPadByIndex(data->sensorSourcePadIdx_);
 	sensorSrc->links()[0]->setEnabled(true);
 
 	/*
@@ -1041,7 +1044,7 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 	for (MediaPad *pad : crossbar_->entity()->pads()) {
 		unsigned int sink = numSinks;
 
-		if (!(pad->flags() & MEDIA_PAD_FL_SINK) || pad->links().empty())
+		if (!(pad->flags() & MEDIA_PAD_FL_SINK))
 			continue;
 
 		/*
@@ -1076,11 +1079,22 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 		if (!(pad->flags() & MEDIA_PAD_FL_SINK) || pad->links().empty())
 			continue;
 
+		/* Sensor - When present, ISP is considerred as a sensor from pipeline point of view. */
 		MediaEntity *sensor = pad->links()[0]->source()->entity();
-		if (sensor->function() != MEDIA_ENT_F_CAM_SENSOR) {
+		if (sensor->function() != MEDIA_ENT_F_CAM_SENSOR && sensor->function() != MEDIA_ENT_F_PROC_VIDEO_ISP) {
 			LOG(ISI, Debug) << "Skip unsupported subdevice "
 					<< sensor->name();
 			continue;
+		}
+
+		unsigned int sensorSourcePadIx = 0;
+		for (MediaPad *sensorPad : sensor->pads()) {
+			if (!(sensorPad->flags() & MEDIA_PAD_FL_SOURCE) || sensorPad->links().empty())
+				/*
+				* Count each sensor pad to enable the one
+				* currently used in the pipeline.
+				*/
+				sensorSourcePadIx++;
 		}
 
 		/* Create the camera data. */
@@ -1097,6 +1111,8 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 		 */
 		if (formatter)
 			data->formatter_ = std::make_unique<V4L2Subdevice>(formatter);
+
+		data->sensorSourcePadIdx_ = sensorSourcePadIx;
 
 		ret = data->init();
 		if (ret) {
