@@ -40,14 +40,13 @@ class PipelineHandlerISI;
 class ISICameraData : public Camera::Private
 {
 public:
-	ISICameraData(PipelineHandler *ph)
+	/* Maximum amount of streams (ie pipes) per camera */
+	static constexpr unsigned int kNumStreams = 2;
+
+	ISICameraData(PipelineHandler *ph, unsigned int numStreams)
 		: Camera::Private(ph)
 	{
-		/*
-		 * \todo Assume 2 channels only for now, as that's the number of
-		 * available channels on i.MX8MP.
-		 */
-		streams_.resize(2);
+		streams_.resize(std::min(kNumStreams, numStreams));
 	}
 
 	PipelineHandlerISI *pipe();
@@ -65,12 +64,14 @@ public:
 
 	std::unique_ptr<CameraSensor> sensor_;
 	std::unique_ptr<V4L2Subdevice> csis_;
+	std::unique_ptr<V4L2Subdevice> formatter_;
 
 	std::vector<Stream> streams_;
 
 	std::vector<Stream *> enabledStreams_;
 
 	unsigned int xbarSink_;
+	unsigned int sensorSourcePadIdx_;
 };
 
 class ISICameraConfiguration : public CameraConfiguration
@@ -164,6 +165,13 @@ int ISICameraData::init()
 	ret = csis_->open();
 	if (ret)
 		return ret;
+
+	if (formatter_) {
+		ret = formatter_->open();
+
+		if (ret)
+			return ret;
+	}
 
 	properties_ = sensor_->properties();
 
@@ -587,6 +595,25 @@ CameraConfiguration::Status ISICameraConfiguration::validate()
 	}
 
 	/*
+	 * When ISP is used, previous test may not return any valid size.
+	 * Indeed, in such case ISP is considered as the sensor element in
+	 * the pipeline. Moreover, size taken in consideration is the largest
+	 * size reported by the driver (max value is considered even if min/max
+	 * range is shared). Then ISP (sensor) size becomes much bigger than
+	 * requested size.
+	 *
+	 * In such case, we can use value reported by resolution() callback,
+	 * which is the size corresponding to the attached sensor, actually
+	 * smaller than ISP size.
+	 */
+	if (bestSize.isNull()) {
+		Size s = sensor->resolution();
+
+		if (s.width <= maxResolution.width)
+			bestSize = s;
+	}
+
+	/*
 	 * This should happen only if the sensor can only produce formats that
 	 * exceed the maximum allowed input width.
 	 */
@@ -763,30 +790,38 @@ PipelineHandlerISI::generateConfiguration(Camera *camera,
 		 */
 		StreamConfiguration cfg;
 
-                switch (role) {
-                case StreamRole::StillCapture:
-                case StreamRole::Viewfinder:
-                case StreamRole::VideoRecording: {
-                        Size size = role == StreamRole::StillCapture
-                                  ? data->sensor_->resolution()
-                                  : PipelineHandlerISI::kPreviewSize;
-                        cfg = generateYUVConfiguration(camera, size);
-                        if (cfg.pixelFormat.isValid())
-                                break;
+		switch (role) {
+		case StreamRole::StillCapture:
+		case StreamRole::Viewfinder:
+		case StreamRole::VideoRecording: {
+			Size maxSize = data->sensor_->resolution();
+			Size limit = PipelineHandlerISI::kPreviewSize.boundedToAspectRatio(maxSize);
 
+			/*
+			 * Still capture uses sensor's resolution, while
+			 * preview uses resolution closest to kPreviewSize
+			 * with sensor ratio applied, but not more than
+			 * sensor's resolution.
+			 */
+			Size size = role == StreamRole::StillCapture
+					    ? maxSize
+					    : limit.boundedTo(maxSize);
 
-                        /*
-                         * Fallback to use a Bayer format if that's what the
-                         * sensor supports.
-                         */
-                        [[fallthrough]];
+			cfg = generateYUVConfiguration(camera, size);
+			if (cfg.pixelFormat.isValid())
+				break;
 
-		 }
+			/*
+			* Fallback to use a Bayer format if that's what the
+			* sensor supports.
+			*/
+			[[fallthrough]];
+		}
 
-                case StreamRole::Raw: {
-                        cfg = generateRawConfiguration(camera);
-                        break;
-                }
+		case StreamRole::Raw: {
+			cfg = generateRawConfiguration(camera);
+			break;
+		}
 
 		default:
 			LOG(ISI, Error) << "Requested stream role not supported: " << role;
@@ -812,8 +847,10 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 	ISICameraConfiguration *camConfig = static_cast<ISICameraConfiguration *>(c);
 	ISICameraData *data = cameraData(camera);
 
-	/* All links are immutable except the sensor -> csis link. */
-	const MediaPad *sensorSrc = data->sensor_->entity()->getPadByIndex(0);
+	/*
+	 * All links are immutable except the sensor/isp -> csis link.
+	 */
+	const MediaPad *sensorSrc = data->sensor_->entity()->getPadByIndex(data->sensorSourcePadIdx_);
 	sensorSrc->links()[0]->setEnabled(true);
 
 	/*
@@ -824,7 +861,7 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 	 * routing table instead of resetting it.
 	 */
 	V4L2Subdevice::Routing routing = {};
-	unsigned int xbarFirstSource = crossbar_->entity()->pads().size() / 2 + 1;
+	unsigned int xbarFirstSource = crossbar_->entity()->pads().size() - pipes_.size();
 
 	for (const auto &[idx, config] : utils::enumerate(*c)) {
 		uint32_t sourcePad = xbarFirstSource + idx;
@@ -850,6 +887,13 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 	ret = crossbar_->setFormat(data->xbarSink_, &format);
 	if (ret)
 		return ret;
+
+	if (data->formatter_) {
+		ret = data->formatter_->setFormat(0, &format);
+
+		if (ret)
+			return ret;
+	}
 
 	/* Now configure the ISI and video node instances, one per stream. */
 	data->enabledStreams_.clear();
@@ -1026,7 +1070,7 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 	for (MediaPad *pad : crossbar_->entity()->pads()) {
 		unsigned int sink = numSinks;
 
-		if (!(pad->flags() & MEDIA_PAD_FL_SINK) || pad->links().empty())
+		if (!(pad->flags() & MEDIA_PAD_FL_SINK))
 			continue;
 
 		/*
@@ -1035,6 +1079,21 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 		 */
 		numSinks++;
 
+		if (pad->links().empty())
+			continue;
+
+		/* formatter (optional, not present on all i.MX platforms) */
+		MediaEntity *formatter = pad->links()[0]->source()->entity();
+		if (formatter->pads().size() != 2 || formatter->function() != MEDIA_ENT_F_PROC_VIDEO_PIXEL_FORMATTER) {
+			LOG(ISI, Debug) << "Bypass formatter "
+					<< formatter->name();
+			formatter = nullptr;
+		} else {
+			/* jump to next entity */
+			pad = formatter->pads()[0];
+		}
+
+		/* CSI */
 		MediaEntity *csi = pad->links()[0]->source()->entity();
 		if (csi->pads().size() != 2) {
 			LOG(ISI, Debug) << "Skip unsupported CSI-2 receiver "
@@ -1046,20 +1105,47 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 		if (!(pad->flags() & MEDIA_PAD_FL_SINK) || pad->links().empty())
 			continue;
 
+		/* Sensor - When present, ISP is considerred as a sensor from pipeline point of view. */
 		MediaEntity *sensor = pad->links()[0]->source()->entity();
-		if (sensor->function() != MEDIA_ENT_F_CAM_SENSOR) {
+		if (sensor->function() != MEDIA_ENT_F_CAM_SENSOR && sensor->function() != MEDIA_ENT_F_PROC_VIDEO_ISP) {
 			LOG(ISI, Debug) << "Skip unsupported subdevice "
 					<< sensor->name();
 			continue;
 		}
 
+		unsigned int sensorSourcePadIx = 0;
+		for (MediaPad *sensorPad : sensor->pads()) {
+			if (!(sensorPad->flags() & MEDIA_PAD_FL_SOURCE) || sensorPad->links().empty())
+				/*
+				* Count each sensor pad to enable the one
+				* currently used in the pipeline.
+				*/
+				sensorSourcePadIx++;
+		}
+
 		/* Create the camera data. */
+		/* \todo compute remaining pipes instead of pipes_.size() for multi cameras case */
 		std::unique_ptr<ISICameraData> data =
-			std::make_unique<ISICameraData>(this);
+			std::make_unique<ISICameraData>(this, pipes_.size());
 
 		data->sensor_ = std::make_unique<CameraSensor>(sensor);
 		data->csis_ = std::make_unique<V4L2Subdevice>(csi);
 		data->xbarSink_ = sink;
+
+		/*
+		 * Formatter is optional.
+		 * Some i.MX SOCs such as i.MX8 doesn't have any formatter, while i.MX9 has one.
+		 */
+		if (formatter)
+			data->formatter_ = std::make_unique<V4L2Subdevice>(formatter);
+
+		data->sensorSourcePadIdx_ = sensorSourcePadIx;
+
+		if (data->kNumStreams > pipes_.size()) {
+			LOG(ISI, Debug) << "Limit camera streams number to "
+					<< pipes_.size();
+			data->streams_.resize(pipes_.size());
+		}
 
 		ret = data->init();
 		if (ret) {
