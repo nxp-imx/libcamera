@@ -26,6 +26,10 @@ struct StreamConfiguration;
 class NeoDevice
 {
 public:
+	struct PipeConfig {
+		unsigned int topLines;
+	};
+
 	NeoDevice(unsigned int index)
 		: index_(index) {}
 
@@ -34,10 +38,11 @@ public:
 	int allocateBuffers(unsigned int bufferCount);
 	void freeBuffers();
 
-	int configure(V4L2DeviceFormat &formatInput0,
-		      V4L2DeviceFormat &formatInput1,
-		      V4L2DeviceFormat &formatFrame,
-		      V4L2DeviceFormat &formatIr);
+	int configure(PipeConfig &pipeConfig,
+		      V4L2DeviceFormat *formatInput0,
+		      V4L2DeviceFormat *formatInput1,
+		      V4L2DeviceFormat *formatFrame,
+		      V4L2DeviceFormat *formatIr);
 
 	int start();
 	int stop();
@@ -94,7 +99,7 @@ private:
 		      const std::string &sink, unsigned int sinkPad,
 		      bool enable);
 	int configureVideoDevice(V4L2VideoDevice *dev, unsigned int pad,
-				 V4L2DeviceFormat &format);
+				 V4L2DeviceFormat *format);
 	int configureVideoDeviceMeta(V4L2VideoDevice *dev,
 				     unsigned int pad, uint32_t fourcc);
 

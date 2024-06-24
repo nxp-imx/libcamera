@@ -431,16 +431,16 @@ int NeoDevice::enableLinks(bool input1, bool frame, bool ir,
  * \return 0 on success or a negative error code otherwise
  */
 int NeoDevice::configureVideoDevice(V4L2VideoDevice *dev, unsigned int pad,
-				    V4L2DeviceFormat &format)
+				    V4L2DeviceFormat *format)
 {
 	int ret;
 
 	LOG(NeoDev, Debug)
 		<< logPrefix()
 		<< "Configure video device (" << pad << ") format "
-		<< format.toString();
+		<< format->toString();
 
-	ret = dev->setFormat(&format);
+	ret = dev->setFormat(format);
 	if (ret) {
 		LOG(NeoDev, Error)
 			<< logPrefix()
@@ -485,6 +485,7 @@ int NeoDevice::configureVideoDeviceMeta(V4L2VideoDevice *dev,
 
 /**
  * \brief Configure NEO video devices according to their formats
+ * \param[in] pipeConfig The ISP pipeline configuration
  * \param[in] formatInput0 INPUT0 video device format
  * \param[in] formatInput1 INPUT1 video device format
  * \param[in] formatFrame FRAME device node format
@@ -492,10 +493,11 @@ int NeoDevice::configureVideoDeviceMeta(V4L2VideoDevice *dev,
  *
  * \return 0 on success or a negative error code otherwise
  */
-int NeoDevice::configure(V4L2DeviceFormat &formatInput0,
-			 V4L2DeviceFormat &formatInput1,
-			 V4L2DeviceFormat &formatFrame,
-			 V4L2DeviceFormat &formatIr)
+int NeoDevice::configure(PipeConfig &pipeConfig,
+			 V4L2DeviceFormat *formatInput0,
+			 V4L2DeviceFormat *formatInput1,
+			 V4L2DeviceFormat *formatFrame,
+			 V4L2DeviceFormat *formatIr)
 {
 	int ret;
 
@@ -510,9 +512,9 @@ int NeoDevice::configure(V4L2DeviceFormat &formatInput0,
 	 * configure their links accordingly.
 	 * Stats and params pads are always enabled for IPA operation.
 	 */
-	configInput1_ = formatInput1.fourcc.isValid();
-	configFrame_ = formatFrame.fourcc.isValid();
-	configIr_ = formatIr.fourcc.isValid();
+	configInput1_ = formatInput1->fourcc.isValid();
+	configFrame_ = formatFrame->fourcc.isValid();
+	configIr_ = formatIr->fourcc.isValid();
 
 	bool enableInput1 = padActiveInput1();
 	bool enableFrame = padActiveFrame();
@@ -554,7 +556,19 @@ int NeoDevice::configure(V4L2DeviceFormat &formatInput0,
 	if (ret)
 		return ret;
 
-	return 0;
+	/* Crop the top embedded data lines if any */
+	Size sizeInput = formatInput0->size;
+	int top = pipeConfig.topLines;
+	Rectangle rect{ 0, top, sizeInput.width, sizeInput.height - top };
+	ret = input0_->setSelection(V4L2_SEL_TGT_CROP, &rect);
+
+	if (padActiveInput1()) {
+		sizeInput = formatInput1->size;
+		rect = Rectangle{ 0, top, sizeInput.width, sizeInput.height - top };
+		ret |= input1_->setSelection(V4L2_SEL_TGT_CROP, &rect);
+	}
+
+	return ret;
 }
 
 const std::vector<V4L2PixelFormat> &NeoDevice::frameFormats()

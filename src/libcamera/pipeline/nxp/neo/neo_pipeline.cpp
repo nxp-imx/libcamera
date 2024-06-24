@@ -83,6 +83,7 @@ public:
 	PipelineHandlerNxpNeo *pipe();
 
 	bool sensorIsRgbIr() const { return sensorIsRgbIr_; }
+	void adjustTopLinesSize(Size *size) const;
 	unsigned int getRawMediaBusFormat(PixelFormat *pixelFormat = nullptr) const;
 	int configureFrontEndFormat(const V4L2SubdeviceFormat &sensorFormat,
 				    Transform transform);
@@ -156,6 +157,7 @@ private:
 
 	unsigned int sequence_ = 0;
 	bool sensorIsRgbIr_ = false;
+	unsigned int embeddedTopLines_ = 0;
 };
 
 class NxpNeoCameraConfiguration : public CameraConfiguration
@@ -341,30 +343,38 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 	 * supported by the sensor. First stream with valid resolution has its
 	 * size used as reference for the other streams.
 	 * If no valid size is found in any stream, or in multi camera mode,
-	 * then fall back to the sensor max supported size.
+	 * then fall back to the max supported size.
+	 * Sensor and ISP sizes differ when sensor outputs top lines embedded
+	 * data. Those lines are cropped at ISP input, thus streams that are
+	 * decoded by ISP have their size adjusted accordingly.
 	 */
 	PixelFormat rawPixelFormat;
 	unsigned int rawCode = data_->getRawMediaBusFormat(&rawPixelFormat);
 	ASSERT(rawCode);
 
-	std::vector<Size> sizes = sensor->sizes(rawCode);
-	Size size = sizes.back();
+	std::vector<Size> sensorSizes = sensor->sizes(rawCode);
+	std::vector<Size> pixelSizes(sensorSizes);
+	for (Size &size : pixelSizes)
+		data_->adjustTopLinesSize(&size);
+
+	Size sensorSize = sensorSizes.back();
+	Size pixelSize = pixelSizes.back();
 	bool multiCamera = data_->pipe()->multiCamera();
 	if (!multiCamera) {
-		auto iter = std::find_if(config_.begin(),
-					 config_.end(),
-					 [&sizes](auto &cfg) {
-						 return std::find(sizes.begin(),
-								  sizes.end(),
-								  cfg.size) != sizes.end();
-					 });
-		if (iter != config_.end())
-			size = iter->size;
+		for (const StreamConfiguration &cfg : config_) {
+			auto iter = std::find(pixelSizes.begin(),
+					      pixelSizes.end(),
+					      cfg.size);
+			if (iter != pixelSizes.end()) {
+				pixelSize = *iter;
+				sensorSize = sensorSizes[iter - pixelSizes.begin()];
+			}
+		}
 	}
 
 	sensorFormat_ = {};
 	sensorFormat_.code = rawCode;
-	sensorFormat_.size = size;
+	sensorFormat_.size = sensorSize;
 	LOG(NxpNeo, Debug) << "Sensor format " << sensorFormat_.toString();
 
 	for (unsigned int i = 0; i < config_.size(); ++i) {
@@ -387,7 +397,7 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 						 return format.toPixelFormat() == cfg->pixelFormat;
 					 }) == formats.end())
 				cfg->pixelFormat = formats[0].toPixelFormat();
-			cfg->size = size;
+			cfg->size = pixelSize;
 			const PixelFormatInfo &info =
 				PixelFormatInfo::info(cfg->pixelFormat);
 			cfg->stride = info.stride(cfg->size.width, 0, 1);
@@ -399,7 +409,7 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 					   << " stream";
 		} else if (isRaw) {
 			cfg->pixelFormat = rawPixelFormat;
-			cfg->size = size;
+			cfg->size = sensorSize;
 			const PixelFormatInfo &info =
 				PixelFormatInfo::info(cfg->pixelFormat);
 			cfg->stride = info.stride(cfg->size.width, 0, 64);
@@ -446,21 +456,30 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 	CameraSensor *sensor = data->sensor();
 	PixelFormat rawPixelFormat;
 	unsigned int rawCode = data->getRawMediaBusFormat(&rawPixelFormat);
-	std::vector<Size> sizes = sensor->sizes(rawCode);
-	Size &maxSize = sizes.back();
+	std::vector<Size> sensorSizes = sensor->sizes(rawCode);
+
+	/* Top embedded data from sensor are cropped before being fed to ISP */
+	std::vector<Size> pixelSizes(sensorSizes);
+	for (Size &size : pixelSizes)
+		data->adjustTopLinesSize(&size);
 
 	/* Size configuration is possible only with a single camera */
-	std::vector<SizeRange> ranges;
+	std::vector<SizeRange> sensorRanges;
+	std::vector<SizeRange> pixelRanges;
 	if (!multiCamera()) {
-		for (Size size : sizes)
-			ranges.emplace_back(size);
+		for (Size &size : sensorSizes)
+			sensorRanges.emplace_back(size);
+		for (Size &size : pixelSizes)
+			pixelRanges.emplace_back(size);
 	} else {
-		ranges.emplace_back(maxSize);
+		sensorRanges.emplace_back(sensorSizes.back());
+		pixelRanges.emplace_back(pixelSizes.back());
 	}
 
 	for (const StreamRole role : roles) {
 		std::map<PixelFormat, std::vector<SizeRange>> streamFormats;
 		PixelFormat pixelFormat;
+		Size cfgSize;
 
 		switch (role) {
 		case StreamRole::StillCapture:
@@ -475,13 +494,13 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 				NeoDevice::frameFormats();
 			pixelFormat = frameFormats[0].toPixelFormat();
 			for (const V4L2PixelFormat &format : frameFormats)
-				streamFormats[format.toPixelFormat()] = ranges;
+				streamFormats[format.toPixelFormat()] = pixelRanges;
 
 			const std::vector<V4L2PixelFormat> &irFormats =
 				NeoDevice::irFormats();
 			if (data->sensorIsRgbIr()) {
 				for (const V4L2PixelFormat &format : irFormats)
-					streamFormats[format.toPixelFormat()] = ranges;
+					streamFormats[format.toPixelFormat()] = pixelRanges;
 			}
 
 			/*
@@ -499,6 +518,7 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 				LOG(NxpNeo, Error) << "Too many yuv/rgb streams";
 				return nullptr;
 			}
+			cfgSize = pixelSizes.back();
 
 			break;
 		}
@@ -513,8 +533,10 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 				return nullptr;
 			}
 			pixelFormat = rawPixelFormat;
-			streamFormats[pixelFormat] = ranges;
+			streamFormats[pixelFormat] = sensorRanges;
 			rawOutputAvailable = false;
+			cfgSize = sensorSizes.back();
+
 			break;
 
 		default:
@@ -525,7 +547,7 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 
 		StreamFormats formats(streamFormats);
 		StreamConfiguration cfg(formats);
-		cfg.size = maxSize;
+		cfg.size = cfgSize;
 		cfg.pixelFormat = pixelFormat;
 		cfg.bufferCount = NxpNeoCameraConfiguration::kBufferCount;
 
@@ -913,8 +935,12 @@ int NxpNeoCameraData::configure(CameraConfiguration *c)
 			}
 		}
 
-		ret = neo_->configure(devFormatInput0_, devFormatInput1_,
-				      devFormatFrame, devFormatIr);
+		NeoDevice::PipeConfig pipeConfig = {};
+		pipeConfig.topLines = embeddedTopLines_;
+
+		ret = neo_->configure(pipeConfig,
+				      &devFormatInput0_, &devFormatInput1_,
+				      &devFormatFrame, &devFormatIr);
 		if (ret)
 			return ret;
 	}
@@ -926,6 +952,7 @@ int NxpNeoCameraData::configure(CameraConfiguration *c)
 	ret = sensor_->sensorInfo(&sensorInfo);
 	if (ret)
 		return ret;
+	adjustTopLinesSize(&sensorInfo.outputSize);
 
 	std::map<unsigned int, IPAStream> streamConfig;
 
@@ -1197,6 +1224,23 @@ PipelineHandlerNxpNeo *NxpNeoCameraData::pipe()
 }
 
 /**
+ * \brief Adjust a size to crop the top embedded data lines when present
+ * \param[inout] Size The original size to be adjusted
+ *
+ * Some sensors have embedded data lines inserted at the top of the video frame.
+ * Those lines are present in the video device buffers from frontend capture
+ * (output) device. This function adjusts a size to the value it will have
+ * after the top lines are cropped.
+ */
+void NxpNeoCameraData::adjustTopLinesSize(Size *size) const
+{
+	if (embeddedTopLines_) {
+		ASSERT(size->height >= embeddedTopLines_);
+		size->height -= embeddedTopLines_;
+	}
+}
+
+/**
  * \brief Get raw media bus format compatible with the sensor, frontend and ISP
  * \param[out] pixelFormat The associated pixel format for a raw stream
  *
@@ -1263,6 +1307,10 @@ unsigned int NxpNeoCameraData::getRawMediaBusFormat(PixelFormat *pixelFormat) co
  * \brief Configure the front end media controller device
  * \param[in] sensorFormat The sensor subdevice format
  * \param[in] transform The sensor transform
+ * \param[out] vdFormatInput0 The input0 front end's capture video device format
+ * \param[out] vdFormatInput1 The input1 front end's capture video device format
+ * \param[out] vdFormatEd The embedded data front end's capture video device
+ * format
  *
  * \return 0 in case of success or a negative error code.
  */
@@ -1443,6 +1491,7 @@ int NxpNeoCameraData::loadIPA()
 	}
 
 	sensorIsRgbIr_ = sensorConfig.rgbIr;
+	embeddedTopLines_ = sensorConfig.embeddedTopLines;
 
 	std::map<int32_t, ipa::nxpneo::DelayedControlsParams> &ipaDelayParams =
 		sensorConfig.delayedControlsParams;
@@ -2066,7 +2115,7 @@ void NxpNeoCameraData::ipaParamsBufferReady(unsigned int id)
 	if (!info)
 		return;
 
-	/* Queue all buffers from the request aimed for the Neo. */
+	/* Queue buffers from the request to ISP capture devices (outputs) */
 	for (auto it : info->request->buffers()) {
 		const Stream *stream = it.first;
 		FrameBuffer *outbuffer = it.second;
