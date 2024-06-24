@@ -285,6 +285,14 @@ IPAModule *IPAManager::module(PipelineHandler *pipe, uint32_t minVersion,
 bool IPAManager::isSignatureValid([[maybe_unused]] IPAModule *ipa) const
 {
 #if HAVE_IPA_PUBKEY
+	char *disableIsolation = utils::secure_getenv("LIBCAMERA_IPA_DISABLE_ISOLATION");
+	if (disableIsolation && disableIsolation[0] != '\0') {
+		LOG(IPAManager, Debug)
+			<< "Isolation of IPA module " << ipa->path()
+			<< " disabled through environment variable";
+		return true;
+	}
+
 	char *force = utils::secure_getenv("LIBCAMERA_IPA_FORCE_ISOLATION");
 	if (force && force[0] != '\0') {
 		LOG(IPAManager, Debug)
