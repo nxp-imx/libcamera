@@ -32,6 +32,13 @@ LIBCAMERA_IPA_FORCE_ISOLATION
 
    Example value: ``1``
 
+LIBCAMERA_IPA_DISABLE_ISOLATION
+   When set to a non-empty string, disable process isolation of all IPA modules.
+   If isolation is disabled, all IPA modules run in non-isolated mode and
+   the environment variable LIBCAMERA_IPA_FORCE_ISOLATION is not taking effect.
+
+   Example value: ``1``
+
 LIBCAMERA_IPA_MODULE_PATH
    Define custom search locations for IPA modules (`more <IPA module_>`__).
 
