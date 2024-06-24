@@ -354,7 +354,7 @@ gst_libcamera_stream_formats_to_caps(const StreamFormats &formats)
 		}
 
 		const SizeRange &range = formats.range(pixelformat);
-		if (range.hStep && range.vStep) {
+		if (range.hStep && range.vStep && range.min != range.max) {
 			GstStructure *s = gst_structure_copy(bare_s);
 			GValue val = G_VALUE_INIT;
 
