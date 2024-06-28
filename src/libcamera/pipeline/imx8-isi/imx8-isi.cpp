@@ -596,6 +596,25 @@ CameraConfiguration::Status ISICameraConfiguration::validate()
 	}
 
 	/*
+	 * When ISP is used, previous test may not return any valid size.
+	 * Indeed, in such case ISP is considered as the sensor element in
+	 * the pipeline. Moreover, size taken in consideration is the largest
+	 * size reported by the driver (max value is considered even if min/max
+	 * range is shared). Then ISP (sensor) size becomes much bigger than
+	 * requested size.
+	 *
+	 * In such case, we can use value reported by resolution() callback,
+	 * which is the size corresponding to the attached sensor, actually
+	 * smaller than ISP size.
+	 */
+	if (bestSize.isNull()) {
+		Size s = sensor->resolution();
+
+		if (s.width <= maxResolution.width)
+			bestSize = s;
+	}
+
+	/*
 	 * This should happen only if the sensor can only produce formats that
 	 * exceed the maximum allowed input width.
 	 */
