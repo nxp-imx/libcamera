@@ -42,7 +42,7 @@ MdParserOmniOx::MdParserOmniOx(std::initializer_list<uint32_t> registerList)
 	if (registerCount_ % 3) {
 		registerCount_ += 3;
 		registerCount_ &= ~0x03U;
-		LOG(NxpCameraHelper, Info)
+		LOG(NxpCameraHelper, Debug)
 			<< "Number of registers adjusted";
 	}
 }
