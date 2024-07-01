@@ -994,6 +994,7 @@ int NxpNeoCameraData::start([[maybe_unused]] const ControlList *controls)
 	int ret;
 
 	LOG(NxpNeo, Debug) << "Start " << cameraName();
+	sequence_ = 0;
 
 	/* Allocate buffers for internal pipeline usage. */
 	ret = allocateBuffers();
