@@ -84,11 +84,8 @@ public:
 
 	bool sensorIsRgbIr() const { return sensorIsRgbIr_; }
 	unsigned int getRawMediaBusFormat(PixelFormat *pixelFormat = nullptr) const;
-	int configureFrontend(const V4L2SubdeviceFormat &sensorFormat,
-			      Transform transform,
-			      V4L2DeviceFormat *vdFormatInput0,
-			      V4L2DeviceFormat *vdFormatInput1,
-			      V4L2DeviceFormat *vdFormatEd);
+	int configureFrontEndFormat(const V4L2SubdeviceFormat &sensorFormat,
+				    Transform transform);
 
 	CameraSensor *sensor() const { return sensor_.get(); }
 	std::string cameraName() const { return sensor_->entity()->name(); }
@@ -103,13 +100,6 @@ public:
 	std::queue<Request *> pendingRequests_;
 	/* Requests queued to the frontend device but not yet processed by the ISP */
 	std::queue<Request *> processingRequests_;
-
-	/* Front end video device nodes format
-	 * \todo move to private
-	 */
-	V4L2DeviceFormat vdFormatInput0_;
-	V4L2DeviceFormat vdFormatInput1_;
-	V4L2DeviceFormat vdFormatEmbedded_;
 
 private:
 	int initControls();
@@ -151,6 +141,11 @@ private:
 	std::shared_ptr<ISIPipe> pipeInput0_;
 	std::shared_ptr<ISIPipe> pipeInput1_;
 	std::shared_ptr<ISIPipe> pipeEmbedded_;
+
+	/* Front end video device nodes format */
+	V4L2DeviceFormat devFormatInput0_;
+	V4L2DeviceFormat devFormatInput1_;
+	V4L2DeviceFormat devFormatEmbedded_;
 
 	NxpNeoFrames frameInfos_;
 
@@ -826,10 +821,6 @@ int PipelineHandlerNxpNeo::setupCameraGraphs()
 		LOG(NxpNeo, Debug)
 			<< "Setup graph for camera " << data->cameraName();
 
-		V4L2DeviceFormat *vdFormatInput0 = &data->vdFormatInput0_;
-		V4L2DeviceFormat *vdFormatInput1 = &data->vdFormatInput1_;
-		V4L2DeviceFormat *vdFormatEd = &data->vdFormatEmbedded_;
-
 		/* Apply default format and transform to each media pad streams */
 		unsigned int rawCode = data->getRawMediaBusFormat();
 		ASSERT(rawCode);
@@ -842,10 +833,8 @@ int PipelineHandlerNxpNeo::setupCameraGraphs()
 		sensorFormat.code = rawCode;
 		sensorFormat.size = size;
 
-		ret = data->configureFrontend(sensorFormat,
-					      Transform::Identity,
-					      vdFormatInput0, vdFormatInput1,
-					      vdFormatEd);
+		ret = data->configureFrontEndFormat(sensorFormat,
+						    Transform::Identity);
 		if (ret)
 			return ret;
 	}
@@ -883,23 +872,13 @@ int NxpNeoCameraData::configure(CameraConfiguration *c)
 	LOG(NxpNeo, Debug) << "Configure " << cameraName();
 
 	/*
-	 * Configurations have been through validate() so they can be applied
-	 * directly.
-	 */
-	V4L2DeviceFormat *vdFormatInput0 = &vdFormatInput0_;
-	V4L2DeviceFormat *vdFormatInput1 = &vdFormatInput1_;
-	V4L2DeviceFormat *vdFormatEd = &vdFormatEmbedded_;
-
-	/*
 	 * Camera frontend graph reconfiguration is only applicable to
 	 * single camera case. For multicamera case, they have been statically
 	 * configured at pipeline creation time.
 	 */
 	if (!pipe()->multiCamera()) {
-		ret = configureFrontend(config->sensorFormat(),
-					config->combinedTransform(),
-					vdFormatInput0, vdFormatInput1,
-					vdFormatEd);
+		ret = configureFrontEndFormat(config->sensorFormat(),
+					      config->combinedTransform());
 		if (ret)
 			return ret;
 	}
@@ -934,7 +913,7 @@ int NxpNeoCameraData::configure(CameraConfiguration *c)
 			}
 		}
 
-		ret = neo_->configure(*vdFormatInput0, *vdFormatInput1,
+		ret = neo_->configure(devFormatInput0_, devFormatInput1_,
 				      devFormatFrame, devFormatIr);
 		if (ret)
 			return ret;
@@ -1284,18 +1263,11 @@ unsigned int NxpNeoCameraData::getRawMediaBusFormat(PixelFormat *pixelFormat) co
  * \brief Configure the front end media controller device
  * \param[in] sensorFormat The sensor subdevice format
  * \param[in] transform The sensor transform
- * \param[out] vdFormatInput0 The input0 front end's capture video device format
- * \param[out] vdFormatInput1 The input1 front end's capture video device format
- * \param[out] vdFormatEd The embedded data front end's capture video device
- * format
  *
  * \return 0 in case of success or a negative error code.
  */
-int NxpNeoCameraData::configureFrontend(const V4L2SubdeviceFormat &sensorFormat,
-					Transform transform,
-					V4L2DeviceFormat *vdFormatInput0,
-					V4L2DeviceFormat *vdFormatInput1,
-					V4L2DeviceFormat *vdFormatEd)
+int NxpNeoCameraData::configureFrontEndFormat(const V4L2SubdeviceFormat &sensorFormat,
+					      Transform transform)
 {
 	int ret;
 	CameraSensor *sensor = this->sensor();
@@ -1361,15 +1333,15 @@ int NxpNeoCameraData::configureFrontend(const V4L2SubdeviceFormat &sensorFormat,
 	}
 
 	/* Configure ISI capture video devices */
-	*vdFormatInput0 = {};
-	*vdFormatInput1 = {};
-	*vdFormatEd = {};
+	devFormatInput0_ = {};
+	devFormatInput1_ = {};
+	devFormatEmbedded_ = {};
 
-	ret = pipeInput0_->configure(sdFormatInput0, vdFormatInput0);
+	ret = pipeInput0_->configure(sdFormatInput0, &devFormatInput0_);
 	if (cameraInfo_->hasStreamInput1())
-		ret |= pipeInput1_->configure(sdFormatInput1, vdFormatInput1);
+		ret |= pipeInput1_->configure(sdFormatInput1, &devFormatInput1_);
 	if (cameraInfo_->hasStreamEmbedded())
-		ret |= pipeEmbedded_->configure(sdFormatEd, vdFormatEd);
+		ret |= pipeEmbedded_->configure(sdFormatEd, &devFormatEmbedded_);
 
 	return ret;
 }
