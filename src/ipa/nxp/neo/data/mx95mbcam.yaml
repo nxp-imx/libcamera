@@ -17,6 +17,8 @@ algorithms:
         ratios: [ 32, 64, 256, 3584, 3584 ]
   - Drc:
       # DRC Global Tonemap[1-416] u16 (8.8 format)
+      # This global LUT values are universal values which can apply to
+      # all sensors no matter their dynamic range.
       gbl-lut: [
                  4051, 4051, 3444, 3132, 2927, 2778, 2662, 2567, 2488, 2421, 2362, 2309, 2263, 2221, 2182, 2147,
                  2115, 2085, 2058, 2032, 2007, 1985, 1963, 1943, 1923, 1905, 1888, 1871, 1855, 1840, 1825, 1811,
