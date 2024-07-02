@@ -16,6 +16,9 @@ algorithms:
         # KNEE_RATIO[0-4] u12
         ratios: [ 32, 64, 256, 3584, 3584 ]
   - Drc:
+      # DRC Global gain - u16 (8.8 format)
+      # This gain value adjusts the dark scene of the ox03c10 sensor
+      gbl-gain: 4096
       # DRC Global Tonemap[1-416] u16 (8.8 format)
       # This global LUT values are universal values which can apply to
       # all sensors no matter their dynamic range.

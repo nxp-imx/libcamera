@@ -28,9 +28,14 @@ public:
 		     neoisp_meta_params_s *params) override;
 
 private:
+	static constexpr uint16_t kLocalStretchvalue = 256;
+	static constexpr uint16_t kAlphaValue = 256;
+	static constexpr uint16_t kGblGain = 256;
+
 	/* global DRC configuration */
 	bool gblLutEnabled_ = false;
 	std::vector<uint16_t> gblLut_;
+	uint16_t gblGain_;
 };
 
 } /* namespace ipa::nxpneo::algorithms */
