@@ -493,18 +493,11 @@ void IPANxpNeo::updateControls(const IPACameraSensorInfo &sensorInfo,
 
 void IPANxpNeo::setControls(unsigned int frame)
 {
-	/*
-	 * \todo The frame number is most likely wrong here, we need to take
-	 * internal sensor delays and other timing parameters into account.
-	 */
-
-	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
-
+	uint32_t exposure = context_.activeState.agc.automatic.exposure;
+	double gain = context_.activeState.agc.automatic.gain;
 	ControlList ctrls(sensorControls_);
 
-	camHelper_->controlListSetAGC(&ctrls,
-				      frameContext.agc.exposure,
-				      frameContext.agc.gain);
+	camHelper_->controlListSetAGC(&ctrls, exposure, gain);
 
 	setSensorControls.emit(frame, ctrls);
 }
