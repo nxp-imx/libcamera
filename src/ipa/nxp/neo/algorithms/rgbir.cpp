@@ -52,6 +52,8 @@ namespace ipa::nxpneo::algorithms {
  * - offsets: KNEE_NPOINT[0-4] (u20)
  * - newpoints: KNEE_NPOINT[0-4] u16
  * - ratios: KNEE_RATIO[0-4] u1.15
+ * Last entry in the offsets/newpoints/ratios arrays are used as the default
+ * case, meaning that no points[] value matched the condition (pv < points[N]).
  * */
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoRgbIr)
