@@ -794,9 +794,19 @@ PipelineHandlerISI::generateConfiguration(Camera *camera,
 		case StreamRole::StillCapture:
 		case StreamRole::Viewfinder:
 		case StreamRole::VideoRecording: {
+			Size maxSize = data->sensor_->resolution();
+			Size limit = PipelineHandlerISI::kPreviewSize.boundedToAspectRatio(maxSize);
+
+			/*
+			 * Still capture uses sensor's resolution, while
+			 * preview uses resolution closest to kPreviewSize
+			 * with sensor ratio applied, but not more than
+			 * sensor's resolution.
+			 */
 			Size size = role == StreamRole::StillCapture
-					    ? data->sensor_->resolution()
-					    : PipelineHandlerISI::kPreviewSize;
+					    ? maxSize
+					    : limit.boundedTo(maxSize);
+
 			cfg = generateYUVConfiguration(camera, size);
 			if (cfg.pixelFormat.isValid())
 				break;
