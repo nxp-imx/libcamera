@@ -594,6 +594,7 @@ const std::vector<V4L2PixelFormat> &NeoDevice::irFormats()
 {
 	static const std::vector<V4L2PixelFormat> formats = {
 		V4L2PixelFormat(V4L2_PIX_FMT_GREY),
+		V4L2PixelFormat(V4L2_PIX_FMT_Y16),
 	};
 
 	return formats;
