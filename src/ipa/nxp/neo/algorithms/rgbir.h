@@ -37,6 +37,9 @@ private:
 		std::vector<uint16_t> ratios;
 	};
 
+	static constexpr size_t kNumHeadColorEntries = 2;
+	std::vector<uint32_t> headColor_;
+
 	static constexpr size_t kNumColorChannels = 3;
 	std::vector<uint32_t> ccm_;
 	std::vector<uint32_t> crossTalkThreshold_;
@@ -46,11 +49,11 @@ private:
 	static constexpr size_t kNumNewPoints = 5;
 	static constexpr size_t kNumRatios = 5;
 
-	struct IrCompression irComp8bits_;
-	struct IrCompression irComp16bits_;
+	IrCompression irComp8bits_;
+	IrCompression irComp16bits_;
 
 	int parseIrCompression(const YamlObject &tuningData, const char *key,
-			       struct IrCompression &irComp);
+			       IrCompression &irComp);
 };
 
 } /* namespace ipa::nxpneo::algorithms */

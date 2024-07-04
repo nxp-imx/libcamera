@@ -26,7 +26,18 @@ namespace ipa::nxpneo::algorithms {
 
 /**
  * \class RgbIr
- * \brief RGBIR to RGBB,IR block and IR Compression units configuration
+ * \brief RGBIR to HC (Head Color), RGBB,IR block and IR Compression units
+ * configuration
+ *
+ * Head Color unit:
+ * This block reorders any Bayer or RGBIr pattern in horizontal and vertical
+ * directions to become RGGB. Block is controlled by configuring the horizontal
+ * (hoffset) and vertical (voffset) position of the R pixel in the sensor
+ * pattern.
+ * For regular Bayer pattern, ISP driver configures the HC blocks, inferring the
+ * R pixel position from the video device input buffer format. For RGBIr
+ * patterns, the HC block has to be configured explicitly by the IPA.
+ * head-color: [ hoffset, voffset ]
  *
  * RGBIR unit:
  * Converts a RGBIR frame into separate RGGB bayer and IR components.
@@ -65,6 +76,17 @@ int RgbIr::init([[maybe_unused]] IPAContext &context,
 		const YamlObject &tuningData)
 {
 	int ret;
+
+	headColor_ = tuningData["head-color"]
+			     .getList<uint32_t>()
+			     .value_or(std::vector<uint32_t>{});
+	if (headColor_.size() != kNumHeadColorEntries) {
+		LOG(NxpNeoAlgoRgbIr, Error)
+			<< "Invalid head-color size: expected "
+			<< kNumHeadColorEntries << " elements, got "
+			<< headColor_.size();
+		return -EINVAL;
+	}
 
 	ccm_ = tuningData["ccm"]
 		       .getList<uint32_t>()
@@ -105,6 +127,17 @@ void RgbIr::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
 {
 	if (frame > 0)
 		return;
+
+	/* Head Color configuration */
+	params->features_cfg.head_color_cfg = 1;
+
+	neoisp_head_color_cfg_s *hc = &params->regs.head_color;
+	hc->ctrl_hoffset = headColor_[0];
+	hc->ctrl_voffset = headColor_[1];
+
+	LOG(NxpNeoAlgoRgbIr, Debug)
+		<< "Head Color hoffset " << static_cast<unsigned int>(hc->ctrl_hoffset)
+		<< " voffset " << static_cast<unsigned int>(hc->ctrl_voffset);
 
 	/* RGBIR configuration */
 	params->features_cfg.rgbir_cfg = 1;
@@ -174,7 +207,7 @@ void RgbIr::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
 
 	LOG(NxpNeoAlgoRgbIr, Debug)
 		<< "IR Compression obpp "
-		<< static_cast<uint32_t>(ircomp->ctrl_obpp)
+		<< static_cast<unsigned int>(ircomp->ctrl_obpp)
 		<< " kneepoints "
 		<< comp.points[0] << " " << comp.points[1] << " "
 		<< comp.points[2] << " " << comp.points[3]
@@ -196,7 +229,7 @@ void RgbIr::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
  * \copydoc libcamera::ipa::Algorithm::parseIrCompression
  */
 int RgbIr::parseIrCompression(const YamlObject &tuningData, const char *key,
-			      struct IrCompression &irComp)
+			      IrCompression &irComp)
 {
 	const YamlObject &compObj = tuningData[key];
 	if (!compObj.isDictionary() || (!compObj.size())) {

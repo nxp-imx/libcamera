@@ -6,6 +6,10 @@ algorithms:
   - Agc:
   - Awb:
   - RgbIr:
+      # CFA pattern for the sensor with hflip enabled is:
+      # GRGB / IGIG / GBGR / IGIG
+      # R pixel position leads to hoffset=1, voffset=0
+      head-color: [ 1, 0 ]
       ccm: [ 256, 256, 256 ]
       crosstalk-threshold: [ 1044480, 1044480, 1044480 ]
       # No compression is applied for this sensor, thus a single knee point is
