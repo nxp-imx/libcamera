@@ -47,7 +47,7 @@ namespace ipa::nxpneo::algorithms {
  * For the Y component: Y_GDRC = Y_IN * LUT[Linear2Bin(Y_IN)] * DRC_GBL_GAIN >> 4
  */
 
-LOG_DEFINE_CATEGORY(NxpNeoDrc)
+LOG_DEFINE_CATEGORY(NxpNeoAlgoDrc)
 
 Drc::Drc()
 {
@@ -66,17 +66,17 @@ int Drc::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData
 		gblLut_ = lut.getList<uint16_t>()
 				  .value_or(std::vector<uint16_t>{});
 		if (gblLut_.size() != NEO_DRC_GLOBAL_TONEMAP_SIZE) {
-			LOG(NxpNeoDrc, Error) << "global lut list size must be "
+			LOG(NxpNeoAlgoDrc, Error) << "global lut list size must be "
 					      << NEO_DRC_GLOBAL_TONEMAP_SIZE;
 			return -EINVAL;
 		}
 	} else
-		LOG(NxpNeoDrc, Debug) << "global DRC lut not configured";
+		LOG(NxpNeoAlgoDrc, Debug) << "global DRC lut not configured";
 
 	/* Global DRC gain parsing */
 	gblGain_ = tuningData["gbl-gain"].get<uint16_t>(kGblGain);
 
-	LOG(NxpNeoDrc, Debug) << "global GAIN=" << gblGain_;
+	LOG(NxpNeoAlgoDrc, Debug) << "global GAIN=" << gblGain_;
 
 	return 0;
 }
@@ -91,7 +91,7 @@ void Drc::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
 	if (frame > 0)
 		return;
 
-	LOG(NxpNeoDrc, Debug) << "global lut configuration enabled " << gblLutEnabled_;
+	LOG(NxpNeoAlgoDrc, Debug) << "global lut configuration enabled " << gblLutEnabled_;
 	if (gblLutEnabled_) {
 		/* Set global lut */
 		params->features_cfg.drc_global_tonemap_cfg = 1;

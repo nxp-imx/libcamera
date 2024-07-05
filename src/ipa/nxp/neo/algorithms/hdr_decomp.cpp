@@ -32,7 +32,7 @@ namespace ipa::nxpneo::algorithms {
  * function when compression is used by the sensor.
  */
 
-LOG_DEFINE_CATEGORY(NxpNeoHdrDecomp)
+LOG_DEFINE_CATEGORY(NxpNeoAlgoHdrDecomp)
 
 HdrDecomp::HdrDecomp()
 	: input0_({}), input1_({})
@@ -51,14 +51,14 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 
 	const YamlObject &obj0 = tuningData["input0"];
 	if (!obj0.isDictionary() || (!obj0.size())) {
-		LOG(NxpNeoHdrDecomp, Debug) << "input0 not configured";
+		LOG(NxpNeoAlgoHdrDecomp, Debug) << "input0 not configured";
 		return 0;
 	}
 
 	input0_.points = obj0["points"].getList<uint16_t>()
 				.value_or(std::vector<uint16_t>{});
 	if (input0_.points.size() != kNumPoints) {
-		LOG(NxpNeoHdrDecomp, Error)
+		LOG(NxpNeoAlgoHdrDecomp, Error)
 			<< "input0 points list size must be " << kNumPoints;
 		return -EINVAL;
 	}
@@ -66,7 +66,7 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 	input0_.offsets = obj0["offsets"].getList<uint16_t>()
 				.value_or(std::vector<uint16_t>{});
 	if (input0_.offsets.size() != kNumOffsets) {
-		LOG(NxpNeoHdrDecomp, Error)
+		LOG(NxpNeoAlgoHdrDecomp, Error)
 			<< "input0 offsets list size must be " << kNumOffsets;
 		return -EINVAL;
 	}
@@ -74,7 +74,7 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 	input0_.newpoints = obj0["newpoints"].getList<uint32_t>()
 				.value_or(std::vector<uint32_t>{});
 	if (input0_.newpoints.size() != kNumNewPoints) {
-		LOG(NxpNeoHdrDecomp, Error)
+		LOG(NxpNeoAlgoHdrDecomp, Error)
 			<< "input0 newpoints list size must be " << kNumNewPoints;
 		return -EINVAL;
 	}
@@ -82,7 +82,7 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 	input0_.ratios = obj0["ratios"].getList<uint16_t>()
 				.value_or(std::vector<uint16_t>{});
 	if (input0_.ratios.size() != kNumRatios) {
-		LOG(NxpNeoHdrDecomp, Error)
+		LOG(NxpNeoAlgoHdrDecomp, Error)
 			<< "input0 ratios list size must be " << kNumRatios;
 		return -EINVAL;
 	}
@@ -95,14 +95,14 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 
 	const YamlObject &obj1 = tuningData["input1"];
 	if (!obj1.isDictionary() || (!obj1.size())) {
-		LOG(NxpNeoHdrDecomp, Debug) << "input1 not configured";
+		LOG(NxpNeoAlgoHdrDecomp, Debug) << "input1 not configured";
 		return 0;
 	}
 
 	input1_.points = obj1["points"].getList<uint16_t>()
 				.value_or(std::vector<uint16_t>{});
 	if (input1_.points.size() != kNumPoints) {
-		LOG(NxpNeoHdrDecomp, Error)
+		LOG(NxpNeoAlgoHdrDecomp, Error)
 			<< "input1 points list size must be " << kNumPoints;
 		return -EINVAL;
 	}
@@ -110,7 +110,7 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 	input1_.offsets = obj1["offsets"].getList<uint16_t>()
 				.value_or(std::vector<uint16_t>{});
 	if (input1_.offsets.size() != kNumOffsets) {
-		LOG(NxpNeoHdrDecomp, Error)
+		LOG(NxpNeoAlgoHdrDecomp, Error)
 			<< "input1 offsets list size must be " << kNumOffsets;
 		return -EINVAL;
 	}
@@ -118,7 +118,7 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 	input1_.newpoints = obj1["newpoints"].getList<uint16_t>()
 				.value_or(std::vector<uint16_t>{});
 	if (input1_.newpoints.size() != kNumNewPoints) {
-		LOG(NxpNeoHdrDecomp, Error)
+		LOG(NxpNeoAlgoHdrDecomp, Error)
 			<< "input1 newpoints list size must be " << kNumNewPoints;
 		return -EINVAL;
 	}
@@ -126,7 +126,7 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 	input1_.ratios = obj1["ratios"].getList<uint16_t>()
 				.value_or(std::vector<uint16_t>{});
 	if (input1_.ratios.size() != kNumRatios) {
-		LOG(NxpNeoHdrDecomp, Error)
+		LOG(NxpNeoAlgoHdrDecomp, Error)
 			<< "input1 ratios list size must be " << kNumRatios;
 		return -EINVAL;
 	}
@@ -146,7 +146,7 @@ void HdrDecomp::prepare([[maybe_unused]] IPAContext &context, const uint32_t fra
 	if (frame > 0)
 		return;
 
-	LOG(NxpNeoHdrDecomp, Debug)
+	LOG(NxpNeoAlgoHdrDecomp, Debug)
 		<< "input0/1 enabled " << input0_.enabled << "/" << input1_.enabled;
 
 	if (input0_.enabled) {

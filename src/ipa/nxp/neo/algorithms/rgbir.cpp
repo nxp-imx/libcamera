@@ -54,7 +54,7 @@ namespace ipa::nxpneo::algorithms {
  * - ratios: KNEE_RATIO[0-4] u1.15
  * */
 
-LOG_DEFINE_CATEGORY(NxpNeoRgbIr)
+LOG_DEFINE_CATEGORY(NxpNeoAlgoRgbIr)
 
 /**
  * \copydoc libcamera::ipa::Algorithm::init
@@ -68,7 +68,7 @@ int RgbIr::init([[maybe_unused]] IPAContext &context,
 		       .getList<uint32_t>()
 		       .value_or(std::vector<uint32_t>{});
 	if (ccm_.size() != kNumColorChannels) {
-		LOG(NxpNeoRgbIr, Error)
+		LOG(NxpNeoAlgoRgbIr, Error)
 			<< "Invalid ccm size: expected "
 			<< kNumColorChannels << " elements, got "
 			<< ccm_.size();
@@ -79,7 +79,7 @@ int RgbIr::init([[maybe_unused]] IPAContext &context,
 				      .getList<uint32_t>()
 				      .value_or(std::vector<uint32_t>{});
 	if (crossTalkThreshold_.size() != kNumColorChannels) {
-		LOG(NxpNeoRgbIr, Error)
+		LOG(NxpNeoAlgoRgbIr, Error)
 			<< "Invalid crosstalk-threshold size: expected "
 			<< kNumColorChannels << " elements, got "
 			<< crossTalkThreshold_.size();
@@ -119,7 +119,7 @@ void RgbIr::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
 	rgbir->ccm1_th_threshold = crossTalkThreshold_[1];
 	rgbir->ccm2_th_threshold = crossTalkThreshold_[2];
 
-	LOG(NxpNeoRgbIr, Debug)
+	LOG(NxpNeoAlgoRgbIr, Debug)
 		<< "RGBIR ccm[0-2] "
 		<< rgbir->ccm0_ccm << " "
 		<< rgbir->ccm1_ccm << " "
@@ -170,7 +170,7 @@ void RgbIr::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
 	ircomp->knee_ratio23_ratio3 = comp.ratios[3];
 	ircomp->knee_ratio4_ratio4 = comp.ratios[4];
 
-	LOG(NxpNeoRgbIr, Debug)
+	LOG(NxpNeoAlgoRgbIr, Debug)
 		<< "IR Compression obpp "
 		<< static_cast<uint32_t>(ircomp->ctrl_obpp)
 		<< " kneepoints "
@@ -198,35 +198,35 @@ int RgbIr::parseIrCompression(const YamlObject &tuningData, const char *key,
 {
 	const YamlObject &compObj = tuningData[key];
 	if (!compObj.isDictionary() || (!compObj.size())) {
-		LOG(NxpNeoRgbIr, Debug)
+		LOG(NxpNeoAlgoRgbIr, Debug)
 			<< "compression " << key << "not configured";
 		return -EINVAL;
 	}
 
 	irComp.points = compObj["points"].getList<uint32_t>().value_or(std::vector<uint32_t>{});
 	if (irComp.points.size() != kNumPoints) {
-		LOG(NxpNeoRgbIr, Error)
+		LOG(NxpNeoAlgoRgbIr, Error)
 			<< "compression points list size must be " << kNumPoints;
 		return -EINVAL;
 	}
 
 	irComp.offsets = compObj["offsets"].getList<uint32_t>().value_or(std::vector<uint32_t>{});
 	if (irComp.offsets.size() != kNumOffsets) {
-		LOG(NxpNeoRgbIr, Error)
+		LOG(NxpNeoAlgoRgbIr, Error)
 			<< "compression offsets list size must be " << kNumOffsets;
 		return -EINVAL;
 	}
 
 	irComp.newpoints = compObj["newpoints"].getList<uint16_t>().value_or(std::vector<uint16_t>{});
 	if (irComp.newpoints.size() != kNumNewPoints) {
-		LOG(NxpNeoRgbIr, Error)
+		LOG(NxpNeoAlgoRgbIr, Error)
 			<< "compression newpoints list size must be " << kNumNewPoints;
 		return -EINVAL;
 	}
 
 	irComp.ratios = compObj["ratios"].getList<uint16_t>().value_or(std::vector<uint16_t>{});
 	if (irComp.ratios.size() != kNumRatios) {
-		LOG(NxpNeoRgbIr, Error)
+		LOG(NxpNeoAlgoRgbIr, Error)
 			<< "compression ratios list size must be " << kNumRatios;
 		return -EINVAL;
 	}

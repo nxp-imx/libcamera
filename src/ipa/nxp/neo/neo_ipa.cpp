@@ -39,7 +39,7 @@
 
 namespace libcamera {
 
-LOG_DEFINE_CATEGORY(IPANxpNeo)
+LOG_DEFINE_CATEGORY(NxpNeoIPA)
 
 using namespace std::literals::chrono_literals;
 using namespace libcamera::nxp;
@@ -126,11 +126,11 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 		    ControlInfoMap *ipaControls,
 		    SensorConfig *sensorConfig)
 {
-	LOG(IPANxpNeo, Debug) << "Hardware revision is " << hwRevision;
+	LOG(NxpNeoIPA, Debug) << "Hardware revision is " << hwRevision;
 
 	camHelper_ = CameraHelperFactoryBase::create(settings.sensorModel);
 	if (!camHelper_) {
-		LOG(IPANxpNeo, Error)
+		LOG(NxpNeoIPA, Error)
 			<< "Failed to create camera sensor helper for "
 			<< settings.sensorModel;
 		return -ENODEV;
@@ -143,7 +143,7 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 	File file(settings.configurationFile);
 	if (!file.open(File::OpenModeFlag::ReadOnly)) {
 		int ret = file.error();
-		LOG(IPANxpNeo, Error)
+		LOG(NxpNeoIPA, Error)
 			<< "Failed to open configuration file "
 			<< settings.configurationFile << ": " << strerror(-ret);
 		return ret;
@@ -151,26 +151,26 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 
 	std::unique_ptr<libcamera::YamlObject> data = YamlParser::parse(file);
 	if (!data) {
-		LOG(IPANxpNeo, Error) << "Failed to parse configuration file";
+		LOG(NxpNeoIPA, Error) << "Failed to parse configuration file";
 		return -EINVAL;
 	}
 
 	unsigned int version = (*data)["version"].get<uint32_t>(0);
 	if (version != 1) {
-		LOG(IPANxpNeo, Error)
+		LOG(NxpNeoIPA, Error)
 			<< "Invalid tuning file version " << version;
 		return -EINVAL;
 	}
 
 	if (!data->contains("algorithms")) {
-		LOG(IPANxpNeo, Error)
+		LOG(NxpNeoIPA, Error)
 			<< "Tuning file doesn't contain any algorithm";
 		return -EINVAL;
 	}
 
 	int ret = createAlgorithms(context_, (*data)["algorithms"]);
 	if (ret) {
-		LOG(IPANxpNeo, Error) << "Failed to create algorithms";
+		LOG(NxpNeoIPA, Error) << "Failed to create algorithms";
 		return ret;
 	}
 
@@ -223,7 +223,7 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	camHelper_->controlInfoMapGetGainRange(&sensorControls_,
 					       &minGainCode, &maxGainCode);
 
-	LOG(IPANxpNeo, Debug)
+	LOG(NxpNeoIPA, Debug)
 		<< "Exposure: [" << minExposure << ", " << maxExposure
 		<< "], gain: [" << minGainCode << ", " << maxGainCode << "]";
 
@@ -296,7 +296,7 @@ void IPANxpNeo::mapBuffers(const std::vector<IPABuffer> &buffers)
 
 		MappedFrameBuffer mappedBuffer(&fb, MappedFrameBuffer::MapFlag::ReadWrite);
 		if (!mappedBuffer.isValid()) {
-			LOG(IPANxpNeo, Fatal) << "Failed to mmap buffer: "
+			LOG(NxpNeoIPA, Fatal) << "Failed to mmap buffer: "
 					      << strerror(mappedBuffer.error());
 		}
 
