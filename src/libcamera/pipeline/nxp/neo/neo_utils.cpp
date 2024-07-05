@@ -39,15 +39,15 @@ std::string CameraMediaStream::toString() const
 	std::stringstream ss;
 
 	for (const auto &streamLink : streamLinks_) {
-		const MediaLink *_mediaLink = std::get<0>(streamLink);
+		const MediaLink *_mediaLink = streamLink.mediaLink_;
 		const MediaPad *_sourceMediaPad = _mediaLink->source();
 		const MediaPad *_sinkMediaPad = _mediaLink->sink();
 		std::string _sourceName = _sourceMediaPad->entity()->name();
 		std::string _sinkName = _sinkMediaPad->entity()->name();
 		unsigned int _sourcePad = _sourceMediaPad->index();
 		unsigned int _sinkPad = _sinkMediaPad->index();
-		unsigned int _sourceStream = std::get<1>(streamLink);
-		unsigned int _sinkStream = std::get<2>(streamLink);
+		unsigned int _sourceStream = streamLink.sourceStream_;
+		unsigned int _sinkStream = streamLink.sinkStream_;
 		ss << "source " << _sourceName << " "
 		   << _sourcePad << "/" << _sourceStream
 		   << " sink " << _sinkName << " "
@@ -190,7 +190,7 @@ int PipelineConfig::loadAutoDetectEntity(MediaEntity *entity)
 
 	LOG(NxpNeoPipe, Debug) << "Auto discovering path for " << cameraName;
 
-	std::vector<StreamLink> streamLinks;
+	std::vector<CameraMediaStream::StreamLink> streamLinks;
 	for (unsigned int i = 0; i < kGraphDepthMax; i++) {
 		MediaPad *sourcePad = nullptr;
 		MediaPad *sinkPad;
@@ -382,6 +382,7 @@ PipelineConfig::parseMediaStream(const YamlObject &camera,
 
 	LOG(NxpNeoPipe, Debug) << "Parsing stream " << key;
 
+	/* yaml configuration file link sequence elements */
 	enum {
 		LINK_SOURCE_NAME = 0,
 		LINK_SOURCE_PAD = 1,
@@ -398,7 +399,7 @@ PipelineConfig::parseMediaStream(const YamlObject &camera,
 		return std::nullopt;
 	}
 
-	std::vector<StreamLink> streamLinks;
+	std::vector<CameraMediaStream::StreamLink> streamLinks;
 	unsigned int maxUint = std::numeric_limits<unsigned int>::max();
 	for (const auto &link : links.asList()) {
 		std::string sourceEntityName =

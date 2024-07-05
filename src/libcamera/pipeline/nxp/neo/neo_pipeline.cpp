@@ -111,7 +111,7 @@ private:
 	int freeBuffers();
 
 	int setupCameraIsiReserve();
-	int configureFrontEndStream(const std::vector<StreamLink> &streamLinks,
+	int configureFrontEndStream(const std::vector<CameraMediaStream::StreamLink> &streamLinks,
 				    V4L2SubdeviceFormat &sdFormat);
 	int configureFrontEndLinks() const;
 
@@ -1333,7 +1333,7 @@ int NxpNeoCameraData::configureFrontEndFormat(const V4L2SubdeviceFormat &sensorF
 
 	const CameraMediaStream *streamInput0 = cameraInfo_->getStreamInput0();
 	ASSERT(streamInput0);
-	const std::vector<StreamLink> &streamLinksInput0 =
+	const std::vector<CameraMediaStream::StreamLink> &streamLinksInput0 =
 		streamInput0->streamLinks();
 	ret = configureFrontEndStream(streamLinksInput0, sdFormatInput0);
 	if (ret)
@@ -1351,7 +1351,7 @@ int NxpNeoCameraData::configureFrontEndFormat(const V4L2SubdeviceFormat &sensorF
 		unsigned int code = streamInput1->mbusCode();
 		sdFormatInput1.code = code;
 		sdFormatInput1.size = sensorFormat.size;
-		const std::vector<StreamLink> &streamLinksInput1 =
+		const std::vector<CameraMediaStream::StreamLink> &streamLinksInput1 =
 			streamInput1->streamLinks();
 		ret = configureFrontEndStream(streamLinksInput1, sdFormatInput1);
 		if (ret)
@@ -1373,7 +1373,7 @@ int NxpNeoCameraData::configureFrontEndFormat(const V4L2SubdeviceFormat &sensorF
 		unsigned int lines =
 			streamEmbedded->embeddedLines();
 		sdFormatEd.size = Size(sensorFormat.size.width, lines);
-		const std::vector<StreamLink> &streamLinksEmbedded =
+		const std::vector<CameraMediaStream::StreamLink> &streamLinksEmbedded =
 			streamEmbedded->streamLinks();
 		ret = configureFrontEndStream(streamLinksEmbedded, sdFormatEd);
 		if (ret)
@@ -1691,7 +1691,7 @@ int NxpNeoCameraData::setupCameraIsiReserve()
  * \return 0 in case of success or a negative error code.
  */
 int NxpNeoCameraData::configureFrontEndStream(
-	const std::vector<StreamLink> &streamLinks,
+	const std::vector<CameraMediaStream::StreamLink> &streamLinks,
 	V4L2SubdeviceFormat &sdFormat)
 {
 	const MediaDevice *media = pipe()->isiMedia();
@@ -1699,15 +1699,15 @@ int NxpNeoCameraData::configureFrontEndStream(
 	int ret = 0;
 
 	for (const auto &streamLink : streamLinks) {
-		const MediaLink *mediaLink = std::get<0>(streamLink);
+		const MediaLink *mediaLink = streamLink.mediaLink_;
 		const MediaPad *sourceMediaPad = mediaLink->source();
 		const MediaPad *sinkMediaPad = mediaLink->sink();
 		std::string sourceName = sourceMediaPad->entity()->name();
 		std::string sinkName = sinkMediaPad->entity()->name();
 		unsigned int sourcePad = sourceMediaPad->index();
 		unsigned int sinkPad = sinkMediaPad->index();
-		unsigned int sourceStream = std::get<1>(streamLink);
-		unsigned int sinkStream = std::get<2>(streamLink);
+		unsigned int sourceStream = streamLink.sourceStream_;
+		unsigned int sinkStream = streamLink.sinkStream_;
 
 		LOG(NxpNeoPipe, Debug)
 			<< "Set format " << sdFormat.toString()
@@ -1771,9 +1771,9 @@ int NxpNeoCameraData::configureFrontEndLinks() const
 			     std::string streamName) -> int {
 		int res;
 		ASSERT(_stream);
-		std::vector<StreamLink> links = _stream->streamLinks();
+		std::vector<CameraMediaStream::StreamLink> links = _stream->streamLinks();
 		for (auto &streamLink : links) {
-			MediaLink *link = std::get<0>(streamLink);
+			MediaLink *link = streamLink.mediaLink_;
 			MediaPad *sourceMPad = link->source();
 			MediaPad *sinkMPad = link->sink();
 			std::string source = sourceMPad->entity()->name();

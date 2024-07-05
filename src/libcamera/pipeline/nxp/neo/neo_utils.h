@@ -17,13 +17,21 @@ namespace libcamera {
 
 namespace nxpneo {
 
-using StreamLink = std::tuple<MediaLink *, unsigned int, unsigned int>;
-
 class PipelineConfig;
 
 class CameraMediaStream
 {
 public:
+	struct StreamLink {
+		StreamLink(MediaLink *mediaLink, unsigned int sourceStream,
+			   unsigned int sinkStream)
+			: mediaLink_(mediaLink), sourceStream_(sourceStream),
+			  sinkStream_(sinkStream) {}
+		MediaLink *mediaLink_;
+		unsigned int sourceStream_;
+		unsigned int sinkStream_;
+	};
+
 	CameraMediaStream()
 		: isiPipe_(0), mbusCode_(0), embeddedLines_(0) {}
 	CameraMediaStream(std::vector<StreamLink> links,
