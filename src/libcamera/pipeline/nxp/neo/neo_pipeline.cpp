@@ -620,7 +620,7 @@ void PipelineHandlerNxpNeo::cancelRequest(Request *request)
 bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 {
 	int ret;
-	constexpr unsigned int kMaxNeoDevices = 4;
+	constexpr unsigned int kMaxNeoDevices = 8;
 
 	/*
 	 * Prerequisite for pipeline operation is that frontend media controller
@@ -773,7 +773,8 @@ int PipelineHandlerNxpNeo::setupRouting() const
 
 	const RoutingMap &routingMap = pipelineConfig_.getRoutingMap();
 
-	for (const auto &[name, routing] : routingMap) {
+	for (const auto &[entity, routing] : routingMap) {
+		const std::string &name = entity->name();
 		LOG(NxpNeoPipe, Debug)
 			<< "Configure routing for entity " << name
 			<< " routing " << routing;
@@ -880,7 +881,7 @@ int PipelineHandlerNxpNeo::loadPipelineConfig()
 		file = std::string(NXP_NEO_PIPELINE_DATA_DIR) +
 		       std::string("/config.yaml");
 
-	ret = pipelineConfig_.load(file, isiMedia_);
+	ret = pipelineConfig_.load(file, isiMedia_, isi_.get());
 
 	return ret;
 }

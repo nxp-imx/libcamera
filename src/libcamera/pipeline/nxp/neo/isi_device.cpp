@@ -375,7 +375,7 @@ ISIPipe *ISIDevice::allocPipe(unsigned int index)
 
 	auto &pipeEntry = pipeEntries_[index];
 	if (std::get<1>(pipeEntry) == true) {
-		LOG(NxpNeoIsiDev, Error) << "ISI channel already allocated" << index;
+		LOG(NxpNeoIsiDev, Error) << "ISI channel already allocated " << index;
 		return nullptr;
 	}
 

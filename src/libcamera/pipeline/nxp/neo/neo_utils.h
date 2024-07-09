@@ -13,6 +13,8 @@
 #include "libcamera/internal/v4l2_subdevice.h"
 #include "libcamera/internal/yaml_parser.h"
 
+#include "isi_device.h"
+
 namespace libcamera {
 
 namespace nxpneo {
@@ -34,7 +36,7 @@ public:
 
 	CameraMediaStream()
 		: isiPipe_(0), mbusCode_(0), embeddedLines_(0) {}
-	CameraMediaStream(std::vector<StreamLink> links,
+	CameraMediaStream(std::vector<StreamLink> &links,
 			  unsigned int pipe, uint32_t code, unsigned int lines)
 		: streamLinks_(links),
 		  isiPipe_(pipe), mbusCode_(code), embeddedLines_(lines) {}
@@ -92,7 +94,7 @@ private:
 	friend PipelineConfig;
 };
 
-using RoutingMap = std::map<std::string, V4L2Subdevice::Routing>;
+using RoutingMap = std::map<MediaEntity *, V4L2Subdevice::Routing>;
 using CameraMap = std::map<std::string, CameraInfo>;
 
 class PipelineConfig
@@ -100,19 +102,37 @@ class PipelineConfig
 public:
 	PipelineConfig(){};
 	virtual ~PipelineConfig(){};
-	int load(std::string file, MediaDevice *media);
+	int load(std::string file, MediaDevice *media, const ISIDevice *isiDevice);
 	const CameraInfo *getCameraInfo(std::string name) const;
 	const RoutingMap &getRoutingMap() const;
 
 private:
+	static constexpr unsigned int kPadAny =
+		std::numeric_limits<unsigned int>::max();
+
 	int loadFromFile(std::string file, MediaDevice *media);
-	int loadAutoDetect(MediaDevice *media);
-	int loadAutoDetectEntity(MediaEntity *entity);
-	int loadAutoDetectRouting(MediaEntity *entity,
-				  unsigned int sinkPad, unsigned int sourcePad);
+
+	int loadAutoDetect(MediaDevice *media, const ISIDevice *isiDevice);
+	int loadAutoDetectCameraStream(MediaDevice *media,
+				       const ISIDevice *isiDevice, unsigned int pipe,
+				       MediaEntity *sensorEntity,
+				       std::map<MediaPad *, unsigned int> *streamMap,
+				       std::map<MediaEntity *, V4L2Subdevice::Routing> *routingMap,
+				       CameraMediaStream *cameraMediaStream);
+	int loadAutoDetectFindPaths(MediaDevice *media,
+				    MediaEntity *fromEntity, unsigned int fromPad,
+				    MediaEntity *toEntity, unsigned int toPad,
+				    std::vector<std::vector<MediaLink *>> *linkPaths);
+	unsigned int loadAutoDetectPadToStream(std::map<MediaPad *, unsigned int> *streamMap,
+					       MediaPad *pad);
+	int loadAutoDetectAddRoute(MediaEntity *entity,
+				   V4L2Subdevice::Stream *sinkStream,
+				   V4L2Subdevice::Stream *sourceStream,
+				   std::map<MediaEntity *, V4L2Subdevice::Routing> *routingMap);
+
 	int parsePlatform(const YamlObject &platform, MediaDevice *media);
 	int parseMatch(const YamlObject &match, MediaDevice *media);
-	int parseRoutings(const YamlObject &platform);
+	int parseRoutings(const YamlObject &platform, MediaDevice *media);
 	int parseCameras(const YamlObject &platform, MediaDevice *media);
 	std::optional<CameraMediaStream>
 	parseMediaStream(const YamlObject &camera, std::string key,
@@ -121,6 +141,7 @@ private:
 	RoutingMap routingMap_;
 	CameraMap cameraMap_;
 
+	/* Configuration file routes sequence elements */
 	enum {
 		ROUTE_SINK_PAD = 0,
 		ROUTE_SINK_STREAM,

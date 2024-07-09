@@ -7,6 +7,7 @@
 #include "neo_utils.h"
 
 #include <limits>
+#include <regex>
 #include <sstream>
 #include <string>
 
@@ -57,7 +58,7 @@ std::string CameraMediaStream::toString() const
 
 	ss << "mbus-code " << mbusCode()
 	   << " isi-pipe " << pipe()
-	   << " embedded-lines " << pipe();
+	   << " embedded-lines " << embeddedLines();
 
 	return ss.str();
 }
@@ -118,162 +119,438 @@ const RoutingMap &PipelineConfig::getRoutingMap() const
 }
 
 /**
- * \brief Create a default route for a subdevice if it suports streams
+ * \brief Discover the valid camera graphs to the capture video device
+ * \param[in] media The frontend media controller device
+ * \param[in] isiDevice The ISI Device associated to the media controller device
  *
- * Create a single route between the sink and the source pad on stream 0.
- * Doing so will also reinitialise the routing table to a known and
- * deterministic state.
+ * For every camera sensor in the media device, look for a valid link path to
+ * the capture video device. Also, build the aggregated global routing table for
+ * all the cameras detected.
  *
- * \param[in] entity The media device entity of the subdevice.
- * \param[in] sinkPad The sink pad index.
- * \param[in] sourcePad The source pad index.
- * \return 0 on success or a negative error code otherwise.
+ * \return 0 on success or a negative error code otherwise
  */
-int PipelineConfig::loadAutoDetectRouting(MediaEntity *entity,
-					  unsigned int sinkPad,
-					  unsigned int sourcePad)
+int PipelineConfig::loadAutoDetect(MediaDevice *media, const ISIDevice *isiDevice)
+{
+	if (!media)
+		return -EINVAL;
+
+	if (!isiDevice)
+		return -EINVAL;
+
+	unsigned int pipes = isiDevice->crossbarSourcePads();
+	unsigned pipeIndex = 0;
+
+	/* Map aggregating stream identifiers for all pads of the media device */
+	std::map<MediaPad *, unsigned int> globalStreamMap;
+
+	/*
+	 * Build a set of the sensors entities from the media device to have an
+	 * ordered list by name and guarantee a consistent topology detection.
+	 * the usual sensor naming convention is 'model xx-yyyy'
+	 * where xx is the i2c bus number and yyyy is the bus address.
+	 * Sensors set ordering is defined with the criteria below:
+	 * - simple alphabetical order when above convention is not used or
+	 *   for different sensor model
+	 * - increasing i2c bus for identical sensor model on different i2c bus
+	 * - increasing i2c address for identical sensor model on the same bus
+	 */
+	auto compareName =
+		[](MediaEntity *a, MediaEntity *b) {
+			std::regex r("(\\S+) (\\d+)-(\\d+)");
+			const std::string &nameA = a->name();
+			const std::string &nameB = b->name();
+			std::smatch matchesA, matchesB;
+			if (std::regex_search(nameA, matchesA, r) &&
+			    std::regex_search(nameB, matchesB, r)) {
+				const std::string &modelA = matchesA[1];
+				const std::string &modelB = matchesB[1];
+				unsigned i2cBusA = std::stoul(matchesA[2]);
+				unsigned i2cBusB = std::stoul(matchesB[2]);
+				unsigned i2cAddrA = std::stoul(matchesA[3]);
+				unsigned i2cAddrB = std::stoul(matchesB[3]);
+				if (modelA != modelB)
+					return nameA < nameB;
+				else if (i2cBusA != i2cBusB)
+					return i2cBusA < i2cBusB;
+				else
+					return i2cAddrA < i2cAddrB;
+			} else {
+				return nameA < nameB;
+			}
+		};
+	std::set<MediaEntity *, decltype(compareName)> sensors(compareName);
+	for (MediaEntity *e : media->entities()) {
+		if (e->function() != MEDIA_ENT_F_CAM_SENSOR)
+			continue;
+		sensors.insert(e);
+	}
+
+	/* Discover the topology of every sensor */
+	for (MediaEntity *sensor : sensors) {
+		if (pipeIndex >= pipes) {
+			LOG(NxpNeoPipe, Info) << "No pipes left";
+			break;
+		}
+
+		LOG(NxpNeoPipe, Debug) << "Auto detect camera " << sensor->name();
+
+		/* Support is limited to input0 for now */
+		std::map<MediaEntity *, V4L2Subdevice::Routing> routingMap;
+		std::map<MediaPad *, unsigned int> streamMap(globalStreamMap);
+		CameraMediaStream cameraMediaStream;
+		int ret = loadAutoDetectCameraStream(
+			media, isiDevice, pipeIndex, sensor, &streamMap, &routingMap,
+			&cameraMediaStream);
+		if (ret)
+			continue;
+
+		/* Merge the sensor routings into the global routings */
+		for (auto &[entity, routing] : routingMap) {
+			if (routingMap_.count(entity)) {
+				V4L2Subdevice::Routing &dest = routingMap_[entity];
+				dest.reserve(dest.size() + routing.size());
+				std::move(routing.begin(), routing.end(),
+					  std::back_inserter(dest));
+			} else {
+				routingMap_[entity] = std::move(routing);
+			}
+		}
+
+		globalStreamMap = std::move(streamMap);
+
+		CameraInfo cameraInfo = {};
+		cameraInfo.streams_[CameraInfo::STREAM_INPUT0] =
+			std::move(cameraMediaStream);
+		cameraMap_[sensor->name()] = std::move(cameraInfo);
+
+		pipeIndex++;
+	}
+
+	return cameraMap_.size() ? 0 : -EINVAL;
+}
+
+/**
+ * \brief Discover a valid stream path from the sensor to the video capture device
+ * \param[in] media The frontend media controller device
+ * \param[in] isiDevice The ISI device instance associated to the media device
+ * \param[in] pipe The ISI pipe associated to that stream
+ * \param[in] sensorEntity The targeted sensor media entity
+ * \param[inout] streamMap The global map with all media pads already involved
+ * in a camera stream
+ * \param[out] routingMap The map of routings to be created for that camera
+ * \param[out] cameraMediaStream The resulting camera media stream instance
+ *
+ * The camera media stream discovery requires:
+ * - A recursive search of media link paths from the sensor to the capture video
+ *   node, that is done concatenating the 2 paths:
+ *     1) From the sensor to the ISI crossbar
+ *     2) From the crossbar to the capture video node (trivial)
+ * - The assignment of stream numbers to every pad involved in the path
+ * - Build a base of default routes to be applied to the devices of the graph
+ *   if they support streams.
+ *
+ * \return 0 on success or a negative error code otherwise
+ */
+int PipelineConfig::loadAutoDetectCameraStream(MediaDevice *media,
+					       const ISIDevice *isiDevice,
+					       unsigned int pipe,
+					       MediaEntity *sensorEntity,
+					       std::map<MediaPad *, unsigned int> *streamMap,
+					       std::map<MediaEntity *, V4L2Subdevice::Routing> *routingMap,
+					       CameraMediaStream *cameraMediaStream)
 {
 	int ret;
-	std::string entityName = entity->name();
-	std::unique_ptr<V4L2Subdevice> subdev;
 
-	/* Check if subdevices supports streams */
+	MediaEntity *crossbarEntity =
+		media->getEntityByName(isiDevice->kSDevCrossBarEntityName());
+	if (!crossbarEntity) {
+		LOG(NxpNeoPipe, Error) << "Crossbar not found";
+		return -EINVAL;
+	}
+
+	/* Discover path from sensor source to crossbar sink */
+	std::vector<std::vector<MediaLink *>> xbarPaths;
+
+	/* Assume sensor has single source pad */
+	ret = loadAutoDetectFindPaths(media, sensorEntity, 0,
+				      crossbarEntity, kPadAny, &xbarPaths);
+	if (ret) {
+		LOG(NxpNeoPipe, Warning)
+			<< "No path found for sensor " << sensorEntity->name();
+		return -EINVAL;
+	} else if (xbarPaths.size() > 1) {
+		LOG(NxpNeoPipe, Warning)
+			<< "Multiple paths for sensor " << sensorEntity->name();
+	}
+
+	/* Discover path from crossbar to pipe video node */
+	std::vector<std::vector<MediaLink *>> pipePaths;
+	MediaEntity *pipeEntity =
+		media->getEntityByName(isiDevice->kVDevPipeEntityName(pipe));
+	if (!pipeEntity)
+		return -EINVAL;
+	unsigned int crossbarSource =
+		isiDevice->crossbarFirstSourcePad() + pipe;
+
+	ret = loadAutoDetectFindPaths(media, crossbarEntity, crossbarSource,
+				      pipeEntity, kPadAny, &pipePaths);
+	if (ret) {
+		LOG(NxpNeoPipe, Error)
+			<< "No path found for pipe " << pipeEntity->name();
+		return -EINVAL;
+	}
+
+	/* Concatenate full path from sensor to video node */
+	std::vector<MediaLink *> &path = xbarPaths[0];
+	std::vector<MediaLink *> &pipePath = pipePaths[0];
+	path.reserve(path.size() + pipePath.size());
+	std::move(pipePath.begin(), pipePath.end(), std::back_inserter(path));
+
+	/* Create StreamLink (MediaLink + streams) and routing entries */
+	std::vector<CameraMediaStream::StreamLink> slinks;
+	const MediaPad *lastSinkPad = nullptr;
+	unsigned int lastSinkStreamId = -1;
+	for (MediaLink *mlink : path) {
+		MediaPad *sourcePad = mlink->source();
+		MediaPad *sinkPad = mlink->sink();
+
+		unsigned int sourceStreamId =
+			loadAutoDetectPadToStream(streamMap, sourcePad);
+		unsigned int sinkStreamId =
+			loadAutoDetectPadToStream(streamMap, sinkPad);
+		slinks.emplace_back(mlink, sourceStreamId, sinkStreamId);
+
+		/*
+		 * Check if a route is needed for the source entity of the media
+		 * link. The sink pad and stream information for the source
+		 * entity come from the previous link. Thus first link (the
+		 * sensor source) is skipped.
+		 * \todo revisit when sensor internal pads are supported.
+		 */
+		if (lastSinkPad) {
+			V4L2Subdevice::Stream sinkStream{ lastSinkPad->index(),
+							  lastSinkStreamId };
+			V4L2Subdevice::Stream sourceStream{ sourcePad->index(),
+							    sourceStreamId };
+			loadAutoDetectAddRoute(lastSinkPad->entity(),
+					       &sinkStream, &sourceStream,
+					       routingMap);
+		}
+
+		lastSinkPad = sinkPad;
+		lastSinkStreamId = sinkStreamId;
+	}
+
+	uint32_t mbusCode = 0;
+	unsigned int embeddedLines = 0;
+	*cameraMediaStream = CameraMediaStream(slinks, pipe, mbusCode, embeddedLines);
+
+	LOG(NxpNeoPipe, Debug)
+		<< "Detected CameraMediaStream for " << sensorEntity->name()
+		<< std::endl
+		<< cameraMediaStream->toString();
+
+	return 0;
+}
+
+/**
+ * \brief Discover a valid media link path from an entity to an other
+ * \param[in] media The frontend media controller device
+ * \param[in] fromEntity The start entity
+ * \param[in] fromPad The start entity source pad
+ * \param[in] toEntity The destination entity
+ * \param[in] toPad The destination entity sink pad, or kPadAny if do not care
+ * \param[out] linkPaths The resulting list of media links paths
+ *
+ * Search recursively a path from a media entity source pad to a media entity
+ * sink pad, by following the media links from the media device. From the
+ * starting entity pad, every media link is visited to reach the remote entity
+ * sink pad and continue the recursion from there.
+ * A single entry (i.e. path) at most is expected to be reported in linkPaths.
+ * Provision for multiple path is kept in order to be able to detect and warn
+ * about complex topologies where multiple path candidates would have been
+ * found.
+ *
+ * \return 0 on success or a negative error code otherwise
+ */
+int PipelineConfig::loadAutoDetectFindPaths(MediaDevice *media,
+					    MediaEntity *fromEntity, unsigned int fromPad,
+					    MediaEntity *toEntity, unsigned int toPad,
+					    std::vector<std::vector<MediaLink *>> *linkPaths)
+{
+	linkPaths->clear();
+
+	if (!fromEntity || (fromPad >= fromEntity->pads().size()) ||
+	    !(fromEntity->pads()[fromPad]->flags() & MEDIA_PAD_FL_SOURCE))
+		return -EINVAL;
+
+	if (!toEntity || ((toPad != kPadAny) &&
+			  ((toPad >= toEntity->pads().size() ||
+			    !(toEntity->pads()[toPad]->flags() & MEDIA_PAD_FL_SINK)))))
+		return -EINVAL;
+
+	LOG(NxpNeoPipe, Debug)
+		<< "Find path from " << fromEntity->name() << "/" << fromPad
+		<< " to " << toEntity->name() << "/" << toPad;
+
+	/* Visit every remote entity linked to the current entity source pad */
+	std::vector<MediaLink *> mlinks = fromEntity->pads()[fromPad]->links();
+	for (auto mlink : mlinks) {
+		MediaEntity *remoteEntity = mlink->sink()->entity();
+		unsigned int remotePad = mlink->sink()->index();
+
+		/*
+		 * In case the remote entity is the destination entity, the
+		 * recursion ends with a path consisting in that single link.
+		 */
+		if ((remoteEntity == toEntity) &&
+		    ((toPad == remotePad) || (toPad == kPadAny))) {
+			linkPaths->push_back({ mlink });
+			LOG(NxpNeoPipe, Debug)
+				<< "Found destination via final link "
+				<< fromEntity->name() << "/" << fromPad << " -> "
+				<< remoteEntity->name() << "/" << remotePad;
+
+			return 0;
+		}
+
+		/*
+		 * Otherwise, recursively search from every source pad of the
+		 * remote entity.
+		 */
+		for (auto &pad : remoteEntity->pads()) {
+			if (!(pad->flags() & MEDIA_PAD_FL_SOURCE))
+				continue;
+
+			std::vector<std::vector<MediaLink *>> remotePaths;
+			int ret = loadAutoDetectFindPaths(media,
+							  remoteEntity, pad->index(),
+							  toEntity, toPad,
+							  &remotePaths);
+			if (ret)
+				continue;
+
+			for (auto &remotePath : remotePaths) {
+				/*
+				 * Paths to destination were found through remote
+				 * source pad - prepend the link to the remote
+				 * entity, in order to produce the complete path.
+				 * This aggregated path is added to the list of
+				 * the discovered paths.
+				 */
+				std::vector<MediaLink *> fullPath = { mlink };
+				fullPath.reserve(fullPath.size() + remotePath.size());
+				std::move(remotePath.begin(), remotePath.end(),
+					  std::back_inserter(fullPath));
+				LOG(NxpNeoPipe, Debug)
+					<< "Prepending path "
+					<< fromEntity->name() << "/" << fromPad << " -> "
+					<< remoteEntity->name() << "/" << remotePad
+					<< " total links " << fullPath.size();
+
+				linkPaths->push_back(std::move(fullPath));
+			}
+		}
+	}
+
+	return linkPaths->size() ? 0 : -EINVAL;
+}
+
+/**
+ * \brief Return a stream number allocated for a media device pad
+ * \param[in] streamMap The map of all media pads already used and their streams
+ * \param[in] pad The targeted media device map
+ *
+ * Allocate a stream number to use on a media device pad. The basic assumption
+ * is that any time a media pad is reused for a new camera graph, the stream
+ * number has to be incremented because it is a new stream.
+ *
+ * \return The stream number, or zero if streams are not supported by the device
+ */
+unsigned int PipelineConfig::loadAutoDetectPadToStream(std::map<MediaPad *, unsigned int> *streamMap,
+						       MediaPad *pad)
+{
+	std::unique_ptr<V4L2Subdevice> subdev;
+	unsigned int stream = 0;
+	MediaEntity *entity = pad->entity();
+	int ret;
+
+	if (streamMap->count(pad)) {
+		/* Check if subdevice supports streams */
+		subdev = std::make_unique<V4L2Subdevice>(entity);
+		ret = subdev->open();
+		if (ret) {
+			LOG(NxpNeoPipe, Error)
+				<< "Failed to open " << subdev->deviceNode();
+		} else if (!subdev->caps().hasStreams()) {
+			LOG(NxpNeoPipe, Error)
+				<< "Unsupported multi-streams on entity "
+				<< entity->name();
+		} else {
+			unsigned int &previous = streamMap->at(pad);
+			previous++;
+			stream = previous;
+		}
+	} else {
+		streamMap->insert({ pad, 0 });
+	}
+
+	return stream;
+}
+
+/**
+ * \brief Append a route to the entity routing table
+ * \param[in] entity The targeted media entity
+ * \param[in] sinkStream The sink stream (pad index and stream number)
+ * \param[in] sourceStream The source stream (pad index and stream number)
+ * \param[in] routingMap The global map of routings for all the media entities
+ *
+ * If the media entity supports streams, append a route for the stream to this
+ * entity routing table. It does nothing if streams are not supported by the
+ * entity.
+ *
+ * \return 0 on success or a negative error code otherwise
+ */
+int PipelineConfig::loadAutoDetectAddRoute(MediaEntity *entity,
+					   V4L2Subdevice::Stream *sinkStream,
+					   V4L2Subdevice::Stream *sourceStream,
+					   std::map<MediaEntity *, V4L2Subdevice::Routing> *routingMap)
+{
+	std::unique_ptr<V4L2Subdevice> subdev;
+	int ret;
+
+	/* Check if subdevice supports streams */
 	subdev = std::make_unique<V4L2Subdevice>(entity);
 	ret = subdev->open();
 	if (ret) {
 		LOG(NxpNeoPipe, Error)
 			<< "Failed to open " << subdev->deviceNode();
-		return ret;
-	}
-
-	if (!subdev->caps().hasStreams())
-		return 0;
-
-	/* Create default route */
-	V4L2Subdevice::Routing routing = {};
-	routing.emplace_back(V4L2Subdevice::Stream{ sinkPad, 0 },
-			     V4L2Subdevice::Stream{ sourcePad, 0 },
-			     V4L2_SUBDEV_ROUTE_FL_ACTIVE);
-
-	LOG(NxpNeoPipe, Debug)
-		<< "Default routing for " << entityName
-		<< " added " << routing;
-
-	routingMap_[entityName] = routing;
-	return 0;
-}
-
-/**
- * \brief Extract camera media device graph to the capture video device
- * \param[in] entity The media device entity of the sensor.
- *
- * Discover the camera graph going through a very basic walk-through strategy,
- * starting from the sensor moving downstream until the ISI video device is
- * hit. Next entity selected is the peer connected to the first source
- * pad of the current entity. That is simplistic approach that works with
- * basic linear topology and that do not require media stream configuration.
- * Single camera discovery is currently supported, multiple cameras typically
- * inducing support for deserializers and media stream configuration. That is
- * hardly compatible with automatic graph discovery, and rather requires
- * platform configuration via config file.
- * More complex implementation may be considered though if needed.
- *
- * \return 0 on success or a negative error code otherwise.
- */
-int PipelineConfig::loadAutoDetectEntity(MediaEntity *entity)
-{
-	constexpr unsigned int kGraphDepthMax = 16;
-	std::string cameraName = entity->name();
-	unsigned int sourcePadIndex = 0;
-	unsigned int sinkPadIndex = 0;
-	int ret;
-
-	LOG(NxpNeoPipe, Debug) << "Auto discovering path for " << cameraName;
-
-	std::vector<CameraMediaStream::StreamLink> streamLinks;
-	for (unsigned int i = 0; i < kGraphDepthMax; i++) {
-		MediaPad *sourcePad = nullptr;
-		MediaPad *sinkPad;
-
-		for (auto pad : entity->pads()) {
-			if (pad->flags() & MEDIA_PAD_FL_SOURCE) {
-				sourcePad = pad;
-				sourcePadIndex = pad->index();
-				break;
-			}
-		}
-
-		MediaLink *link;
-		if (sourcePad && sourcePad->links().size()) {
-			link = sourcePad->links()[0];
-		} else {
-			LOG(NxpNeoPipe, Debug)
-				<< "Camera " << cameraName
-				<< " entity " << entity->name()
-				<< " has no source pad with links";
-			return -EINVAL;
-		}
-
-		ret = loadAutoDetectRouting(entity,
-					    sinkPadIndex, sourcePadIndex);
-		if (ret)
-			return 0;
-		streamLinks.emplace_back(link, 0, 0);
-
-		/* Hop to new entity and record link */
-		sinkPad = link->sink();
-		entity = sinkPad->entity();
-		sinkPadIndex = sinkPad->index();
-
-		/* Stop at video node */
-		if (entity->function() == MEDIA_ENT_T_V4L2_VIDEO)
-			break;
-	}
-
-	if (entity->name() != ISIDevice::kVDevPipeEntityName(0)) {
-		LOG(NxpNeoPipe, Error)
-			<< "Camera " << cameraName
-			<< " No path found to ISI video node";
 		return -EINVAL;
+	} else if (!subdev->caps().hasStreams()) {
+		return 0;
 	}
 
-	/* Optional input0 stream parameters set to default */
-	unsigned int mbusCode = 0;
-	unsigned int isiPipe = 0;
-	unsigned int embeddedLines = 0;
-	CameraMediaStream mediaStream = { streamLinks, isiPipe, mbusCode, embeddedLines };
+	V4L2Subdevice::Routing *routing;
+	if (!routingMap->count(entity))
+		routingMap->insert({ entity, {} });
+	routing = &(routingMap->at(entity));
+
+	/* Append a default route for this entity */
+	unsigned int flags = V4L2_SUBDEV_ROUTE_FL_ACTIVE;
+	routing->emplace_back(*sinkStream, *sourceStream, flags);
 
 	LOG(NxpNeoPipe, Debug)
-		<< "Camera media stream detected " << std::endl
-		<< mediaStream.toString();
-
-	CameraInfo cameraInfo = {};
-	cameraInfo.streams_[CameraInfo::STREAM_INPUT0] = mediaStream;
-	cameraMap_[cameraName] = cameraInfo;
+		<< "Default route added for " << entity->name() << " "
+		<< sinkStream->pad << "/" << sinkStream->stream << "->"
+		<< sourceStream->pad << "/" << sourceStream->stream
+		<< " [" << flags << "]";
 
 	return 0;
 }
 
-/**
- * \brief Discover a valid camera graph to the capture video device
- * \param[in] media The frontend media controller device.
- *
- * \return 0 on success or a negative error code otherwise.
+/*
+ * ---------------------------- Config file parsing ----------------------------
  */
-int PipelineConfig::loadAutoDetect(MediaDevice *media)
-{
-	int ret = -EINVAL;
-
-	for (MediaEntity *entity : media->entities()) {
-		if (entity->function() != MEDIA_ENT_F_CAM_SENSOR)
-			continue;
-		ret = loadAutoDetectEntity(entity);
-		if (!ret)
-			break;
-	}
-
-	return ret;
-}
 
 /**
  * \brief Parse match entries in a platform node
@@ -313,7 +590,7 @@ int PipelineConfig::parseMatch(const YamlObject &platform, MediaDevice *media)
  * \param[in] media The frontend media controller device.
  * \return 0 on success or a negative error code otherwise.
  */
-int PipelineConfig::parseRoutings(const YamlObject &platform)
+int PipelineConfig::parseRoutings(const YamlObject &platform, MediaDevice *media)
 {
 	/* Routes definition is optional */
 	const YamlObject &routings = platform["routings"];
@@ -325,12 +602,17 @@ int PipelineConfig::parseRoutings(const YamlObject &platform)
 	routingMap_.clear();
 
 	for (const auto &subdev : routings.asList()) {
-		const auto &entity = subdev["entity"].get<std::string>();
-		if (!entity.has_value()) {
+		const auto &entityNameValue = subdev["entity"].get<std::string>();
+		if (!entityNameValue.has_value()) {
 			LOG(NxpNeoPipe, Warning) << "Missing routing entity name";
 			return -EINVAL;
 		}
-		std::string entityName = entity.value();
+		std::string entityName = entityNameValue.value();
+		MediaEntity *entity = media->getEntityByName(entityName);
+		if (!entity) {
+			LOG(NxpNeoPipe, Warning) << "Entity not found " << entityName;
+			return -EINVAL;
+		}
 
 		const auto &routes = subdev["routes"];
 		if (!routes.isList() || routes.size() == 0) {
@@ -355,7 +637,7 @@ int PipelineConfig::parseRoutings(const YamlObject &platform)
 				v[ROUTE_FLAGS]);
 		}
 
-		routingMap_[entityName] = routing;
+		routingMap_[entity] = routing;
 		LOG(NxpNeoPipe, Debug) << "Entity name " << entityName
 				   << " routing " << routing;
 	}
@@ -570,7 +852,7 @@ int PipelineConfig::parsePlatform(const YamlObject &platform,
 	if (ret)
 		return ret;
 
-	ret = parseRoutings(platform);
+	ret = parseRoutings(platform, media);
 	if (ret)
 		return ret;
 
@@ -634,6 +916,7 @@ int PipelineConfig::loadFromFile(std::string filename, MediaDevice *media)
  * \brief Load the pipeline configuration
  * \param[in] file The path to the pipeline configuration file.
  * \param[in] media The frontend media controller device.
+ * \param[in] isiDevice The ISI Device associated to the media controller device
  *
  * Build the pipeline configuration from either the config file
  * if it exists and lists a setup corresponding to the frontend media controller
@@ -642,13 +925,14 @@ int PipelineConfig::loadFromFile(std::string filename, MediaDevice *media)
  *
  * \return 0 on success or a negative error code otherwise.
  */
-int PipelineConfig::load(std::string filename, MediaDevice *media)
+int PipelineConfig::load(std::string filename, MediaDevice *media,
+			 const ISIDevice *isiDevice)
 {
 	int ret;
 
 	ret = loadFromFile(filename, media);
 	if (ret)
-		ret = loadAutoDetect(media);
+		ret = loadAutoDetect(media, isiDevice);
 
 	return ret;
 }
