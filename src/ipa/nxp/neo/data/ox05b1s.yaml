@@ -3,8 +3,8 @@
 ---
 version: 1
 algorithms:
-  - Agc:
   - Awb:
+  - Agc:
   - RgbIr:
       # CFA pattern for the sensor with hflip enabled is:
       # GRGB / IGIG / GBGR / IGIG

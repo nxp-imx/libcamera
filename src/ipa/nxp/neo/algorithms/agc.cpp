@@ -40,6 +40,12 @@ namespace ipa::nxpneo::algorithms {
 /**
  * \class Agc
  * \brief A mean-based auto-exposure algorithm
+ *
+ * The AGC algorithm should run before the AWB algorithm
+ * since the AGC has dependency with the AWB.
+ * Indeed the AGC algorithm is using the AWB gains to estimate
+ * the luminance.
+ * Hence the AWB gains should be computed before running the AGC.
  */
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoAgc)
