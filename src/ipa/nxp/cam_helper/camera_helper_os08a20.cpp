@@ -8,6 +8,8 @@
 
 #include <cmath>
 
+#include <linux/v4l2-controls.h>
+
 #include <libcamera/base/log.h>
 
 #include "camera_helper.h"
@@ -24,6 +26,12 @@ public:
 	CameraHelperOs08a20()
 	{
 		/* gainType_ / gainConstants_ are unused */
+
+		/* Adapt the default delayedControls for the os08a20 custom controls */
+		attributes_.delayedControlParams = {
+			{ V4L2_CID_ANALOGUE_GAIN, { 3, false } },
+			{ V4L2_CID_EXPOSURE, { 3, false } },
+		};
 	}
 
 	uint32_t gainCode(double gain) const override;
