@@ -217,9 +217,9 @@ CameraHelperMx95mbcam::CameraHelperMx95mbcam()
 {
 	/* Adapt the default delayedControls for the ox03c10 custom controls */
 	attributes_.delayedControlParams = {
-		{ V4L2_CID_OX03C10_ANALOGUE_GAIN, { 2, false } },
-		{ V4L2_CID_OX03C10_DIGITAL_GAIN, { 2, false } },
-		{ V4L2_CID_OX03C10_EXPOSURE, { 2, false } },
+		{ V4L2_CID_OX03C10_ANALOGUE_GAIN, { 3, false } },
+		{ V4L2_CID_OX03C10_DIGITAL_GAIN, { 3, false } },
+		{ V4L2_CID_OX03C10_EXPOSURE, { 3, false } },
 	};
 
 	/*
