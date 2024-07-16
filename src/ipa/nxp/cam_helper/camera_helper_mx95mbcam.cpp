@@ -179,6 +179,11 @@ public:
 		uint32_t *maxGainCode, uint32_t *defGainCode = nullptr) const override;
 
 	void parseEmbedded(Span<const uint8_t> buffer, ControlList *mdControls) override;
+	struct embeddedData {
+		uint32_t hcgAnalogGainCode;
+		uint32_t hcgDigitalGainCode;
+		uint32_t hcgExposure;
+	};
 
 private:
 	/* total number of raws per frame from driver init sequence (unit double-raw) */
@@ -203,6 +208,9 @@ private:
 	static constexpr double kDefAnalogGain = 5.0;
 
 	std::unique_ptr<MdParser> parser_;
+	/* Embedded data from previous frame */
+	embeddedData embeddedPreviousFrame_;
+	bool embeddedInitialized_;
 };
 
 CameraHelperMx95mbcam::CameraHelperMx95mbcam()
@@ -239,6 +247,8 @@ CameraHelperMx95mbcam::CameraHelperMx95mbcam()
 		ControlInfoMap(std::move(ctrlMap), md::controlIdMap);
 
 	parser_ = std::make_unique<MdParserOmniOx>(registerList);
+	embeddedPreviousFrame_ = {};
+	embeddedInitialized_ = false;
 
 	/* Note: gainType / gainConstants_ are unused */
 }
@@ -515,7 +525,6 @@ void CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 	uint32_t hcgAnalogGainCode;
 	hcgAnalogGainCode = ((registers[AecHcgCtrl08Reg] & 0xf) << 4) |
 			    ((registers[AecHcgCtrl09Reg] & 0xf0) >> 4);
-	mdControls->set(md::AnalogueGain, hcgAnalogGainCode);
 
 	/*
 	 * Digital gain is currently configured identical for hcg, lcg, vs and
@@ -527,7 +536,6 @@ void CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 	hcgDigitalGainCode = ((registers[AecHcgCtrl0aReg] & 0xf) << 10) |
 			     ((registers[AecHcgCtrl0bReg] & 0xff) << 2) |
 			     ((registers[AecHcgCtrl0cReg] & 0xc0) >> 6);
-	mdControls->set(md::DigitalGain, hcgDigitalGainCode);
 
 	/*
 	 * Exposure is currently configured identical for dcg, vs and spd in
@@ -541,7 +549,37 @@ void CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 	hcgExposure = ((registers[AecHcgCtrl01Reg] & 0xff) << 8) |
 		      ((registers[AecHcgCtrl02Reg] & 0xff));
 	hcgExposure *= 2;
-	mdControls->set(md::Exposure, hcgExposure);
+
+	/*
+	 * This is a temporary workaround to compensate the ox03c10
+	 * embedded data not aligned with the frame sensor setting.
+	 * Indeed the exposure and gain setting of the frame is matching
+	 * the embedded data from the previous frame.
+	 * The control list is set with embedded data from previous frame.
+	 */
+	if (embeddedInitialized_) {
+		mdControls->set(md::AnalogueGain,
+				embeddedPreviousFrame_.hcgAnalogGainCode);
+		mdControls->set(md::DigitalGain,
+				embeddedPreviousFrame_.hcgDigitalGainCode);
+		mdControls->set(md::Exposure,
+				embeddedPreviousFrame_.hcgExposure);
+	} else {
+		/*
+		 * This is the first frame for which embedded data are parsed,
+		 * so use embedded data from current frame.
+		 */
+		mdControls->set(md::AnalogueGain, hcgAnalogGainCode);
+		mdControls->set(md::DigitalGain, hcgDigitalGainCode);
+		mdControls->set(md::Exposure, hcgExposure);
+	}
+
+	/* store the embedded data for next frame */
+	embeddedPreviousFrame_.hcgAnalogGainCode = hcgAnalogGainCode;
+	embeddedPreviousFrame_.hcgDigitalGainCode = hcgDigitalGainCode;
+	embeddedPreviousFrame_.hcgExposure = hcgExposure;
+
+	embeddedInitialized_ = true;
 }
 
 REGISTER_CAMERA_HELPER("mx95mbcam", CameraHelperMx95mbcam)
