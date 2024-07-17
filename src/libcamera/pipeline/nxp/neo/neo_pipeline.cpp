@@ -110,7 +110,7 @@ private:
 	int allocateBuffers();
 	int freeBuffers();
 
-	int setupCameraIsiReserve();
+	int setupCameraIsiPipes();
 	int configureFrontEndStream(const std::vector<CameraMediaStream::StreamLink> &streamLinks,
 				    V4L2SubdeviceFormat &sdFormat);
 	int configureFrontEndLinks() const;
@@ -1186,7 +1186,7 @@ int NxpNeoCameraData::init()
 	 * associated NEO inputs where they get processed and
 	 * returned through the NEO main and IR outputs.
 	 */
-	ret = setupCameraIsiReserve();
+	ret = setupCameraIsiPipes();
 	if (ret)
 		return ret;
 
@@ -1639,22 +1639,24 @@ int NxpNeoCameraData::freeBuffers()
 }
 
 /**
- * \brief Handle ISI channels reservation for the camera sensor
+ * \brief Acquire ISI pipes that have been reserved at enumeration time
  *
  * \return 0 in case of success or a negative error code.
  */
-int NxpNeoCameraData::setupCameraIsiReserve()
+
+int NxpNeoCameraData::setupCameraIsiPipes()
 {
 	ISIDevice *isi = pipe()->isiDevice();
 	unsigned int pipeIndex;
-	auto isiPipeDeleter = [=](ISIPipe *_pipe) { isi->freePipe(_pipe); };
+	auto isiPipeDeleter =
+		[=](ISIPipe *_pipe) { isi->releasePipe(_pipe->index()); };
 
 	const CameraMediaStream *streamInput0 =
 		cameraInfo_->getStreamInput0();
 	ASSERT(streamInput0);
 	pipeIndex = streamInput0->pipe();
-	pipeInput0_ = std::shared_ptr<ISIPipe>
-		(isi->allocPipe(pipeIndex), isiPipeDeleter);
+	pipeInput0_ = std::shared_ptr<ISIPipe>(isi->getPipeByIndex(pipeIndex),
+					       isiPipeDeleter);
 	if (!pipeInput0_.get())
 		return -ENODEV;
 
@@ -1662,8 +1664,8 @@ int NxpNeoCameraData::setupCameraIsiReserve()
 		const CameraMediaStream *streamInput1 =
 			cameraInfo_->getStreamInput1();
 		pipeIndex = streamInput1->pipe();
-		pipeInput1_ = std::shared_ptr<ISIPipe>
-			(isi->allocPipe(pipeIndex), isiPipeDeleter);
+		pipeInput1_ = std::shared_ptr<ISIPipe>(isi->getPipeByIndex(pipeIndex),
+						       isiPipeDeleter);
 		if (!pipeInput1_.get())
 			return -ENODEV;
 	}
@@ -1672,8 +1674,8 @@ int NxpNeoCameraData::setupCameraIsiReserve()
 		const CameraMediaStream *streamEmbedded =
 			cameraInfo_->getStreamEmbedded();
 		pipeIndex = streamEmbedded->pipe();
-		pipeEmbedded_ = std::shared_ptr<ISIPipe>
-			(isi->allocPipe(pipeIndex), isiPipeDeleter);
+		pipeEmbedded_ = std::shared_ptr<ISIPipe>(isi->getPipeByIndex(pipeIndex),
+							 isiPipeDeleter);
 		if (!pipeEmbedded_.get())
 			return -ENODEV;
 	}

@@ -102,7 +102,7 @@ class PipelineConfig
 public:
 	PipelineConfig(){};
 	virtual ~PipelineConfig(){};
-	int load(std::string file, MediaDevice *media, const ISIDevice *isiDevice);
+	int load(std::string file, MediaDevice *media, ISIDevice *isiDevice);
 	const CameraInfo *getCameraInfo(std::string name) const;
 	const RoutingMap &getRoutingMap() const;
 
@@ -110,11 +110,11 @@ private:
 	static constexpr unsigned int kPadAny =
 		std::numeric_limits<unsigned int>::max();
 
-	int loadFromFile(std::string file, MediaDevice *media);
+	int loadFromFile(std::string file, MediaDevice *media, ISIDevice *isiDevice);
 
-	int loadAutoDetect(MediaDevice *media, const ISIDevice *isiDevice);
+	int loadAutoDetect(MediaDevice *media, ISIDevice *isiDevice);
 	int loadAutoDetectCameraStream(MediaDevice *media,
-				       const ISIDevice *isiDevice, unsigned int pipe,
+				       ISIDevice *isiDevice, unsigned int pipe,
 				       MediaEntity *sensorEntity,
 				       std::map<MediaPad *, unsigned int> *streamMap,
 				       std::map<MediaEntity *, V4L2Subdevice::Routing> *routingMap,
@@ -130,10 +130,13 @@ private:
 				   V4L2Subdevice::Stream *sourceStream,
 				   std::map<MediaEntity *, V4L2Subdevice::Routing> *routingMap);
 
-	int parsePlatform(const YamlObject &platform, MediaDevice *media);
+	int parsePlatform(const YamlObject &platform, MediaDevice *media,
+			  ISIDevice *isiDevice);
 	int parseMatch(const YamlObject &match, MediaDevice *media);
 	int parseRoutings(const YamlObject &platform, MediaDevice *media);
-	int parseCameras(const YamlObject &platform, MediaDevice *media);
+	int parseCameras(const YamlObject &platform, MediaDevice *media,
+			 ISIDevice *isiDevice);
+	int parseReserveIsi(ISIDevice *isiDevice);
 	std::optional<CameraMediaStream>
 	parseMediaStream(const YamlObject &camera, std::string key,
 			 MediaDevice *media);

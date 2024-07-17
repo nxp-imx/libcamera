@@ -91,11 +91,15 @@ public:
 	ISIDevice() {}
 
 	static constexpr unsigned int kPipesMax = 16;
+	static constexpr unsigned int kUnchainedWidthMax = 2048;
+	static constexpr unsigned int kChainedWidthMax = 4096;
 
 	int init(const MediaDevice *media);
-	ISIPipe *allocPipe();
-	ISIPipe *allocPipe(unsigned int index);
-	void freePipe(ISIPipe *pipe);
+
+	int reservePipeBySize(Size &sizeMax, unsigned int *index);
+	int reservePipeByIndex(Size &sizeMax, unsigned int index);
+	void releasePipe(unsigned int index);
+	ISIPipe *getPipeByIndex(unsigned int index);
 
 	static std::string kDriverName() { return "mxc-isi"; }
 	static std::string kSDevCrossBarEntityName() { return "crossbar"; }
@@ -121,7 +125,15 @@ public:
 	const MediaDevice *media() const { return media_; }
 
 private:
-	std::vector<std::tuple<std::unique_ptr<ISIPipe>, bool>> pipeEntries_;
+	struct PipeWrapper {
+		PipeWrapper(unsigned int index)
+			: pipe_(index), free(true), chained(false){};
+		ISIPipe pipe_;
+		bool free;
+		bool chained;
+	};
+
+	std::vector<PipeWrapper> pipeEntries_;
 	std::unique_ptr<V4L2Subdevice> crossbar_;
 	unsigned int xbarSinkPads_ = 0;
 	const MediaDevice *media_ = nullptr;
