@@ -58,11 +58,7 @@ public:
 		return "Pipe[" + std::to_string(index_) + "] ";
 	}
 
-	unsigned int index() const
-	{
-		return index_;
-	}
-
+	unsigned int index() const { return index_; }
 	int allocateBuffers(unsigned int bufferCount);
 	std::vector<std::unique_ptr<FrameBuffer>> &buffers() { return buffers_; }
 	void freeBuffers();
@@ -76,30 +72,11 @@ private:
 
 	static const std::map<uint32_t, V4L2PixelFormat> &mediaBusToPixelFormats();
 
-	void setState(unsigned int state)
-	{
-		state_ = state;
-	}
-
-	unsigned getState() const
-	{
-		return state_;
-	}
-
-	bool stateIdle() const
-	{
-		return state_ == kStateIdle;
-	}
-
-	bool stateConfigured() const
-	{
-		return state_ == kStateConfigured;
-	}
-
-	bool stateActive() const
-	{
-		return state_ == kStateActive;
-	}
+	void setState(unsigned int state) { state_ = state; }
+	unsigned getState() const { return state_; }
+	bool stateIdle() const { return state_ == kStateIdle; }
+	bool stateConfigured() const { return state_ == kStateConfigured; }
+	bool stateActive() const { return state_ == kStateActive; }
 
 	std::vector<std::unique_ptr<FrameBuffer>> buffers_;
 	std::unique_ptr<V4L2Subdevice> pipe_;
@@ -120,15 +97,8 @@ public:
 	ISIPipe *allocPipe(unsigned int index);
 	void freePipe(ISIPipe *pipe);
 
-	static std::string kDriverName()
-	{
-		return "mxc-isi";
-	}
-
-	static std::string kSDevCrossBarEntityName()
-	{
-		return "crossbar";
-	}
+	static std::string kDriverName() { return "mxc-isi"; }
+	static std::string kSDevCrossBarEntityName() { return "crossbar"; }
 
 	static std::string kSDevPipeEntityName(unsigned int i)
 	{
@@ -145,25 +115,10 @@ public:
 		return ISIPipe::mediaBusToPixelFormats();
 	}
 
-	V4L2Subdevice *crossbar() const
-	{
-		return crossbar_.get();
-	}
-
-	unsigned int crossbarFirstSourcePad() const
-	{
-		return xbarSinkPads_;
-	}
-
-	unsigned int crossbarSourcePads() const
-	{
-		return pipeEntries_.size();
-	}
-
-	const MediaDevice *media() const
-	{
-		return media_;
-	}
+	V4L2Subdevice *crossbar() const { return crossbar_.get(); }
+	unsigned int crossbarFirstSourcePad() const { return xbarSinkPads_; }
+	unsigned int crossbarSourcePads() const { return pipeEntries_.size(); }
+	const MediaDevice *media() const { return media_; }
 
 private:
 	std::vector<std::tuple<std::unique_ptr<ISIPipe>, bool>> pipeEntries_;
