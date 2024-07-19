@@ -637,12 +637,10 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 
 	isi_ = std::make_unique<ISIDevice>();
 	ret = isi_->init(isiMedia_);
-	if (ret)
+	if (ret) {
+		LOG(NxpNeoPipe, Debug) << "ISI media device init failed";
 		return false;
-
-	ret = loadPipelineConfig();
-	if (ret)
-		return false;
+	}
 
 	/*
 	 * Discover Neo ISP media controller devices
@@ -663,7 +661,13 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 		if (neoDev)
 			neos.push(neoDev);
 	}
-	if (!neos.size())
+	if (!neos.size()) {
+		LOG(NxpNeoPipe, Debug) << "No ISP media device";
+		return false;
+	}
+
+	ret = loadPipelineConfig();
+	if (ret)
 		return false;
 
 	/*
@@ -698,6 +702,8 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 	ret = setupCameraGraphs();
 	if (ret)
 		return ret;
+
+	LOG(NxpNeoPipe, Info) << "Probed " << numCameras_ << " cameras";
 
 	return true;
 }
