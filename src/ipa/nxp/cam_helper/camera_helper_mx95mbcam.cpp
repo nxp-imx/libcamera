@@ -584,6 +584,18 @@ void CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 
 REGISTER_CAMERA_HELPER("mx95mbcam", CameraHelperMx95mbcam)
 
+/*
+ * This definition is to support the other variant of the MX95MBCAM module,
+ * using TI DS90UB953/DS90UB960 serializer/deserializer instead of the Maxim
+ * ones. A separate Linux kernel driver is used for this variant that reports a
+ * different sensor model name. Because the same underlying sensor driver is
+ * actually used, the Maxim CameraHelper is subclassed to avoid duplication.
+ */
+class CameraHelperOx03c10Drv : public CameraHelperMx95mbcam
+{
+};
+REGISTER_CAMERA_HELPER("ox03c10_drv", CameraHelperOx03c10Drv)
+
 } /* namespace nxp */
 
 } /* namespace libcamera */
