@@ -424,6 +424,18 @@ void Agc::process(IPAContext &context, [[maybe_unused]] const uint32_t frame,
 	activeState.agc.automatic.exposure = shutterTime / context.configuration.sensor.lineDuration;
 	activeState.agc.automatic.gain = aGain;
 
+	/*
+	 * Update the frame context of current frame only for frame 0
+	 * to make sure that the frame context has relevant configuration
+	 * whilst processing frame 0.
+	 * Indeed the frame context for each frame is updated whilst
+	 * preparing the next frame.
+	 */
+	if (!frame && frameContext.agc.autoEnabled) {
+		frameContext.agc.exposure = activeState.agc.automatic.exposure;
+		frameContext.agc.gain = activeState.agc.automatic.gain;
+	}
+
 	fillMetadata(context, frameContext, metadata);
 }
 
