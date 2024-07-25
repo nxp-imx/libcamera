@@ -503,9 +503,19 @@ void IPANxpNeo::setControls(unsigned int frame)
 
 	ControlList ctrls(sensorControls_);
 
-	camHelper_->controlListSetAGC(&ctrls,
-				      frameContext.agc.exposure,
-				      frameContext.agc.gain);
+	/*
+	 * Skip control setting for frame 0 for which the frame context
+	 * doesn't have a relevant configuration for the exposure and the gain.
+	 * Indeed the frame context is not initialized at startup.
+	 *
+	 * This workaround prevents some frames from flashing at startup.
+	 * This effect can be addressed later by configuring some startup
+	 * frames to be hidden.
+	 */
+	if (frame)
+		camHelper_->controlListSetAGC(&ctrls,
+					      frameContext.agc.exposure,
+					      frameContext.agc.gain);
 
 	setSensorControls.emit(frame, ctrls);
 }
