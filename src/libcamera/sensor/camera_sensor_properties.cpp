@@ -154,6 +154,11 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
 				{ controls::draft::TestPatternModePn9, 4 },
 			},
 		} },
+		{ "mx95mbcam", {
+			/* Camera module based on OX03C10 + MAX96717 serializer  */
+			.unitCellSize = { 3000, 3000 },
+			.testPatternModes = {},
+		} },
 		{ "ov2685", {
 			.unitCellSize = { 1750, 1750 },
 			.testPatternModes = {
@@ -271,6 +276,11 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
 				{ controls::draft::TestPatternModeOff, 0 },
 				{ controls::draft::TestPatternModeColorBars, 1 },
 			},
+		} },
+		{ "ox03c10_drv", {
+			/* Camera module based on OX03C10 + DS90UB953 serializer  */
+			.unitCellSize = { 3000, 3000 },
+			.testPatternModes = {},
 		} },
 	};
 
