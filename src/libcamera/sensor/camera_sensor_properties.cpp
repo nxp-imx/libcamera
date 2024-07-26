@@ -286,6 +286,10 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
 			.unitCellSize = { 3000, 3000 },
 			.testPatternModes = {},
 		} },
+		{ "ox05b1s", {
+			.unitCellSize = { 2200, 2200 },
+			.testPatternModes = {},
+		} },
 	};
 
 	const auto it = sensorProps.find(sensor);
