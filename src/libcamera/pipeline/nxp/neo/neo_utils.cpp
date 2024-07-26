@@ -970,7 +970,7 @@ int PipelineConfig::loadFromFile(std::string filename, MediaDevice *media,
 			<< "No platform listed in pipeline config file";
 	}
 
-	LOG(NxpNeoPipe, Info) << "Parsing pipeline config file " << filename;
+	LOG(NxpNeoPipe, Debug) << "Parsing pipeline config file " << filename;
 
 	for (const auto &platform : platforms.asList()) {
 		ret = parsePlatform(platform, media, isiDevice);
