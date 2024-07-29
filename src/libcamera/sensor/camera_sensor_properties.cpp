@@ -52,6 +52,11 @@ LOG_DEFINE_CATEGORY(CameraSensorProperties)
 const CameraSensorProperties *CameraSensorProperties::get(const std::string &sensor)
 {
 	static const std::map<std::string, const CameraSensorProperties> sensorProps = {
+		{ "ap130x", {
+			/* Camera module based on AR0144 with AP1302 ISP */
+			.unitCellSize = { 3000, 3000 },
+			.testPatternModes = {},
+		} },
 		{ "ar0521", {
 			.unitCellSize = { 2200, 2200 },
 			.testPatternModes = {
@@ -148,6 +153,15 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
 				{ controls::draft::TestPatternModeColorBarsFadeToGray, 3 },
 				{ controls::draft::TestPatternModePn9, 4 },
 			},
+		} },
+		{ "mx95mbcam", {
+			/* Camera module based on OX03C10 + MAX96717 serializer  */
+			.unitCellSize = { 3000, 3000 },
+			.testPatternModes = {},
+		} },
+		{ "os08a20", {
+			.unitCellSize = { 2000, 2000 },
+			.testPatternModes = {},
 		} },
 		{ "ov2685", {
 			.unitCellSize = { 1750, 1750 },
@@ -266,6 +280,15 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
 				{ controls::draft::TestPatternModeOff, 0 },
 				{ controls::draft::TestPatternModeColorBars, 1 },
 			},
+		} },
+		{ "ox03c10_drv", {
+			/* Camera module based on OX03C10 + DS90UB953 serializer  */
+			.unitCellSize = { 3000, 3000 },
+			.testPatternModes = {},
+		} },
+		{ "ox05b1s", {
+			.unitCellSize = { 2200, 2200 },
+			.testPatternModes = {},
 		} },
 	};
 

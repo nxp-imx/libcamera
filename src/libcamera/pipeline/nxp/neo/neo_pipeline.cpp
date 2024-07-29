@@ -110,8 +110,8 @@ private:
 	int allocateBuffers();
 	int freeBuffers();
 
-	int setupCameraIsiReserve();
-	int configureFrontEndStream(const std::vector<StreamLink> &streamLinks,
+	int setupCameraIsiPipes();
+	int configureFrontEndStream(const std::vector<CameraMediaStream::StreamLink> &streamLinks,
 				    V4L2SubdeviceFormat &sdFormat);
 	int configureFrontEndLinks() const;
 
@@ -620,7 +620,7 @@ void PipelineHandlerNxpNeo::cancelRequest(Request *request)
 bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 {
 	int ret;
-	constexpr unsigned int kMaxNeoDevices = 4;
+	constexpr unsigned int kMaxNeoDevices = 8;
 
 	/*
 	 * Prerequisite for pipeline operation is that frontend media controller
@@ -637,12 +637,10 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 
 	isi_ = std::make_unique<ISIDevice>();
 	ret = isi_->init(isiMedia_);
-	if (ret)
+	if (ret) {
+		LOG(NxpNeoPipe, Debug) << "ISI media device init failed";
 		return false;
-
-	ret = loadPipelineConfig();
-	if (ret)
-		return false;
+	}
 
 	/*
 	 * Discover Neo ISP media controller devices
@@ -663,7 +661,13 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 		if (neoDev)
 			neos.push(neoDev);
 	}
-	if (!neos.size())
+	if (!neos.size()) {
+		LOG(NxpNeoPipe, Debug) << "No ISP media device";
+		return false;
+	}
+
+	ret = loadPipelineConfig();
+	if (ret)
 		return false;
 
 	/*
@@ -698,6 +702,8 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 	ret = setupCameraGraphs();
 	if (ret)
 		return ret;
+
+	LOG(NxpNeoPipe, Info) << "Probed " << numCameras_ << " cameras";
 
 	return true;
 }
@@ -773,7 +779,8 @@ int PipelineHandlerNxpNeo::setupRouting() const
 
 	const RoutingMap &routingMap = pipelineConfig_.getRoutingMap();
 
-	for (const auto &[name, routing] : routingMap) {
+	for (const auto &[entity, routing] : routingMap) {
+		const std::string &name = entity->name();
 		LOG(NxpNeoPipe, Debug)
 			<< "Configure routing for entity " << name
 			<< " routing " << routing;
@@ -880,7 +887,7 @@ int PipelineHandlerNxpNeo::loadPipelineConfig()
 		file = std::string(NXP_NEO_PIPELINE_DATA_DIR) +
 		       std::string("/config.yaml");
 
-	ret = pipelineConfig_.load(file, isiMedia_);
+	ret = pipelineConfig_.load(file, isiMedia_, isi_.get());
 
 	return ret;
 }
@@ -1185,7 +1192,7 @@ int NxpNeoCameraData::init()
 	 * associated NEO inputs where they get processed and
 	 * returned through the NEO main and IR outputs.
 	 */
-	ret = setupCameraIsiReserve();
+	ret = setupCameraIsiPipes();
 	if (ret)
 		return ret;
 
@@ -1333,7 +1340,7 @@ int NxpNeoCameraData::configureFrontEndFormat(const V4L2SubdeviceFormat &sensorF
 
 	const CameraMediaStream *streamInput0 = cameraInfo_->getStreamInput0();
 	ASSERT(streamInput0);
-	const std::vector<StreamLink> &streamLinksInput0 =
+	const std::vector<CameraMediaStream::StreamLink> &streamLinksInput0 =
 		streamInput0->streamLinks();
 	ret = configureFrontEndStream(streamLinksInput0, sdFormatInput0);
 	if (ret)
@@ -1351,7 +1358,7 @@ int NxpNeoCameraData::configureFrontEndFormat(const V4L2SubdeviceFormat &sensorF
 		unsigned int code = streamInput1->mbusCode();
 		sdFormatInput1.code = code;
 		sdFormatInput1.size = sensorFormat.size;
-		const std::vector<StreamLink> &streamLinksInput1 =
+		const std::vector<CameraMediaStream::StreamLink> &streamLinksInput1 =
 			streamInput1->streamLinks();
 		ret = configureFrontEndStream(streamLinksInput1, sdFormatInput1);
 		if (ret)
@@ -1373,7 +1380,7 @@ int NxpNeoCameraData::configureFrontEndFormat(const V4L2SubdeviceFormat &sensorF
 		unsigned int lines =
 			streamEmbedded->embeddedLines();
 		sdFormatEd.size = Size(sensorFormat.size.width, lines);
-		const std::vector<StreamLink> &streamLinksEmbedded =
+		const std::vector<CameraMediaStream::StreamLink> &streamLinksEmbedded =
 			streamEmbedded->streamLinks();
 		ret = configureFrontEndStream(streamLinksEmbedded, sdFormatEd);
 		if (ret)
@@ -1638,22 +1645,24 @@ int NxpNeoCameraData::freeBuffers()
 }
 
 /**
- * \brief Handle ISI channels reservation for the camera sensor
+ * \brief Acquire ISI pipes that have been reserved at enumeration time
  *
  * \return 0 in case of success or a negative error code.
  */
-int NxpNeoCameraData::setupCameraIsiReserve()
+
+int NxpNeoCameraData::setupCameraIsiPipes()
 {
 	ISIDevice *isi = pipe()->isiDevice();
 	unsigned int pipeIndex;
-	auto isiPipeDeleter = [=](ISIPipe *_pipe) { isi->freePipe(_pipe); };
+	auto isiPipeDeleter =
+		[=](ISIPipe *_pipe) { isi->releasePipe(_pipe->index()); };
 
 	const CameraMediaStream *streamInput0 =
 		cameraInfo_->getStreamInput0();
 	ASSERT(streamInput0);
 	pipeIndex = streamInput0->pipe();
-	pipeInput0_ = std::shared_ptr<ISIPipe>
-		(isi->allocPipe(pipeIndex), isiPipeDeleter);
+	pipeInput0_ = std::shared_ptr<ISIPipe>(isi->getPipeByIndex(pipeIndex),
+					       isiPipeDeleter);
 	if (!pipeInput0_.get())
 		return -ENODEV;
 
@@ -1661,8 +1670,8 @@ int NxpNeoCameraData::setupCameraIsiReserve()
 		const CameraMediaStream *streamInput1 =
 			cameraInfo_->getStreamInput1();
 		pipeIndex = streamInput1->pipe();
-		pipeInput1_ = std::shared_ptr<ISIPipe>
-			(isi->allocPipe(pipeIndex), isiPipeDeleter);
+		pipeInput1_ = std::shared_ptr<ISIPipe>(isi->getPipeByIndex(pipeIndex),
+						       isiPipeDeleter);
 		if (!pipeInput1_.get())
 			return -ENODEV;
 	}
@@ -1671,8 +1680,8 @@ int NxpNeoCameraData::setupCameraIsiReserve()
 		const CameraMediaStream *streamEmbedded =
 			cameraInfo_->getStreamEmbedded();
 		pipeIndex = streamEmbedded->pipe();
-		pipeEmbedded_ = std::shared_ptr<ISIPipe>
-			(isi->allocPipe(pipeIndex), isiPipeDeleter);
+		pipeEmbedded_ = std::shared_ptr<ISIPipe>(isi->getPipeByIndex(pipeIndex),
+							 isiPipeDeleter);
 		if (!pipeEmbedded_.get())
 			return -ENODEV;
 	}
@@ -1691,7 +1700,7 @@ int NxpNeoCameraData::setupCameraIsiReserve()
  * \return 0 in case of success or a negative error code.
  */
 int NxpNeoCameraData::configureFrontEndStream(
-	const std::vector<StreamLink> &streamLinks,
+	const std::vector<CameraMediaStream::StreamLink> &streamLinks,
 	V4L2SubdeviceFormat &sdFormat)
 {
 	const MediaDevice *media = pipe()->isiMedia();
@@ -1699,15 +1708,15 @@ int NxpNeoCameraData::configureFrontEndStream(
 	int ret = 0;
 
 	for (const auto &streamLink : streamLinks) {
-		const MediaLink *mediaLink = std::get<0>(streamLink);
+		const MediaLink *mediaLink = streamLink.mediaLink_;
 		const MediaPad *sourceMediaPad = mediaLink->source();
 		const MediaPad *sinkMediaPad = mediaLink->sink();
 		std::string sourceName = sourceMediaPad->entity()->name();
 		std::string sinkName = sinkMediaPad->entity()->name();
 		unsigned int sourcePad = sourceMediaPad->index();
 		unsigned int sinkPad = sinkMediaPad->index();
-		unsigned int sourceStream = std::get<1>(streamLink);
-		unsigned int sinkStream = std::get<2>(streamLink);
+		unsigned int sourceStream = streamLink.sourceStream_;
+		unsigned int sinkStream = streamLink.sinkStream_;
 
 		LOG(NxpNeoPipe, Debug)
 			<< "Set format " << sdFormat.toString()
@@ -1771,9 +1780,9 @@ int NxpNeoCameraData::configureFrontEndLinks() const
 			     std::string streamName) -> int {
 		int res;
 		ASSERT(_stream);
-		std::vector<StreamLink> links = _stream->streamLinks();
+		std::vector<CameraMediaStream::StreamLink> links = _stream->streamLinks();
 		for (auto &streamLink : links) {
-			MediaLink *link = std::get<0>(streamLink);
+			MediaLink *link = streamLink.mediaLink_;
 			MediaPad *sourceMPad = link->source();
 			MediaPad *sinkMPad = link->sink();
 			std::string source = sourceMPad->entity()->name();

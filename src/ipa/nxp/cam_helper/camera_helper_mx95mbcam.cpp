@@ -179,6 +179,11 @@ public:
 		uint32_t *maxGainCode, uint32_t *defGainCode = nullptr) const override;
 
 	void parseEmbedded(Span<const uint8_t> buffer, ControlList *mdControls) override;
+	struct embeddedData {
+		uint32_t hcgAnalogGainCode;
+		uint32_t hcgDigitalGainCode;
+		uint32_t hcgExposure;
+	};
 
 private:
 	/* total number of raws per frame from driver init sequence (unit double-raw) */
@@ -203,15 +208,18 @@ private:
 	static constexpr double kDefAnalogGain = 5.0;
 
 	std::unique_ptr<MdParser> parser_;
+	/* Embedded data from previous frame */
+	embeddedData embeddedPreviousFrame_;
+	bool embeddedInitialized_;
 };
 
 CameraHelperMx95mbcam::CameraHelperMx95mbcam()
 {
 	/* Adapt the default delayedControls for the ox03c10 custom controls */
 	attributes_.delayedControlParams = {
-		{ V4L2_CID_OX03C10_ANALOGUE_GAIN, { 2, false } },
-		{ V4L2_CID_OX03C10_DIGITAL_GAIN, { 2, false } },
-		{ V4L2_CID_OX03C10_EXPOSURE, { 2, false } },
+		{ V4L2_CID_OX03C10_ANALOGUE_GAIN, { 3, false } },
+		{ V4L2_CID_OX03C10_DIGITAL_GAIN, { 3, false } },
+		{ V4L2_CID_OX03C10_EXPOSURE, { 3, false } },
 	};
 
 	/*
@@ -239,6 +247,8 @@ CameraHelperMx95mbcam::CameraHelperMx95mbcam()
 		ControlInfoMap(std::move(ctrlMap), md::controlIdMap);
 
 	parser_ = std::make_unique<MdParserOmniOx>(registerList);
+	embeddedPreviousFrame_ = {};
+	embeddedInitialized_ = false;
 
 	/* Note: gainType / gainConstants_ are unused */
 }
@@ -515,7 +525,6 @@ void CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 	uint32_t hcgAnalogGainCode;
 	hcgAnalogGainCode = ((registers[AecHcgCtrl08Reg] & 0xf) << 4) |
 			    ((registers[AecHcgCtrl09Reg] & 0xf0) >> 4);
-	mdControls->set(md::AnalogueGain, hcgAnalogGainCode);
 
 	/*
 	 * Digital gain is currently configured identical for hcg, lcg, vs and
@@ -527,7 +536,6 @@ void CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 	hcgDigitalGainCode = ((registers[AecHcgCtrl0aReg] & 0xf) << 10) |
 			     ((registers[AecHcgCtrl0bReg] & 0xff) << 2) |
 			     ((registers[AecHcgCtrl0cReg] & 0xc0) >> 6);
-	mdControls->set(md::DigitalGain, hcgDigitalGainCode);
 
 	/*
 	 * Exposure is currently configured identical for dcg, vs and spd in
@@ -541,10 +549,52 @@ void CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 	hcgExposure = ((registers[AecHcgCtrl01Reg] & 0xff) << 8) |
 		      ((registers[AecHcgCtrl02Reg] & 0xff));
 	hcgExposure *= 2;
-	mdControls->set(md::Exposure, hcgExposure);
+
+	/*
+	 * This is a temporary workaround to compensate the ox03c10
+	 * embedded data not aligned with the frame sensor setting.
+	 * Indeed the exposure and gain setting of the frame is matching
+	 * the embedded data from the previous frame.
+	 * The control list is set with embedded data from previous frame.
+	 */
+	if (embeddedInitialized_) {
+		mdControls->set(md::AnalogueGain,
+				embeddedPreviousFrame_.hcgAnalogGainCode);
+		mdControls->set(md::DigitalGain,
+				embeddedPreviousFrame_.hcgDigitalGainCode);
+		mdControls->set(md::Exposure,
+				embeddedPreviousFrame_.hcgExposure);
+	} else {
+		/*
+		 * This is the first frame for which embedded data are parsed,
+		 * so use embedded data from current frame.
+		 */
+		mdControls->set(md::AnalogueGain, hcgAnalogGainCode);
+		mdControls->set(md::DigitalGain, hcgDigitalGainCode);
+		mdControls->set(md::Exposure, hcgExposure);
+	}
+
+	/* store the embedded data for next frame */
+	embeddedPreviousFrame_.hcgAnalogGainCode = hcgAnalogGainCode;
+	embeddedPreviousFrame_.hcgDigitalGainCode = hcgDigitalGainCode;
+	embeddedPreviousFrame_.hcgExposure = hcgExposure;
+
+	embeddedInitialized_ = true;
 }
 
 REGISTER_CAMERA_HELPER("mx95mbcam", CameraHelperMx95mbcam)
+
+/*
+ * This definition is to support the other variant of the MX95MBCAM module,
+ * using TI DS90UB953/DS90UB960 serializer/deserializer instead of the Maxim
+ * ones. A separate Linux kernel driver is used for this variant that reports a
+ * different sensor model name. Because the same underlying sensor driver is
+ * actually used, the Maxim CameraHelper is subclassed to avoid duplication.
+ */
+class CameraHelperOx03c10Drv : public CameraHelperMx95mbcam
+{
+};
+REGISTER_CAMERA_HELPER("ox03c10_drv", CameraHelperOx03c10Drv)
 
 } /* namespace nxp */
 

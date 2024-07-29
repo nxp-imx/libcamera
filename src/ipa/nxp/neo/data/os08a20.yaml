@@ -3,8 +3,8 @@
 ---
 version: 1
 algorithms:
-  - Agc:
   - Awb:
+  - Agc:
   - Drc:
       # DRC Global Tonemap[1-416] u16 (8.8 format)
       # This global LUT values are universal values which can apply to

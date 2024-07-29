@@ -3,8 +3,12 @@
 ---
 version: 1
 algorithms:
-  - Agc:
   - Awb:
+  - Agc:
+      # HIST_SCALE[0-3] u8.16 for 64 bins
+      # ox03c10 HCG+LCG range: 0 - 2^15-1
+      # scale = totalBins * 2^16 / inputBitRange
+      hist-scale: [ 128, 128, 128, 128 ]
   - HdrDecomp:
       input0:
         # KNEE_POINT[1-4] u16

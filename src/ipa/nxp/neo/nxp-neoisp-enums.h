@@ -68,6 +68,42 @@ enum neo_isp_ctemp_ibpp {
 #define NEO_CTEMP_BLOCK_NB_X 8
 #define NEO_CTEMP_BLOCK_NB_Y 8
 
+/**
+ * enum neoisp_hist_ctrl_channel - RGGB channel to be included in the histogram.
+ *
+ * @NEO_HIST_CHANNEL_R:  Red (R) pixels of a RGGB Bayer pattern
+ * @NEO_HIST_CHANNEL_GR: Green (Gr) pixels of a RGGB Bayer pattern
+ * @NEO_HIST_CHANNEL_GB: Green (Gb) pixels of a RGGB Bayer pattern
+ * @NEO_HIST_CHANNEL_B:  Blue (B) pixels of a RGGB Bayer pattern
+ */
+enum neoisp_hist_ctrl_channel {
+	NEO_HIST_CHANNEL_R = 0x1,
+	NEO_HIST_CHANNEL_GR = 0x2,
+	NEO_HIST_CHANNEL_GB = 0x4,
+	NEO_HIST_CHANNEL_B = 0x8,
+};
+
+/**
+ * Statistics and Histogram (stat)
+ */
+
+#define NEO_HIST_BIN_SIZE 64
+#define NEO_HIST_ROI_NB 2
+#define NEO_HIST0_ID 0
+#define NEO_HIST1_ID 1
+#define NEO_HIST2_ID 2
+#define NEO_HIST3_ID 3
+#define NEO_HIST_ROI0_ID 0
+#define NEO_HIST_ROI1_ID 1
+
+#define NEO_HIST0_OFFSET (NEO_HIST0_ID + NEO_HIST_ROI1_ID * NEO_HIST_BIN_SIZE)
+#define NEO_HIST1_OFFSET (NEO_HIST1_ID * NEO_HIST_ROI_NB * NEO_HIST_BIN_SIZE + \
+			  NEO_HIST_ROI1_ID * NEO_HIST_BIN_SIZE)
+#define NEO_HIST2_OFFSET (NEO_HIST2_ID * NEO_HIST_ROI_NB * NEO_HIST_BIN_SIZE + \
+			  NEO_HIST_ROI1_ID * NEO_HIST_BIN_SIZE)
+#define NEO_HIST3_OFFSET (NEO_HIST3_ID * NEO_HIST_ROI_NB * NEO_HIST_BIN_SIZE + \
+			  NEO_HIST_ROI1_ID * NEO_HIST_BIN_SIZE)
+
 } /* namespace ipa::nxpneo */
 
 } /* namespace libcamera*/
