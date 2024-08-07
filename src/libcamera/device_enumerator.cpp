@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2018, Google Inc.
  *
- * device_enumerator.cpp - Enumeration and matching
+ * Enumeration and matching
  */
 
 #include "libcamera/internal/device_enumerator.h"
@@ -56,7 +56,7 @@ LOG_DEFINE_CATEGORY(DeviceEnumerator)
  * names can be added as match criteria.
  *
  * Pipeline handlers are recommended to add entities to DeviceMatch as
- * appropriare to ensure that the media device they need can be uniquely
+ * appropriate to ensure that the media device they need can be uniquely
  * identified. This is useful when the corresponding kernel driver can produce
  * different graphs, for instance as a result of different driver versions or
  * hardware configurations, and not all those graphs are suitable for a pipeline
@@ -101,8 +101,14 @@ bool DeviceMatch::match(const MediaDevice *device) const
 
 		for (const MediaEntity *entity : device->entities()) {
 			if (name == entity->name()) {
-				found = true;
-				break;
+				if (!entity->deviceNode().empty()) {
+					found = true;
+					break;
+				} else {
+					LOG(DeviceEnumerator, Debug)
+						<< "Skip " << entity->name()
+						<< ": no device node";
+				}
 			}
 		}
 

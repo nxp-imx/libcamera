@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2019, Raspberry Pi Ltd
  *
- * awb.h - AWB control algorithm
+ * AWB control algorithm
  */
 #pragma once
 
@@ -95,6 +95,7 @@ public:
 	void initialise() override;
 	int read(const libcamera::YamlObject &params) override;
 	unsigned int getConvergenceFrames() const override;
+	void initialValues(double &gainR, double &gainB) override;
 	void setMode(std::string const &name) override;
 	void setManualGains(double manualR, double manualB) override;
 	void enableAuto() override;

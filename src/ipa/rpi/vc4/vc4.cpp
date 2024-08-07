@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2019-2021, Raspberry Pi Ltd
  *
- * rpi.cpp - Raspberry Pi VC4/BCM2835 ISP IPA.
+ * Raspberry Pi VC4/BCM2835 ISP IPA.
  */
 
 #include <string.h>
@@ -11,6 +11,8 @@
 #include <linux/bcm2835-isp.h>
 
 #include <libcamera/base/log.h>
+#include <libcamera/base/span.h>
+#include <libcamera/control_ids.h>
 #include <libcamera/ipa/ipa_module_info.h>
 
 #include "common/ipa_base.h"
@@ -244,12 +246,48 @@ RPiController::StatisticsPtr IpaVc4::platformProcessStats(Span<uint8_t> mem)
 						  stats->focus_stats[i].contrast_val_num[1][1],
 						  stats->focus_stats[i].contrast_val_num[1][0] });
 
+	if (statsMetadataOutput_) {
+		Span<const uint8_t> statsSpan(reinterpret_cast<const uint8_t *>(stats),
+					      sizeof(bcm2835_isp_stats));
+		libcameraMetadata_.set(controls::rpi::Bcm2835StatsOutput, statsSpan);
+	}
+
 	return statistics;
 }
 
-void IpaVc4::handleControls([[maybe_unused]] const ControlList &controls)
+void IpaVc4::handleControls(const ControlList &controls)
 {
-	/* No controls require any special updates to the hardware configuration. */
+	static const std::map<int32_t, RPiController::DenoiseMode> DenoiseModeTable = {
+		{ controls::draft::NoiseReductionModeOff, RPiController::DenoiseMode::Off },
+		{ controls::draft::NoiseReductionModeFast, RPiController::DenoiseMode::ColourFast },
+		{ controls::draft::NoiseReductionModeHighQuality, RPiController::DenoiseMode::ColourHighQuality },
+		{ controls::draft::NoiseReductionModeMinimal, RPiController::DenoiseMode::ColourOff },
+		{ controls::draft::NoiseReductionModeZSL, RPiController::DenoiseMode::ColourHighQuality },
+	};
+
+	for (auto const &ctrl : controls) {
+		switch (ctrl.first) {
+		case controls::draft::NOISE_REDUCTION_MODE: {
+			RPiController::DenoiseAlgorithm *sdn = dynamic_cast<RPiController::DenoiseAlgorithm *>(
+				controller_.getAlgorithm("SDN"));
+			/* Some platforms may have a combined "denoise" algorithm instead. */
+			if (!sdn)
+				sdn = dynamic_cast<RPiController::DenoiseAlgorithm *>(
+					controller_.getAlgorithm("denoise"));
+			if (!sdn) {
+				LOG(IPARPI, Warning)
+					<< "Could not set NOISE_REDUCTION_MODE - no SDN algorithm";
+				return;
+			}
+
+			int32_t idx = ctrl.second.get<int32_t>();
+			auto mode = DenoiseModeTable.find(idx);
+			if (mode != DenoiseModeTable.end())
+				sdn->setMode(mode->second);
+			break;
+		}
+		}
+	}
 }
 
 bool IpaVc4::validateIspControls()
@@ -545,7 +583,7 @@ extern "C" {
 const struct IPAModuleInfo ipaModuleInfo = {
 	IPA_MODULE_API_VERSION,
 	1,
-	"PipelineHandlerVc4",
+	"rpi/vc4",
 	"rpi/vc4",
 };
 

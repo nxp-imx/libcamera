@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2023, Raspberry Pi Ltd
  *
- * agc_channel.h - AGC/AEC control algorithm
+ * AGC/AEC control algorithm
  */
 #pragma once
 
@@ -76,6 +76,7 @@ struct AgcConfig {
 	libcamera::utils::Duration defaultExposureTime;
 	double defaultAnalogueGain;
 	double stableRegion;
+	bool desaturate;
 };
 
 class AgcChannel

@@ -7,8 +7,6 @@ libcamera_sources = files([
     'camera_controls.cpp',
     'camera_lens.cpp',
     'camera_manager.cpp',
-    'camera_sensor.cpp',
-    'camera_sensor_properties.cpp',
     'color_space.cpp',
     'controls.cpp',
     'control_serializer.cpp',
@@ -17,6 +15,7 @@ libcamera_sources = files([
     'delayed_controls.cpp',
     'device_enumerator.cpp',
     'device_enumerator_sysfs.cpp',
+    'dma_heaps.cpp',
     'fence.cpp',
     'formats.cpp',
     'framebuffer.cpp',
@@ -34,11 +33,13 @@ libcamera_sources = files([
     'mapped_framebuffer.cpp',
     'media_device.cpp',
     'media_object.cpp',
+    'orientation.cpp',
     'pipeline_handler.cpp',
     'pixel_format.cpp',
     'process.cpp',
     'pub_key.cpp',
     'request.cpp',
+    'shared_mem_object.cpp',
     'source_paths.cpp',
     'stream.cpp',
     'sysfs.cpp',
@@ -68,6 +69,8 @@ subdir('converter')
 subdir('ipa')
 subdir('pipeline')
 subdir('proxy')
+subdir('sensor')
+subdir('software_isp')
 
 null_dep = dependency('', required : false)
 
@@ -126,12 +129,27 @@ endif
 
 control_sources = []
 
-foreach source : control_source_files
-    input_files = files(source +'.yaml', source + '.cpp.in')
-    control_sources += custom_target(source + '_cpp',
+controls_mode_files = {
+    'controls' : controls_files,
+    'properties' : properties_files,
+}
+
+foreach mode, input_files : controls_mode_files
+    input_files = files(input_files)
+
+    if mode == 'controls'
+        template_file = files('control_ids.cpp.in')
+    else
+        template_file = files('property_ids.cpp.in')
+    endif
+
+    ranges_file = files('control_ranges.yaml')
+    control_sources += custom_target(mode + '_cpp',
                                      input : input_files,
-                                     output : source + '.cpp',
-                                     command : [gen_controls, '-o', '@OUTPUT@', '@INPUT@'])
+                                     output : mode + '_ids.cpp',
+                                     command : [gen_controls, '-o', '@OUTPUT@',
+                                                '--mode', mode, '-t', template_file,
+                                                '-r', ranges_file, '@INPUT@'])
 endforeach
 
 libcamera_sources += control_sources

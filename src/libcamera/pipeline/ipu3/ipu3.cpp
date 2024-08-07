@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2019, Google Inc.
  *
- * ipu3.cpp - Pipeline handler for Intel IPU3
+ * Pipeline handler for Intel IPU3
  */
 
 #include <algorithm>
@@ -187,9 +187,9 @@ CameraConfiguration::Status IPU3CameraConfiguration::validate()
 	 * rotation and store the final combined transform that configure() will
 	 * need to apply to the sensor to save us working it out again.
 	 */
-	Transform requestedTransform = transform;
-	combinedTransform_ = data_->cio2_.sensor()->validateTransform(&transform);
-	if (transform != requestedTransform)
+	Orientation requestedOrientation = orientation;
+	combinedTransform_ = data_->cio2_.sensor()->computeTransform(&orientation);
+	if (orientation != requestedOrientation)
 		status = Adjusted;
 
 	/* Cap the number of entries to the available streams. */
@@ -1420,6 +1420,6 @@ void IPU3CameraData::frameStart(uint32_t sequence)
 				*testPatternMode);
 }
 
-REGISTER_PIPELINE_HANDLER(PipelineHandlerIPU3)
+REGISTER_PIPELINE_HANDLER(PipelineHandlerIPU3, "ipu3")
 
 } /* namespace libcamera */

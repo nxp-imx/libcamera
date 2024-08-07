@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2018, Google Inc.
  *
- * camera.h - Camera object interface
+ * Camera object interface
  */
 
 #pragma once
@@ -21,9 +21,9 @@
 
 #include <libcamera/controls.h>
 #include <libcamera/geometry.h>
+#include <libcamera/orientation.h>
 #include <libcamera/request.h>
 #include <libcamera/stream.h>
-#include <libcamera/transform.h>
 
 namespace libcamera {
 
@@ -93,7 +93,7 @@ public:
 	std::size_t size() const;
 
 	std::optional<SensorConfiguration> sensorConfig;
-	Transform transform;
+	Orientation orientation;
 
 protected:
 	CameraConfiguration();

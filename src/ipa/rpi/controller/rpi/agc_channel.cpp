@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2023, Raspberry Pi Ltd
  *
- * agc_channel.cpp - AGC/AEC control algorithm
+ * AGC/AEC control algorithm
  */
 
 #include "agc_channel.h"
@@ -253,6 +253,8 @@ int AgcConfig::read(const libcamera::YamlObject &params)
 
 	stableRegion = params["stable_region"].get<double>(0.02);
 
+	desaturate = params["desaturate"].get<int>(1);
+
 	return 0;
 }
 
@@ -268,7 +270,11 @@ AgcChannel::AgcChannel()
 	  lastTargetExposure_(0s), ev_(1.0), flickerPeriod_(0s),
 	  maxShutter_(0s), fixedShutter_(0s), fixedAnalogueGain_(0.0)
 {
-	memset(&awb_, 0, sizeof(awb_));
+	/* Set AWB default values in case early frames have no updates in metadata. */
+	awb_.gainR = 1.0;
+	awb_.gainG = 1.0;
+	awb_.gainB = 1.0;
+
 	/*
 	 * Setting status_.totalExposureValue_ to zero initially tells us
 	 * it's not been calculated yet (i.e. Process hasn't yet run).
@@ -407,7 +413,6 @@ void AgcChannel::switchMode(CameraMode const &cameraMode,
 	Duration fixedShutter = limitShutter(fixedShutter_);
 	if (fixedShutter && fixedAnalogueGain_) {
 		/* We're going to reset the algorithm here with these fixed values. */
-
 		fetchAwbStatus(metadata);
 		double minColourGain = std::min({ awb_.gainR, awb_.gainG, awb_.gainB, 1.0 });
 		ASSERT(minColourGain != 0.0);
@@ -462,6 +467,9 @@ void AgcChannel::prepare(Metadata *imageMetadata)
 	AgcStatus delayedStatus;
 	AgcPrepareStatus prepareStatus;
 
+	/* Fetch the AWB status now because AWB also sets it in the prepare method. */
+	fetchAwbStatus(imageMetadata);
+
 	if (!imageMetadata->get("agc.delayed_status", delayedStatus))
 		totalExposureValue = delayedStatus.totalExposureValue;
 
@@ -505,8 +513,6 @@ void AgcChannel::process(StatisticsPtr &stats, DeviceStatus const &deviceStatus,
 	 * configuration, that kind of thing.
 	 */
 	housekeepConfig();
-	/* Fetch the AWB status immediately, so that we can assume it's there. */
-	fetchAwbStatus(imageMetadata);
 	/* Get the current exposure values for the frame that's just arrived. */
 	fetchCurrentExposure(deviceStatus);
 	/* Compute the total gain we require relative to the current exposure. */
@@ -635,9 +641,6 @@ void AgcChannel::fetchCurrentExposure(DeviceStatus const &deviceStatus)
 
 void AgcChannel::fetchAwbStatus(Metadata *imageMetadata)
 {
-	awb_.gainR = 1.0; /* in case not found in metadata */
-	awb_.gainG = 1.0;
-	awb_.gainB = 1.0;
 	if (imageMetadata->get("awb.status", awb_) != 0)
 		LOG(RPiAgc, Debug) << "No AWB status found";
 }
@@ -860,8 +863,10 @@ bool AgcChannel::applyDigitalGain(double gain, double targetY, bool channelBound
 	 * quickly (and we then approach the correct value more quickly from
 	 * below).
 	 */
-	bool desaturate = !channelBound &&
-			  targetY > config_.fastReduceThreshold && gain < sqrt(targetY);
+	bool desaturate = false;
+	if (config_.desaturate)
+		desaturate = !channelBound &&
+			     targetY > config_.fastReduceThreshold && gain < sqrt(targetY);
 	if (desaturate)
 		dg /= config_.fastReduceThreshold;
 	LOG(RPiAgc, Debug) << "Digital gain " << dg << " desaturate? " << desaturate;
@@ -972,7 +977,7 @@ void AgcChannel::divideUpExposure()
 void AgcChannel::writeAndFinish(Metadata *imageMetadata, bool desaturate)
 {
 	status_.totalExposureValue = filtered_.totalExposure;
-	status_.targetExposureValue = desaturate ? 0s : target_.totalExposureNoDG;
+	status_.targetExposureValue = desaturate ? 0s : target_.totalExposure;
 	status_.shutterTime = filtered_.shutter;
 	status_.analogueGain = filtered_.analogueGain;
 	/*

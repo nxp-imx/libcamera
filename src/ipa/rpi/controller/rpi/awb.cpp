@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2019, Raspberry Pi Ltd
  *
- * awb.cpp - AWB control algorithm
+ * AWB control algorithm
  */
 
 #include <assert.h>
@@ -218,6 +218,12 @@ void Awb::initialise()
 	}
 	prevSyncResults_ = syncResults_;
 	asyncResults_ = syncResults_;
+}
+
+void Awb::initialValues(double &gainR, double &gainB)
+{
+	gainR = syncResults_.gainR;
+	gainB = syncResults_.gainB;
 }
 
 void Awb::disableAuto()

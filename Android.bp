@@ -1,0 +1,360 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+/*
+ * Copyright 2024 NXP
+*/
+
+// libcamera-base.so
+cc_library_shared {
+    name: "libcamera-base",
+    rtti: true,
+    proprietary: true,
+    srcs: [
+        "src/libcamera/base/*.cpp",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-DLIBCAMERA_BASE_PRIVATE",
+        "-DHAVE_LOCALE_T=1",
+    ],
+
+    static_libs: [
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "libutils",
+        "liblog",
+    ],
+    include_dirs: [
+        "system/core/libcutils/include",
+    ],
+    local_include_dirs: [
+        "include",
+        "prebuilt-android/include",
+    ],
+}
+
+// libcamera.so
+cc_library_shared {
+    name: "libcamera",
+    rtti: true,
+    proprietary: true,
+    srcs: [
+        "src/libcamera/bayer_format.cpp",
+        "src/libcamera/byte_stream_buffer.cpp",
+        "src/libcamera/camera.cpp",
+        "src/libcamera/camera_controls.cpp",
+        "src/libcamera/camera_lens.cpp",
+        "src/libcamera/camera_manager.cpp",
+        "src/libcamera/sensor/camera_sensor.cpp",
+        "src/libcamera/sensor/camera_sensor_properties.cpp",
+        "src/libcamera/color_space.cpp",
+        "src/libcamera/controls.cpp",
+        "src/libcamera/control_serializer.cpp",
+        "src/libcamera/control_validator.cpp",
+        "src/libcamera/converter.cpp",
+        "src/libcamera/delayed_controls.cpp",
+        "src/libcamera/device_enumerator.cpp",
+        "src/libcamera/device_enumerator_sysfs.cpp",
+        "src/libcamera/dma_heaps.cpp",
+        "src/libcamera/fence.cpp",
+        "src/libcamera/formats.cpp",
+        "src/libcamera/framebuffer.cpp",
+        "src/libcamera/framebuffer_allocator.cpp",
+        "src/libcamera/geometry.cpp",
+        "src/libcamera/ipa_controls.cpp",
+        "src/libcamera/ipa_data_serializer.cpp",
+        "src/libcamera/ipa_interface.cpp",
+        "src/libcamera/ipa_manager.cpp",
+        "src/libcamera/ipa_module.cpp",
+        "src/libcamera/ipa_proxy.cpp",
+        "src/libcamera/ipc_pipe.cpp",
+        "src/libcamera/ipc_pipe_unixsocket.cpp",
+        "src/libcamera/ipc_unixsocket.cpp",
+        "src/libcamera/mapped_framebuffer.cpp",
+        "src/libcamera/media_device.cpp",
+        "src/libcamera/media_object.cpp",
+        "src/libcamera/orientation.cpp",
+        "src/libcamera/pipeline_handler.cpp",
+        "src/libcamera/pixel_format.cpp",
+        "src/libcamera/process.cpp",
+        "src/libcamera/pub_key.cpp",
+        "src/libcamera/request.cpp",
+        "src/libcamera/shared_mem_object.cpp",
+        "src/libcamera/source_paths.cpp",
+        "src/libcamera/stream.cpp",
+        "src/libcamera/sysfs.cpp",
+        "src/libcamera/transform.cpp",
+        "src/libcamera/v4l2_device.cpp",
+        "src/libcamera/v4l2_pixelformat.cpp",
+        "src/libcamera/v4l2_subdevice.cpp",
+        "src/libcamera/v4l2_videodevice.cpp",
+        "src/libcamera/yaml_parser.cpp",
+        "src/libcamera/pipeline/nxp/neo/*.cpp",
+        "src/libcamera/pipeline/imx8-isi/*.cpp",
+        "prebuilt-android/src/libcamera/controls_ids.cpp",
+        "prebuilt-android/src/libcamera/ipa_pub_key.cpp",
+        "prebuilt-android/src/libcamera/properties_ids.cpp",
+        "prebuilt-android/src/libcamera/version.cpp",
+        "prebuilt-android/src/libcamera/proxy/nxpneo_ipa_proxy.cpp",
+        "prebuilt-android/src/libcamera/proxy/worker/nxpneo_ipa_proxy_worker.cpp",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-DLIBCAMERA_BASE_PRIVATE",
+        "-DLIBCAMERA_DATA_DIR=\"/data/vendor/libcamera\"",
+        "-DLIBCAMERA_SYSCONF_DIR=\"/vendor/etc/configs/libcamera\"",
+        "-DIPA_PROXY_DIR=\"/vendor/etc/configs/libcamera\"",
+        "-DIPA_CONFIG_DIR=\"/vendor/etc/configs/libcamera\"",
+        "-DIPA_MODULE_DIR=\"/vendor/lib64/ipa\"",
+        "-DNXP_NEO_PIPELINE_DATA_DIR=\"/vendor/etc/configs/libcamera\"",
+        "-DHAVE_IPA_PUBKEY=1",
+        "-DHAVE_MEMFD_CREATE=1",
+    ],
+
+    static_libs: [
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "libutils",
+        "liblog",
+        "libdl",
+        "libcamera-base",
+        "libyaml",
+    ],
+    include_dirs: [
+        "system/core/libcutils/include",
+        "external/libyaml/include",
+    ],
+    local_include_dirs: [
+        "include",
+        "prebuilt-android/include",
+        "src/libcamera/pipeline/nxp/neo",
+    ],
+}
+
+// libipa.a
+cc_library_static {
+    name: "libipa",
+    rtti: true,
+    proprietary: true,
+    srcs: [
+        "src/ipa/libipa/*.cpp",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-DLIBCAMERA_BASE_PRIVATE",
+        "-DHAVE_LOCALE_T=1",
+    ],
+
+    static_libs: [
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "libutils",
+        "liblog",
+    ],
+    include_dirs: [
+        "system/core/libcutils/include",
+    ],
+    local_include_dirs: [
+        "include",
+        "prebuilt-android/include",
+        "src/ipa/libipa",
+    ],
+}
+
+// libnxp_ipa_cam_helper.so
+cc_library_shared {
+    name: "libnxp_ipa_cam_helper",
+    rtti: true,
+    proprietary: true,
+    srcs: [
+        "src/ipa/nxp/cam_helper/*.cpp",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-DLIBCAMERA_BASE_PRIVATE",
+        "-DHAVE_LOCALE_T=1",
+    ],
+
+    static_libs: [
+        "libipa",
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "libutils",
+        "liblog",
+        "libcamera",
+        "libcamera-base",
+    ],
+    include_dirs: [
+        "system/core/libcutils/include",
+    ],
+    local_include_dirs: [
+        "include",
+        "prebuilt-android/include",
+        "src/ipa",
+        "src/ipa/nxp/cam_helper",
+        "src/ipa/rpi/cam_helper",
+    ],
+}
+
+// ipa_nxp_neo.so
+cc_library_shared {
+    name: "ipa_nxp_neo",
+    rtti: true,
+    proprietary: true,
+    relative_install_path: "ipa",
+    srcs: [
+        "src/ipa/nxp/neo/*.cpp",
+        "src/ipa/nxp/neo/algorithms/*.cpp",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-DLIBCAMERA_BASE_PRIVATE",
+        "-DHAVE_LOCALE_T=1",
+    ],
+
+    static_libs: [
+        "libipa",
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "libutils",
+        "liblog",
+        "libcamera",
+        "libcamera-base",
+        "libnxp_ipa_cam_helper",
+    ],
+    include_dirs: [
+        "system/core/libcutils/include",
+    ],
+    local_include_dirs: [
+        "include",
+        "prebuilt-android/include",
+        "src/ipa",
+        "src/ipa/nxp/neo",
+        "src/ipa/nxp/neo/algorithms",
+    ],
+}
+
+// libapps.a
+cc_library_static {
+    name: "libapps",
+    rtti: true,
+    proprietary: true,
+    srcs: [
+        "src/apps/common/image.cpp",
+        "src/apps/common/options.cpp",
+        "src/apps/common/ppm_writer.cpp",
+        "src/apps/common/stream_options.cpp",
+        "src/apps/common/event_loop.cpp",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-DLIBCAMERA_BASE_PRIVATE",
+        "-DHAVE_LOCALE_T=1",
+    ],
+
+    static_libs: [
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "libutils",
+        "liblog",
+        "libcamera-base",
+        "libcamera",
+    ],
+    include_dirs: [
+        "vendor/nxp-opensource/libcamera/include",
+        "vendor/nxp-opensource/libcamera/prebuilt-android/include",
+        "external/libevent/include",
+    ],
+    local_include_dirs: [
+        ".",
+    ]
+}
+
+// cam app
+cc_binary {
+    name: "cam",
+    vendor: true,
+    srcs: [
+        "src/apps/cam/camera_session.cpp",
+        "src/apps/cam/capture_script.cpp",
+        "src/apps/cam/file_sink.cpp",
+        "src/apps/cam/frame_sink.cpp",
+        "src/apps/cam/main.cpp",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-DLIBCAMERA_BASE_PRIVATE",
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "libutils",
+        "liblog",
+        "libcamera-base",
+        "libcamera",
+       // "libatomic",
+        "libyaml",
+        "libevent",
+    ],
+
+    static_libs: [
+        "libapps",
+    ],
+
+    include_dirs: [
+        "vendor/nxp-opensource/libcamera/include",
+        "vendor/nxp-opensource/libcamera/prebuilt-android/include",
+        "external/libyaml/include",
+    ],
+    local_include_dirs: [
+        ".",
+    ]
+}
+
+// config.yaml
+prebuilt_etc {
+    name: "config.yaml",
+    sub_dir: "configs/libcamera",
+    src: "src/libcamera/pipeline/nxp/neo/data/config.yaml",
+    vendor: true,
+}
+
+// os08a20.yaml
+prebuilt_etc {
+    name: "os08a20.yaml",
+    sub_dir: "configs/libcamera/nxp/neo",
+    src: "src/ipa/nxp/neo/data/os08a20.yaml",
+    vendor: true,
+}

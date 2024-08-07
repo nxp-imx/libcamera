@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2019, Google Inc.
  *
- * unixsocket.cpp - Unix socket IPC test
+ * Unix socket IPC test
  */
 
 #include <algorithm>
@@ -431,7 +431,7 @@ private:
 		if (ret)
 			return ret;
 
-		timeout.start(200ms);
+		timeout.start(2s);
 		while (!callDone_) {
 			if (!timeout.isRunning()) {
 				cerr << "Call timeout!" << endl;
