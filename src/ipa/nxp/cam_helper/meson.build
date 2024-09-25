@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: CC0-1.0
 
+nxp_ipa_cam_helper_headers = files([
+    'camera_helper.h',
+])
+
 nxp_ipa_cam_helper_sources = files([
     'camera_helper.cpp',
     'camera_helper_mx95mbcam.cpp',
@@ -9,12 +13,15 @@ nxp_ipa_cam_helper_sources = files([
     'md_parser_ox.cpp',
 ])
 
+nxp_ipa_cam_helper_includes = include_directories('..')
+
 # include path to md_parser.h
 ipa_rpi_cam_helper = '..' / '..' / 'rpi' / 'cam_helper'
 
-nxp_ipa_cam_helper_includes = [
+lib_nxp_ipa_cam_helper_includes = [
+    nxp_ipa_cam_helper_includes,
     libipa_includes,
-    ipa_rpi_cam_helper,
+    ipa_rpi_cam_helper
 ]
 
 nxp_ipa_cam_helper_deps = [
@@ -22,5 +29,9 @@ nxp_ipa_cam_helper_deps = [
 ]
 
 nxp_ipa_cam_helper_lib = static_library('nxp_ipa_cam_helper', nxp_ipa_cam_helper_sources,
-                                         include_directories : nxp_ipa_cam_helper_includes,
+                                         include_directories : lib_nxp_ipa_cam_helper_includes,
                                          dependencies : nxp_ipa_cam_helper_deps)
+
+nxp_ipa_cam_helper_dep = declare_dependency(sources : nxp_ipa_cam_helper_headers,
+                                            include_directories : nxp_ipa_cam_helper_includes,
+                                            link_whole : nxp_ipa_cam_helper_lib)
