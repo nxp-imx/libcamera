@@ -120,7 +120,6 @@ cc_library_shared {
         "prebuilt-android/src/libcamera/property_ids.cpp",
         "prebuilt-android/src/libcamera/version.cpp",
         "prebuilt-android/src/libcamera/proxy/nxpneo_ipa_proxy.cpp",
-        "prebuilt-android/src/libcamera/proxy/worker/nxpneo_ipa_proxy_worker.cpp",
         ":libcamera_gen_ipa_pub_key",
     ],
 
@@ -130,7 +129,7 @@ cc_library_shared {
         "-DLIBCAMERA_BASE_PRIVATE",
         "-DLIBCAMERA_DATA_DIR=\"/data/vendor/libcamera\"",
         "-DLIBCAMERA_SYSCONF_DIR=\"/vendor/etc/configs/libcamera\"",
-        "-DIPA_PROXY_DIR=\"/vendor/etc/configs/libcamera\"",
+        "-DIPA_PROXY_DIR=\"/vendor/bin\"",
         "-DIPA_CONFIG_DIR=\"/vendor/etc/configs/libcamera\"",
         "-DIPA_MODULE_DIR=\"/vendor/lib64/ipa\"",
         "-DNXP_NEO_PIPELINE_DATA_DIR=\"/vendor/etc/configs/libcamera\"",
@@ -342,6 +341,45 @@ cc_library_static {
     ],
     local_include_dirs: [
         ".",
+    ]
+}
+
+
+// nxpneo_ipa_proxy
+cc_binary {
+    name: "nxpneo_ipa_proxy",
+    rtti: true,
+    vendor: true,
+    srcs: [
+        "prebuilt-android/src/libcamera/proxy/worker/nxpneo_ipa_proxy_worker.cpp",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-DLIBCAMERA_BASE_PRIVATE",
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "libutils",
+        "liblog",
+        "libcamera-base",
+        "libcamera",
+        "libevent",
+    ],
+
+    static_libs: [
+    ],
+
+    include_dirs: [
+    ],
+
+    local_include_dirs: [
+        ".",
+        "include",
+        "prebuilt-android/include",
     ]
 }
 
