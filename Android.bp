@@ -3,6 +3,25 @@
  * Copyright 2024 NXP
 */
 
+genrule {
+    name: "libcamera_gen_ipa_priv_key",
+    tool_files: ["utils/gen-ipa-priv-key.sh"],
+    out: ["tmp-private-key.pem"],
+    cmd: "$(location utils/gen-ipa-priv-key.sh) $(out)",
+}
+
+genrule {
+    name: "libcamera_gen_ipa_pub_key",
+    tool_files: ["utils/codegen/gen-ipa-pub-key.py"],
+    srcs: [
+        ":libcamera_gen_ipa_priv_key",
+        "src/libcamera/ipa_pub_key.cpp.in",
+    ],
+    out: ["ipa_pub_key.cpp"],
+
+    cmd: "$(location utils/codegen/gen-ipa-pub-key.py) $(in) $(out)",
+}
+
 // libcamera-base.so
 cc_library_shared {
     name: "libcamera-base",
@@ -98,11 +117,11 @@ cc_library_shared {
         "src/libcamera/pipeline/nxp/neo/*.cpp",
         "src/libcamera/pipeline/imx8-isi/*.cpp",
         "prebuilt-android/src/libcamera/controls_ids.cpp",
-        "prebuilt-android/src/libcamera/ipa_pub_key.cpp",
         "prebuilt-android/src/libcamera/property_ids.cpp",
         "prebuilt-android/src/libcamera/version.cpp",
         "prebuilt-android/src/libcamera/proxy/nxpneo_ipa_proxy.cpp",
         "prebuilt-android/src/libcamera/proxy/worker/nxpneo_ipa_proxy_worker.cpp",
+        ":libcamera_gen_ipa_pub_key",
     ],
 
     cflags: [
@@ -261,6 +280,28 @@ cc_library_shared {
         "src/ipa/nxp/neo",
         "src/ipa/nxp/neo/algorithms",
     ],
+}
+
+// ipa_nxp_neo.so.sign
+genrule {
+    name: "ipa_nxp_neo_sign",
+    tool_files: ["src/ipa/ipa-sign.sh"],
+    srcs: [
+        ":libcamera_gen_ipa_priv_key",
+        ":ipa_nxp_neo",
+    ],
+    out: ["ipa_nxp_neo.so.sign"],
+    cmd: "$(location src/ipa/ipa-sign.sh) $(in) $(out)",
+}
+
+prebuilt_etc
+{
+    name: "libcamera_ipa_sign",
+    sub_dir: "ipa",
+    srcs: [
+        ":ipa_nxp_neo_sign",
+    ],
+    vendor: true,
 }
 
 // libapps.a
