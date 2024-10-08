@@ -320,6 +320,20 @@ int IPAModule::loadIPAModuleInfo()
 
 	/* Load the signature. Failures are not fatal. */
 	File sign{ libPath_ + ".sign" };
+
+	/* Handle user-specified directory */
+	const char *signDir = utils::secure_getenv("LIBCAMERA_IPA_SIGNATURE_DIR");
+	if (signDir) {
+		std::string signPath(signDir);
+		signPath += "/";
+		signPath += utils::basename(libPath_.c_str());
+		signPath += ".sign";
+
+		sign.setFileName(signPath);
+		LOG(IPAModule, Debug)
+				<< "Use customized sign path '" << sign.fileName() << "'";
+	}
+
 	if (!sign.open(File::OpenModeFlag::ReadOnly)) {
 		LOG(IPAModule, Debug)
 			<< "IPA module " << libPath_ << " is not signed";
