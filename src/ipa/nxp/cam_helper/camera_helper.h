@@ -35,40 +35,54 @@ enum {
 	ANALOGUE_GAIN = 0,
 	DIGITAL_GAIN = 1,
 	EXPOSURE = 2,
+	WB_GAIN = 3,
+	TEMPERATURE = 4,
 };
 
-extern const Control<int32_t> AnalogueGain;
-extern const Control<int32_t> DigitalGain;
-extern const Control<int32_t> Exposure;
+extern const Control<Span<const float>> AnalogueGain;
+extern const Control<Span<const float>> DigitalGain;
+extern const Control<Span<const float>> Exposure;
+extern const Control<Span<const float>> WhiteBalanceGain;
+extern const Control<const float> Temperature;
 
 extern const ControlIdMap controlIdMap;
 
 } /* namespace md */
+
+
+/* Subset of IPACameraSensorInfo structure*/
+struct CameraMode {
+	uint64_t pixelRate;
+	uint32_t minLineLength;
+	uint32_t maxLineLength;
+	uint32_t minFrameLength;
+	uint32_t maxFrameLength;
+};
 
 class CameraHelper : public ipa::CameraSensorHelper
 {
 public:
 	CameraHelper();
 	virtual ~CameraHelper() = default;
-
-	virtual uint32_t controlListGetExposure(const ControlList *ctrls) const;
-	virtual uint32_t controlListGetGain(const ControlList *ctrls) const;
+	virtual void setCameraMode(const CameraMode &mode);
 
 	virtual void controlListSetAGC(
-		ControlList *ctrls, uint32_t exposure, double gain) const;
+		ControlList *ctrls, double exposure, double gain) const;
 
 	virtual void controlInfoMapGetExposureRange(
-		const ControlInfoMap *ctrls, uint32_t *minExposure,
-		uint32_t *maxExposure, uint32_t *defExposure = nullptr) const;
+		const ControlInfoMap *ctrls, std::vector<double> *minExposure,
+		std::vector<double> *maxExposure, std::vector<double> *defExposure) const;
 
-	virtual void controlInfoMapGetGainRange(
-		const ControlInfoMap *ctrls, uint32_t *minGainCode,
-		uint32_t *maxGainCode, uint32_t *defGainCode = nullptr) const;
+	virtual void controlInfoMapGetAnalogGainRange(
+		const ControlInfoMap *ctrls, std::vector<double> *minGain,
+		std::vector<double> *maxGain, std::vector<double> *defGain) const;
+
+	virtual void controlListSetAWB(
+		ControlList *ctrls, Span<const double, 4> gains) const;
 
 	struct Attributes {
 		struct MdParams {
 			uint32_t topLines;
-			ControlInfoMap controls;
 		};
 
 		std::map<int32_t, std::pair<uint32_t, bool>> delayedControlParams;
@@ -78,12 +92,18 @@ public:
 
 	virtual const Attributes *attributes() const { return &attributes_; };
 
-	virtual void parseEmbedded(Span<const uint8_t> buffer,
-				   ControlList *mdControls);
+	virtual int parseEmbedded(
+		Span<const uint8_t> buffer, ControlList *mdControls);
+
+	virtual int sensorControlsToMetaData(
+		const ControlList *sensorCtrls, ControlList *mdCtrls) const;
+
+	virtual double lineDuration() const;
 
 protected:
-	virtual bool controlListHasId(const ControlList *ctrls, unsigned int id) const;
+	static bool controlListHasId(const ControlList *ctrls, unsigned int id);
 	Attributes attributes_;
+	CameraMode mode_;
 
 private:
 	LIBCAMERA_DISABLE_COPY_AND_MOVE(CameraHelper)
