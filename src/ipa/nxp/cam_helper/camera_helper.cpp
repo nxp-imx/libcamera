@@ -10,6 +10,7 @@
  */
 #include "camera_helper.h"
 
+#include <cmath>
 #include <limits>
 
 #include <linux/v4l2-controls.h>
@@ -46,28 +47,50 @@ namespace md {
 
 /**
  * \var AnalogueGain
- * \brief Analogue gain code applied by the sensor, in the same format as
- * reported by controlListGetGain().
+ * \brief Real analogue gain applied by the sensor
+ *
+ * Values correspond to Long and optionally Short and Very Short captures.
  */
-const Control<int32_t> AnalogueGain(ANALOGUE_GAIN, "AnalogueGain");
+const Control<Span<const float>> AnalogueGain(ANALOGUE_GAIN, "AnalogueGain");
 
 /**
  * \var DigitalGain
- * \brief DigitalGain gain code applied by the sensor.
+ * \brief Real digital gain applied by the sensor
+ *
+ * Values correspond to Long and optionally Short and Very Short captures.
  */
-const Control<int32_t> DigitalGain(DIGITAL_GAIN, "DigitalGain");
+const Control<Span<const float>> DigitalGain(DIGITAL_GAIN, "DigitalGain");
 
 /**
  * \var Exposure
- * \brief Exposure applied by the sensor, in same format as reported by
- *  controlListGetExposure().
+ * \brief Exposure in seconds applied by the sensor
+ *
+ * Values correspond to Long and optionally Short and Very Short captures.
  */
-const Control<int32_t> Exposure(EXPOSURE, "Exposure");
+const Control<Span<const float>> Exposure(EXPOSURE, "Exposure");
+
+/**
+ * \var WhiteBalanceGain
+ * \brief Real White Balance gains applied by the sensor
+ *
+ * Values correspond to Red, GreenR, GreenB and Blue color channels for Long
+ * and optionally Short and Very Short captures.
+ */
+const Control<Span<const float>> WhiteBalanceGain(WB_GAIN, "WhiteBalanceGain");
+
+/**
+ * \var Temperature
+ * \brief Sensor temperature
+ * Temperature format is real degrees Celsius.
+ */
+const Control<const float> Temperature(TEMPERATURE, "Temperature");
 
 const ControlIdMap controlIdMap{
 	{ ANALOGUE_GAIN, &AnalogueGain },
 	{ DIGITAL_GAIN, &DigitalGain },
 	{ EXPOSURE, &Exposure },
+	{ WB_GAIN, &WhiteBalanceGain },
+	{ TEMPERATURE, &Temperature },
 };
 
 } /* namespace md */
@@ -140,7 +163,6 @@ CameraHelper::CameraHelper()
 		  }, /* delayedControlParams */
 		  {
 			  0, /* topLines */
-			  {}, /*controls */
 		  } /* MdParams */,
 		  false, /* rgbIr */
 	  }
@@ -148,86 +170,32 @@ CameraHelper::CameraHelper()
 }
 
 /**
- * \brief Retrieve exposure from the control list
- * \param[in] ctrls The control list to use
- *
- * This function aims to abstract the exposure control for sensor having
- * a proprietary programming model.
- *
- * \return The exposure time in line duration units
+ * \brief Configure the camera helper for the current sensor mode of operation
+ * \param[in] mode The mode to be configured
  */
-uint32_t CameraHelper::controlListGetExposure(const ControlList *ctrls) const
+void CameraHelper::setCameraMode(const CameraMode &mode)
 {
-	uint32_t exposure = 0;
-	if (!ctrls->contains(V4L2_CID_EXPOSURE)) {
-		LOG(NxpCameraHelper, Error)
-			<< "V4L2_CID_EXPOSURE cannot be got";
-		return exposure;
-	}
-
-	/*
-	 * \todo Spurious frame loss at stream start() induces invalid
-	 * control values reported by pipeline's DelayedControl object.
-	 * Occurence is logged by pipeline, workaround the issue to avoid
-	 * later assert condition failure.
-	 */
-	const ControlValue &exposureValue = ctrls->get(V4L2_CID_EXPOSURE);
-
-	if (exposureValue.type() != ControlTypeNone)
-		exposure = exposureValue.get<int32_t>();
-	else
-		/* Keep debug level for now as root cause occurence is logged */
-		LOG(NxpCameraHelper, Debug) << "Invalid exposure control";
-
-	return exposure;
-}
-
-/**
- * \brief Retrieve gain code from the control list
- * \param[in] ctrls The control list to use
- *
- * This function aims to abstract the gain control for sensor having
- * a proprietary programming model.
- *
- * \return The gain code in sensor format
- */
-uint32_t CameraHelper::controlListGetGain(const ControlList *ctrls) const
-{
-	uint32_t gain = 0;
-	if (!ctrls->contains(V4L2_CID_ANALOGUE_GAIN)) {
-		LOG(NxpCameraHelper, Error)
-			<< "V4L2_CID_ANALOGUE_GAIN cannot be got";
-		return gain;
-	}
-
-	/*
-	 * \todo Spurious frame loss at stream start() induces invalid
-	 * control values reported by pipeline's DelayedControl object.
-	 * Occurence is logged by pipeline, workaround the issue to avoid
-	 * later assert condition failure.
-	 */
-	const ControlValue &gainValue = ctrls->get(V4L2_CID_ANALOGUE_GAIN);
-
-	if (gainValue.type() != ControlTypeNone)
-		gain = gainValue.get<int32_t>();
-	else
-		/* Keep debug level for now as root cause occurence is logged */
-		LOG(NxpCameraHelper, Debug) << "Invalid gain control";
-
-	return gain;
+	mode_ = mode;
+	LOG(NxpCameraHelper, Debug)
+		<< " pixel rate: " << mode_.pixelRate
+		<< " Line length (min/max) ("
+		<< mode.minLineLength << "/" << mode.maxLineLength
+		<< ") Frame length (min/max) ("
+		<< mode.minFrameLength << "/" << mode.maxFrameLength
+		<< ") Line duration " << lineDuration();
 }
 
 /**
  * \brief Update sensor control list with AGC configuration
  * \param[inout] ctrls The control list to be updated
- * \param[in] exposure The AGC exposure decision - unit is horizontal line number
+ * \param[in] exposure The AGC exposure duration in seconds
  * \param[in] gain The AGC real gain decision
  *
  * This function aims to abstract the AGC control for sensor having
  * a proprietary programming model.
  */
 void CameraHelper::controlListSetAGC(
-	ControlList *ctrls, uint32_t exposure, double gain) const
+	ControlList *ctrls, double exposure, double gain) const
 {
 	if (!controlListHasId(ctrls, V4L2_CID_ANALOGUE_GAIN)) {
 		LOG(NxpCameraHelper, Error)
@@ -237,28 +205,33 @@ void CameraHelper::controlListSetAGC(
 
 	ctrls->set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gainCode(gain)));
 
+	int32_t lines =
+		static_cast<int32_t>(std::round(exposure / lineDuration()));
+
 	if (!controlListHasId(ctrls, V4L2_CID_EXPOSURE)) {
 		LOG(NxpCameraHelper, Error)
 			<< "V4L2_CID_EXPOSURE cannot be set";
 		return;
 	}
 
-	ctrls->set(V4L2_CID_EXPOSURE, static_cast<int32_t>(exposure));
+	ctrls->set(V4L2_CID_EXPOSURE, lines);
 }
 
 /**
  * \brief Retrieve exposure range from sensor control info map
- * \param[in] ctrls The control list to be updated
- * \param[out] minExposure The minimum exposure time in line duration units
- * \param[out] maxExposure The maximum exposure time in line duration units
- * \param[out] defExposure The default exposure time in line duration units
+ * \param[in] ctrls The control list used for control ranges
+ * \param[out] minExposure The minimum exposure time in seconds
+ * \param[out] maxExposure The maximum exposure time in seconds
+ * \param[out] defExposure The default exposure time in seconds
  *
- * This function aims to abstract the exposure control for sensor having
- * a proprietary programming model.
+ * Report min, max and default values for exposure. At least one value is
+ * reported in each vector corresponding to the main (long) exposure.
+ * Implementation may append additional values if it supports multiple captures
+ * (short and/or very short).
  */
 void CameraHelper::controlInfoMapGetExposureRange(
-	const ControlInfoMap *ctrls, uint32_t *minExposure,
-	uint32_t *maxExposure, uint32_t *defExposure) const
+	const ControlInfoMap *ctrls, std::vector<double> *minExposure,
+	std::vector<double> *maxExposure, std::vector<double> *defExposure) const
 {
 	uint32_t min, max, def;
 	const auto it = ctrls->find(V4L2_CID_EXPOSURE);
@@ -275,27 +248,32 @@ void CameraHelper::controlInfoMapGetExposureRange(
 			<< "V4L2_CID_EXPOSURE not supported";
 	}
 
-	if (minExposure)
-		*minExposure = min;
-	if (maxExposure)
-		*maxExposure = max;
-	if (defExposure)
-		*defExposure = def;
+	double line = lineDuration();
+	minExposure->clear();
+	minExposure->push_back(min * line);
+
+	maxExposure->clear();
+	maxExposure->push_back(max * line);
+
+	defExposure->clear();
+	defExposure->push_back(def * line);
 }
 
 /**
- * \brief Retrieve gain range from sensor control info map
- * \param[in] ctrls The control list to be updated
- * \param[out] minGainCode The minimum gain code in sensor format
- * \param[out] maxGainCode The maximum gain code in sensor format
- * \param[out] defGainCode The default gain code in sensor format
+ * \brief Retrieve analog gain range from sensor control info map
+ * \param[in] ctrls The control list map used for control ranges
+ * \param[out] minGain The minimum analog gain
+ * \param[out] maxGain The maximum analog gain
+ * \param[out] defGain The default analog gain
  *
- * This function aims to abstract the gain control for sensor having
- * a proprietary programming model.
+ * Report min, max and default values for analog gain. At least one value is
+ * reported in each vector corresponding to the main (long) analog gain.
+ * Implementation may append additional values if it supports multiple captures
+ * (short and/or very short).
  */
-void CameraHelper::controlInfoMapGetGainRange(
-	const ControlInfoMap *ctrls, uint32_t *minGainCode,
-	uint32_t *maxGainCode, uint32_t *defGainCode) const
+void CameraHelper::controlInfoMapGetAnalogGainRange(
+	const ControlInfoMap *ctrls, std::vector<double> *minGain,
+	std::vector<double> *maxGain, std::vector<double> *defGain) const
 {
 	uint32_t min, max, def;
 	const auto it = ctrls->find(V4L2_CID_ANALOGUE_GAIN);
@@ -312,23 +290,126 @@ void CameraHelper::controlInfoMapGetGainRange(
 			<< "V4L2_CID_ANALOGUE_GAIN not supported";
 	}
 
-	if (minGainCode)
-		*minGainCode = min;
-	if (maxGainCode)
-		*maxGainCode = max;
-	if (defGainCode)
-		*defGainCode = def;
+	minGain->clear();
+	minGain->push_back(gain(min));
+
+	maxGain->clear();
+	maxGain->push_back(gain(max));
+
+	defGain->clear();
+	defGain->push_back(gain(def));
+}
+
+/**
+ * \brief Configure the sensor with white balance gain
+ *
+ * This is optional method that is used when following conditions are met:
+ * - IPA has the option to control white balance gains in sensors rather than
+ *   in the ISP, and that option is enabled.
+ * - Sensor driver actually provides a control for white balance gain
+ *   configuration.
+ * In case white balance gains are controlled in the ISP, this method does
+ * nothing.
+.*
+ * \param[inout] ctrls The control list to be updated
+ * \param[in] gains The gains for the color channels in this order: R, Gr, Gb, B
+ */
+void CameraHelper::controlListSetAWB(
+	ControlList *ctrls, Span<const double, 4> gains) const
+{
+	/* Nothing to do, not supported by default */
+	(void)gains;
+	(void)ctrls;
 }
 
 /**
  * \brief Parse the embedded data buffer to extract metadata
  * \param[in] buffer The buffer with the embedded data
- * \param[out] controls The controlList to store the extracted metadata
+ * \param[out] mdControls The control list where parsed values will be stored
+ *
+ * \return 0 in case of success (embedded data present and valid)
  */
-void CameraHelper::parseEmbedded([[maybe_unused]] Span<const uint8_t> buffer,
-				 [[maybe_unused]] ControlList *controls)
+int CameraHelper::parseEmbedded([[maybe_unused]] Span<const uint8_t> buffer,
+				[[maybe_unused]] ControlList *mdControls)
 {
-	/* Nothing to do when no metadata provided by the sensor */
+	/* No metadata provided by the sensor */
+	return -1;
+}
+
+/**
+ * \brief Convert a sensor control list to its associated metadata control list
+ *
+ * The purpose of this function is to build a meta data control list matching a
+ * sensor control list. It may be used when the sensor does not actually
+ * report embedded data, in order to represent the sensor state in the meta
+ * data format.
+ *
+ * \param[in] sensorCtrls The sensor control list
+ * \param[out] mdCtrls The metadata control list
+ *
+ * \return 0 in case of success, embedded data present and decoded
+ */
+int CameraHelper::sensorControlsToMetaData(const ControlList *sensorCtrls,
+					   ControlList *mdCtrls) const
+{
+	int ret = 0;
+
+	/* Analog gain, consider single capture */
+	ASSERT(controlListHasId(mdCtrls, md::AnalogueGain.id()));
+	const ControlValue &aGainCtrl = sensorCtrls->get(V4L2_CID_ANALOGUE_GAIN);
+	std::array<float, 1> aGainsArray = { 1.0f };
+	if (!aGainCtrl.isNone()) {
+		uint32_t aGainCode = aGainCtrl.get<int32_t>();
+		aGainsArray[0] = gain(aGainCode);
+	} else {
+		LOG(NxpCameraHelper, Warning) << "Invalid analogue gain control";
+		ret = -1;
+	}
+	mdCtrls->set(md::AnalogueGain, Span<float>(aGainsArray));
+
+	/* Unitary gain for digital gain */
+	ASSERT(controlListHasId(mdCtrls, md::DigitalGain.id()));
+	std::array<float, 1> dGainsArray = { 1.0f };
+	mdCtrls->set(md::DigitalGain, Span<float>(dGainsArray));
+
+	/* Exposure, consider single capture */
+	ASSERT(controlListHasId(mdCtrls, md::Exposure.id()));
+	const ControlValue &exposureCtrl = sensorCtrls->get(V4L2_CID_EXPOSURE);
+	std::array<float, 1> exposuresArray = { 0.0f };
+	if (!exposureCtrl.isNone()) {
+		int32_t exposureLines = exposureCtrl.get<int32_t>();
+		exposuresArray[0] = static_cast<float>(exposureLines * lineDuration());
+	} else {
+		LOG(NxpCameraHelper, Warning) << "Invalid exposure control";
+		ret = -1;
+	}
+	mdCtrls->set(md::Exposure, Span<float>(exposuresArray));
+
+	/* Unitary gains for white balance */
+	ASSERT(controlListHasId(mdCtrls, md::WhiteBalanceGain.id()));
+	std::array<float, 4> wbGains = { 1.0f, 1.0f, 1.0f, 1.0f };
+	mdCtrls->set(md::WhiteBalanceGain, Span<float>(wbGains));
+
+	/* Arbitrary temperature value */
+	ASSERT(controlListHasId(mdCtrls, md::Temperature.id()));
+	mdCtrls->set(md::Temperature, 25.0);
+
+	return ret;
+}
+
+/**
+ * \brief Report the line duration in seconds
+ *
+ * Line duration is computed by dividing the line length in pixels by the pixel
+ * rate. By default, the line length is configured to its minimum value, so use
+ * that value.
+ * \todo make this computation dynamic according to the actual line length.
+ *
+ * \return The duration in seconds
+ */
+double CameraHelper::lineDuration() const
+{
+	return static_cast<double>(mode_.minLineLength) / mode_.pixelRate;
 }
 
 /**
@@ -345,7 +426,7 @@ void CameraHelper::parseEmbedded([[maybe_unused]] Span<const uint8_t> buffer,
  *
  * \return True if the ControlId is handled by the ControlList
  */
-bool CameraHelper::controlListHasId(const ControlList *ctrls, unsigned int id) const
+bool CameraHelper::controlListHasId(const ControlList *ctrls, unsigned int id)
 {
 	auto idMap = ctrls->idMap();
 	return (idMap->find(id) != idMap->end());
