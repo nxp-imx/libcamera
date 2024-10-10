@@ -354,18 +354,26 @@ gst_libcamera_stream_formats_to_caps(const StreamFormats &formats)
 		}
 
 		const SizeRange &range = formats.range(pixelformat);
-		if (range.hStep && range.vStep && range.min != range.max) {
+		if (range.hStep && range.vStep) {
 			GstStructure *s = gst_structure_copy(bare_s);
 			GValue val = G_VALUE_INIT;
 
 			g_value_init(&val, GST_TYPE_INT_RANGE);
-			gst_value_set_int_range_step(&val, range.min.width, range.max.width, range.hStep);
-			gst_structure_set_value(s, "width", &val);
-			gst_value_set_int_range_step(&val, range.min.height, range.max.height, range.vStep);
-			gst_structure_set_value(s, "height", &val);
+			if (range.min.width == range.max.width) {
+				gst_structure_set(s, "width", G_TYPE_INT, range.min.width, nullptr);
+			} else {
+				gst_value_set_int_range_step(&val, range.min.width, range.max.width, range.hStep);
+				gst_structure_set_value(s, "width", &val);
+			}
+			if (range.min.height == range.max.height) {
+				gst_structure_set(s, "height", G_TYPE_INT, range.min.height, nullptr);
+			} else {
+				gst_value_set_int_range_step(&val, range.min.height, range.max.height, range.vStep);
+				gst_structure_set_value(s, "height", &val);
+			}
 			g_value_unset(&val);
 
-			gst_caps_append_structure(caps, s);
+			caps = gst_caps_merge_structure(caps, s);
 		}
 	}
 

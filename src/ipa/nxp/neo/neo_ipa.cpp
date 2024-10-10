@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <math.h>
 #include <queue>
+#include <sstream>
 #include <stdint.h>
 #include <string.h>
 
@@ -40,6 +41,7 @@
 namespace libcamera {
 
 LOG_DEFINE_CATEGORY(NxpNeoIPA)
+LOG_DEFINE_CATEGORY(NxpNeoControlList)
 
 using namespace std::literals::chrono_literals;
 using namespace libcamera::nxp;
@@ -83,6 +85,10 @@ private:
 			    const ControlInfoMap &sensorControls,
 			    ControlInfoMap *ipaControls);
 	void setControls(unsigned int frame);
+	std::string controlListToString(const ControlList *ctrls) const;
+	std::string logSensorParams(const unsigned int frame,
+				    const ControlList *ctrlsApplied,
+				    const ControlList *ctrlsToApply) const;
 
 	std::map<unsigned int, FrameBuffer> buffers_;
 	std::map<unsigned int, MappedFrameBuffer> mappedBuffers_;
@@ -517,7 +523,38 @@ void IPANxpNeo::setControls(unsigned int frame)
 					      frameContext.agc.exposure,
 					      frameContext.agc.gain);
 
+	LOG(NxpNeoControlList, Debug) << logSensorParams(frame, &frameContext.sensor.mdControls, &ctrls);
+
 	setSensorControls.emit(frame, ctrls);
+}
+
+std::string IPANxpNeo::controlListToString(const ControlList *ctrls) const
+{
+	std::stringstream log;
+	for (auto it = ctrls->begin(); it != ctrls->end(); ++it) {
+		ControlValue value = it->second;
+		log << it->first << ": val=" << value.toString() << "\n";
+	}
+
+	return log.str();
+}
+
+std::string IPANxpNeo::logSensorParams(const unsigned int frame,
+				       const ControlList *ctrlsApplied,
+				       const ControlList *ctrlsToApply) const
+{
+	std::stringstream log;
+
+	log << "Sensor parameter status:\n"
+	    << "--------------" << frame << "-----------\n"
+	    << "Current sensor params:\n"
+	    << controlListToString(ctrlsApplied)
+	    << "------\n"
+	    << "New sensor params to apply:\n"
+	    << controlListToString(ctrlsToApply)
+	    << "----------------------------\n";
+
+	return log.str();
 }
 
 } // namespace ipa::nxpneo
