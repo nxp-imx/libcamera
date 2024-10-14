@@ -567,7 +567,9 @@ std::string IPANxpNeo::controlListToString(const ControlList *ctrls) const
 	std::stringstream log;
 	for (auto it = ctrls->begin(); it != ctrls->end(); ++it) {
 		ControlValue value = it->second;
-		log << it->first << ": val=" << value.toString() << "\n";
+		if (it != ctrls->begin())
+			log << "\n";
+		log << it->first << ": val=" << value.toString();
 	}
 
 	return log.str();
@@ -579,14 +581,10 @@ std::string IPANxpNeo::logSensorParams(const unsigned int frame,
 {
 	std::stringstream log;
 
-	log << "Sensor parameter status:\n"
-	    << "--------------" << frame << "-----------\n"
-	    << "Current sensor params:\n"
+	log << "\n--- frame [" << frame << "] meta data:\n"
 	    << controlListToString(ctrlsApplied)
-	    << "------\n"
-	    << "New sensor params to apply:\n"
-	    << controlListToString(ctrlsToApply)
-	    << "----------------------------\n";
+	    << "\nupdate:\n"
+	    << controlListToString(ctrlsToApply);
 
 	return log.str();
 }
