@@ -9,11 +9,19 @@
 
 #pragma once
 
+#include <map>
+#include <string>
+#include <vector>
+
+#include <libcamera/base/flags.h>
+#include <libcamera/base/signal.h>
+
+#include <libcamera/controls.h>
+#include <libcamera/framebuffer.h>
+#include <libcamera/geometry.h>
+
 #include <libcamera/ipa/core_ipa_interface.h>
 #include <libcamera/ipa/ipa_interface.h>
-
-#include <map>
-#include <vector>
 
 namespace libcamera {
 

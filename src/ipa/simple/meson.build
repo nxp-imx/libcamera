@@ -7,12 +7,10 @@ soft_simple_sources = files([
     'black_level.cpp',
 ])
 
-mod = shared_module(ipa_name,
-                    [soft_simple_sources, libcamera_generated_ipa_headers],
+mod = shared_module(ipa_name, soft_simple_sources,
                     name_prefix : '',
-                    include_directories : [ipa_includes, libipa_includes],
-                    dependencies : libcamera_private,
-                    link_with : libipa,
+                    include_directories : [ipa_includes],
+                    dependencies : [libcamera_private, libipa_dep],
                     install : true,
                     install_dir : ipa_install_dir)
 

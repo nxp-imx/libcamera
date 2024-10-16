@@ -10,7 +10,12 @@
 #pragma once
 
 
+#include <string>
 #include <vector>
+
+#include <libcamera/controls.h>
+#include <libcamera/framebuffer.h>
+#include <libcamera/geometry.h>
 
 #include <libcamera/ipa/ipa_interface.h>
 

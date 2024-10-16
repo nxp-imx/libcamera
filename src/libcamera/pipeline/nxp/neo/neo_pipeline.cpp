@@ -424,8 +424,35 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 
 		cfg->bufferCount = NxpNeoCameraConfiguration::kBufferCount;
 
+		/*
+		 * Linux driver currently supports only sRGB color space for the
+		 * decoded frame output.
+		 * Infrared grayscale stream is considered as raw because it has
+		 * full range encoding and is not gamma corrected. Thus, do not
+		 * use ColorSpace::adjust() method here, as that would override
+		 * the linear transfer function, as it considers grayscale to be
+		 * a YUV format unlikely to be linear.
+		 * Thus, both infrared and raw streams are associated to a raw
+		 * color space.
+		 */
+		ColorSpace colorSpace = ColorSpace::Raw;
+		if (isFrame) {
+			const PixelFormatInfo &info = PixelFormatInfo::info(cfg->pixelFormat);
+			colorSpace = ColorSpace::Srgb;
+			if (info.colourEncoding == PixelFormatInfo::ColourEncodingYUV) {
+				colorSpace.ycbcrEncoding = ColorSpace::YcbcrEncoding::Rec601;
+				colorSpace.range = ColorSpace::Range::Limited;
+			}
+		}
+		cfg->colorSpace = colorSpace;
+
 		if (cfg->pixelFormat != originalCfg.pixelFormat ||
 		    cfg->size != originalCfg.size) {
+			status = Adjusted;
+		}
+
+		if (originalCfg.colorSpace.has_value() &&
+		    cfg->colorSpace != originalCfg.colorSpace) {
 			status = Adjusted;
 		}
 
@@ -927,19 +954,20 @@ int NxpNeoCameraData::configure(CameraConfiguration *c)
 			StreamConfiguration &cfg = (*config)[i];
 			Stream *stream = cfg.stream();
 
+			if (stream == &streamRaw_)
+				continue;
+
 			const auto fmts =
 				V4L2PixelFormat::fromPixelFormat(cfg.pixelFormat);
 			V4L2PixelFormat fmt;
 			if (fmts.size())
 				fmt = fmts[0];
 
-			if (stream == &streamFrame_) {
-				devFormatFrame.size = cfg.size;
-				devFormatFrame.fourcc = fmt;
-			} else if (stream == &streamIr_) {
-				devFormatIr.size = cfg.size;
-				devFormatIr.fourcc = fmt;
-			}
+			V4L2DeviceFormat &devFormat =
+				stream == &streamFrame_ ? devFormatFrame : devFormatIr;
+			devFormat.size = cfg.size;
+			devFormat.fourcc = fmt;
+			devFormat.colorSpace = cfg.colorSpace;
 		}
 
 		NeoDevice::PipeConfig pipeConfig = {};

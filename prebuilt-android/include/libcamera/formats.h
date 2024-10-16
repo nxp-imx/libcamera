@@ -93,6 +93,7 @@ constexpr PixelFormat SGRBG16{ __fourcc('G', 'R', '1', '6'), __mod(0, 0) };
 constexpr PixelFormat SGBRG16{ __fourcc('G', 'B', '1', '6'), __mod(0, 0) };
 constexpr PixelFormat SBGGR16{ __fourcc('B', 'Y', 'R', '2'), __mod(0, 0) };
 constexpr PixelFormat R10_CSI2P{ __fourcc('R', '1', '0', ' '), __mod(11, 1) };
+constexpr PixelFormat R12_CSI2P{ __fourcc('R', '1', '2', ' '), __mod(11, 1) };
 constexpr PixelFormat SRGGB10_CSI2P{ __fourcc('R', 'G', '1', '0'), __mod(11, 1) };
 constexpr PixelFormat SGRBG10_CSI2P{ __fourcc('B', 'A', '1', '0'), __mod(11, 1) };
 constexpr PixelFormat SGBRG10_CSI2P{ __fourcc('G', 'B', '1', '0'), __mod(11, 1) };

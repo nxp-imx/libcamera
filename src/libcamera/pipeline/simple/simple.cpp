@@ -13,8 +13,8 @@
 #include <memory>
 #include <queue>
 #include <set>
-#include <string>
 #include <string.h>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -37,7 +37,6 @@
 #include "libcamera/internal/software_isp/software_isp.h"
 #include "libcamera/internal/v4l2_subdevice.h"
 #include "libcamera/internal/v4l2_videodevice.h"
-
 
 namespace libcamera {
 
@@ -164,7 +163,7 @@ LOG_DEFINE_CATEGORY(SimplePipeline)
  * handler has no a priori knowledge of. The pipeline handler thus implements a
  * heuristic to handle sharing of hardware resources in a generic fashion.
  *
- * Two cameras are considered to be mutually exclusive if their share common
+ * Two cameras are considered to be mutually exclusive if they share common
  * pads along the pipeline from the camera sensor to the video node. An entity
  * can thus be used concurrently by multiple cameras, as long as pads are
  * distinct.
@@ -199,7 +198,8 @@ namespace {
 static const SimplePipelineInfo supportedDevices[] = {
 	{ "dcmipp", {}, false },
 	{ "imx7-csi", { { "pxp", 1 } }, false },
-	{ "j721e-csi2rx", {}, false },
+	{ "intel-ipu6", {}, true },
+	{ "j721e-csi2rx", {}, true },
 	{ "mtk-seninf", { { "mtk-mdp", 3 } }, false },
 	{ "mxc-isi", {}, false },
 	{ "qcom-camss", {}, true },
@@ -278,7 +278,7 @@ public:
 	std::map<PixelFormat, std::vector<const Configuration *>> formats_;
 
 	std::vector<std::unique_ptr<FrameBuffer>> conversionBuffers_;
-	std::queue<std::map<unsigned int, FrameBuffer *>> conversionQueue_;
+	std::queue<std::map<const Stream *, FrameBuffer *>> conversionQueue_;
 	bool useConversion_;
 
 	std::unique_ptr<Converter> converter_;
@@ -363,13 +363,12 @@ private:
 		return static_cast<SimpleCameraData *>(camera->_d());
 	}
 
-	std::vector<MediaEntity *> locateSensors();
+	std::vector<MediaEntity *> locateSensors(MediaDevice *media);
 	static int resetRoutingTable(V4L2Subdevice *subdev);
 
 	const MediaPad *acquirePipeline(SimpleCameraData *data);
 	void releasePipeline(SimpleCameraData *data);
 
-	MediaDevice *media_;
 	std::map<const MediaEntity *, EntityData> entities_;
 
 	MediaDevice *converter_;
@@ -774,11 +773,8 @@ int SimpleCameraData::setupFormats(V4L2SubdeviceFormat *format,
 		}
 
 		LOG(SimplePipeline, Debug)
-			<< "Link '" << source->entity()->name()
-			<< "':" << source->index()
-			<< " -> '" << sink->entity()->name()
-			<< "':" << sink->index()
-			<< " configured with format " << *format;
+			<< "Link " << *link << ": configured with format "
+			<< *format;
 	}
 
 	return 0;
@@ -837,7 +833,7 @@ void SimpleCameraData::bufferReady(FrameBuffer *buffer)
 	Request *request = buffer->request();
 
 	if (useConversion_ && !conversionQueue_.empty()) {
-		const std::map<unsigned int, FrameBuffer *> &outputs =
+		const std::map<const Stream *, FrameBuffer *> &outputs =
 			conversionQueue_.front();
 		if (!outputs.empty()) {
 			FrameBuffer *outputBuffer = outputs.begin()->second;
@@ -1304,10 +1300,8 @@ int SimplePipelineHandler::exportFrameBuffers(Camera *camera, Stream *stream,
 	 */
 	if (data->useConversion_)
 		return data->converter_
-			       ? data->converter_->exportBuffers(data->streamIndex(stream),
-								 count, buffers)
-			       : data->swIsp_->exportBuffers(data->streamIndex(stream),
-							     count, buffers);
+			       ? data->converter_->exportBuffers(stream, count, buffers)
+			       : data->swIsp_->exportBuffers(stream, count, buffers);
 	else
 		return data->video_->exportBuffers(count, buffers);
 }
@@ -1399,7 +1393,7 @@ int SimplePipelineHandler::queueRequestDevice(Camera *camera, Request *request)
 	SimpleCameraData *data = cameraData(camera);
 	int ret;
 
-	std::map<unsigned int, FrameBuffer *> buffers;
+	std::map<const Stream *, FrameBuffer *> buffers;
 
 	for (auto &[stream, buffer] : request->buffers()) {
 		/*
@@ -1408,7 +1402,7 @@ int SimplePipelineHandler::queueRequestDevice(Camera *camera, Request *request)
 		 * completion handler.
 		 */
 		if (data->useConversion_) {
-			buffers.emplace(data->streamIndex(stream), buffer);
+			buffers.emplace(stream, buffer);
 		} else {
 			ret = data->video_->queueBuffer(buffer);
 			if (ret < 0)
@@ -1426,7 +1420,8 @@ int SimplePipelineHandler::queueRequestDevice(Camera *camera, Request *request)
  * Match and Setup
  */
 
-std::vector<MediaEntity *> SimplePipelineHandler::locateSensors()
+std::vector<MediaEntity *>
+SimplePipelineHandler::locateSensors(MediaDevice *media)
 {
 	std::vector<MediaEntity *> entities;
 
@@ -1434,7 +1429,7 @@ std::vector<MediaEntity *> SimplePipelineHandler::locateSensors()
 	 * Gather all the camera sensor entities based on the function they
 	 * expose.
 	 */
-	for (MediaEntity *entity : media_->entities()) {
+	for (MediaEntity *entity : media->entities()) {
 		if (entity->function() == MEDIA_ENT_F_CAM_SENSOR)
 			entities.push_back(entity);
 	}
@@ -1522,17 +1517,18 @@ bool SimplePipelineHandler::match(DeviceEnumerator *enumerator)
 {
 	const SimplePipelineInfo *info = nullptr;
 	unsigned int numStreams = 1;
+	MediaDevice *media;
 
 	for (const SimplePipelineInfo &inf : supportedDevices) {
 		DeviceMatch dm(inf.driver);
-		media_ = acquireMediaDevice(enumerator, dm);
-		if (media_) {
+		media = acquireMediaDevice(enumerator, dm);
+		if (media) {
 			info = &inf;
 			break;
 		}
 	}
 
-	if (!media_)
+	if (!media)
 		return false;
 
 	for (const auto &[name, streams] : info->converters) {
@@ -1547,11 +1543,13 @@ bool SimplePipelineHandler::match(DeviceEnumerator *enumerator)
 	swIspEnabled_ = info->swIspEnabled;
 
 	/* Locate the sensors. */
-	std::vector<MediaEntity *> sensors = locateSensors();
+	std::vector<MediaEntity *> sensors = locateSensors(media);
 	if (sensors.empty()) {
-		LOG(SimplePipeline, Error) << "No sensor found";
+		LOG(SimplePipeline, Info) << "No sensor found for " << media->deviceNode();
 		return false;
 	}
+
+	LOG(SimplePipeline, Debug) << "Sensor found for " << media->deviceNode();
 
 	/*
 	 * Create one camera data instance for each sensor and gather all
@@ -1616,8 +1614,8 @@ bool SimplePipelineHandler::match(DeviceEnumerator *enumerator)
 			if (subdev->caps().hasStreams()) {
 				/*
 				 * Reset the routing table to its default state
-				 * to make sure entities are enumerate according
-				 * to the defaul routing configuration.
+				 * to make sure entities are enumerated according
+				 * to the default routing configuration.
 				 */
 				ret = resetRoutingTable(subdev.get());
 				if (ret) {

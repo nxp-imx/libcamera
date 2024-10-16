@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2019, Google Inc.
  *
- * control_ids.cpp : Control ID list
+ * controls ID list
  *
  * This file is auto-generated. Do not edit.
  */
@@ -12,7 +12,7 @@
 
 /**
  * \file control_ids.h
- * \brief Camera control identifiers
+ * \brief Camera controls identifiers
  */
 
 namespace libcamera {
@@ -69,10 +69,11 @@ namespace controls {
 
 /**
  * \var AeMeteringMode
- * \brief Specify a metering mode for the AE algorithm to use. The metering
- * modes determine which parts of the image are used to determine the
- * scene brightness. Metering modes may be platform specific and not
- * all metering modes may be supported.
+ * \brief Specify a metering mode for the AE algorithm to use.
+ *
+ * The metering modes determine which parts of the image are used to
+ * determine the scene brightness. Metering modes may be platform specific
+ * and not all metering modes may be supported.
  */
 
 /**
@@ -80,13 +81,26 @@ namespace controls {
  * \brief Supported AeConstraintMode values
  *
  * \var ConstraintNormal
- * \brief Default constraint mode. This mode aims to balance the exposure of different parts of the image so as to reach a reasonable average level. However, highlights in the image may appear over-exposed and lowlights may appear under-exposed.
+ * \brief Default constraint mode.
+ *
+ * This mode aims to balance the exposure of different parts of the
+ * image so as to reach a reasonable average level. However, highlights
+ * in the image may appear over-exposed and lowlights may appear
+ * under-exposed.
  *
  * \var ConstraintHighlight
- * \brief Highlight constraint mode. This mode adjusts the exposure levels in order to try and avoid over-exposing the brightest parts (highlights) of an image. Other non-highlight parts of the image may appear under-exposed.
+ * \brief Highlight constraint mode.
+ *
+ * This mode adjusts the exposure levels in order to try and avoid
+ * over-exposing the brightest parts (highlights) of an image.
+ * Other non-highlight parts of the image may appear under-exposed.
  *
  * \var ConstraintShadows
- * \brief Shadows constraint mode. This mode adjusts the exposure levels in order to try and avoid under-exposing the dark parts (shadows) of an image. Other normally exposed parts of the image may appear over-exposed.
+ * \brief Shadows constraint mode.
+ *
+ * This mode adjusts the exposure levels in order to try and avoid
+ * under-exposing the dark parts (shadows) of an image. Other normally
+ * exposed parts of the image may appear over-exposed.
  *
  * \var ConstraintCustom
  * \brief Custom constraint mode.
@@ -104,10 +118,11 @@ namespace controls {
 
 /**
  * \var AeConstraintMode
- * \brief Specify a constraint mode for the AE algorithm to use. These determine
- * how the measured scene brightness is adjusted to reach the desired
- * target exposure. Constraint modes may be platform specific, and not
- * all constraint modes may be supported.
+ * \brief Specify a constraint mode for the AE algorithm to use.
+ *
+ * The constraint modes determine how the measured scene brightness is
+ * adjusted to reach the desired target exposure. Constraint modes may be
+ * platform specific, and not all constraint modes may be supported.
  */
 
 /**
@@ -139,19 +154,22 @@ namespace controls {
 
 /**
  * \var AeExposureMode
- * \brief Specify an exposure mode for the AE algorithm to use. These specify
- * how the desired total exposure is divided between the shutter time
- * and the sensor's analogue gain. The exposure modes are platform
- * specific, and not all exposure modes may be supported.
+ * \brief Specify an exposure mode for the AE algorithm to use.
+ *
+ * The exposure modes specify how the desired total exposure is divided
+ * between the shutter time and the sensor's analogue gain. They are
+ * platform specific, and not all exposure modes may be supported.
  */
 
 /**
  * \var ExposureValue
- * \brief Specify an Exposure Value (EV) parameter. The EV parameter will only be
- * applied if the AE algorithm is currently enabled.
+ * \brief Specify an Exposure Value (EV) parameter.
+ *
+ * The EV parameter will only be applied if the AE algorithm is currently
+ * enabled.
  *
  * By convention EV adjusts the exposure as log2. For example
- * EV = [-2, -1, 0.5, 0, 0.5, 1, 2] results in an exposure adjustment
+ * EV = [-2, -1, -0.5, 0, 0.5, 1, 2] results in an exposure adjustment
  * of [1/4x, 1/2x, 1/sqrt(2)x, 1x, sqrt(2)x, 2x, 4x].
  *
  * \sa AeEnable
@@ -160,7 +178,9 @@ namespace controls {
 /**
  * \var ExposureTime
  * \brief Exposure time (shutter speed) for the frame applied in the sensor
- * device. This value is specified in micro-seconds.
+ * device.
+ *
+ * This value is specified in micro-seconds.
  *
  * Setting this value means that it is now fixed and the AE algorithm may
  * not change it. Setting it back to zero returns it to the control of the
@@ -178,6 +198,7 @@ namespace controls {
 /**
  * \var AnalogueGain
  * \brief Analogue gain value applied in the sensor device.
+ *
  * The value of the control specifies the gain multiplier applied to all
  * colour channels. This value cannot be lower than 1.0.
  *
@@ -202,10 +223,20 @@ namespace controls {
  * \brief No flicker avoidance is performed.
  *
  * \var FlickerManual
- * \brief Manual flicker avoidance. Suppress flicker effects caused by lighting running with a period specified by the AeFlickerPeriod control. \sa AeFlickerPeriod
+ * \brief Manual flicker avoidance.
+ *
+ * Suppress flicker effects caused by lighting running with a period
+ * specified by the AeFlickerPeriod control.
+ * \sa AeFlickerPeriod
  *
  * \var FlickerAuto
- * \brief Automatic flicker period detection and avoidance. The system will automatically determine the most likely value of flicker period, and avoid flicker of this frequency. Once flicker is being corrected, it is implementation dependent whether the system is still able to detect a change in the flicker period. \sa AeFlickerDetected
+ * \brief Automatic flicker period detection and avoidance.
+ *
+ * The system will automatically determine the most likely value of
+ * flicker period, and avoid flicker of this frequency. Once flicker
+ * is being corrected, it is implementation dependent whether the
+ * system is still able to detect a change in the flicker period.
+ * \sa AeFlickerDetected
  */
 
 /**
@@ -220,9 +251,11 @@ namespace controls {
 
 /**
  * \var AeFlickerMode
- * \brief Set the flicker mode, which determines whether, and how, the AGC/AEC
- * algorithm attempts to hide flicker effects caused by the duty cycle of
- * artificial lighting.
+ * \brief Set the flicker avoidance mode for AGC/AEC.
+ *
+ * The flicker mode determines whether, and how, the AGC/AEC algorithm
+ * attempts to hide flicker effects caused by the duty cycle of artificial
+ * lighting.
  *
  * Although implementation dependent, many algorithms for "flicker
  * avoidance" work by restricting this exposure time to integer multiples
@@ -236,39 +269,67 @@ namespace controls {
 
 /**
  * \var AeFlickerPeriod
- * \brief Manual flicker period in microseconds. This value sets the current flicker period to avoid. It is used when AeFlickerMode is set to FlickerManual.
- * To cancel 50Hz mains flicker, this should be set to 10000 (corresponding to 100Hz), or 8333 (120Hz) for 60Hz mains.
- * Setting the mode to FlickerManual when no AeFlickerPeriod has ever been set means that no flicker cancellation occurs (until the value of this control is updated).
- * Switching to modes other than FlickerManual has no effect on the value of the AeFlickerPeriod control.
+ * \brief Manual flicker period in microseconds.
+ *
+ * This value sets the current flicker period to avoid. It is used when
+ * AeFlickerMode is set to FlickerManual.
+ *
+ * To cancel 50Hz mains flicker, this should be set to 10000 (corresponding
+ * to 100Hz), or 8333 (120Hz) for 60Hz mains.
+ *
+ * Setting the mode to FlickerManual when no AeFlickerPeriod has ever been
+ * set means that no flicker cancellation occurs (until the value of this
+ * control is updated).
+ *
+ * Switching to modes other than FlickerManual has no effect on the
+ * value of the AeFlickerPeriod control.
+ *
  * \sa AeFlickerMode
  */
 
 /**
  * \var AeFlickerDetected
- * \brief Flicker period detected in microseconds. The value reported here indicates the currently detected flicker period, or zero if no flicker at all is detected.
- * When AeFlickerMode is set to FlickerAuto, there may be a period during which the value reported here remains zero. Once a non-zero value is reported, then this is the flicker period that has been detected and is now being cancelled.
- * In the case of 50Hz mains flicker, the value would be 10000 (corresponding to 100Hz), or 8333 (120Hz) for 60Hz mains flicker.
- * It is implementation dependent whether the system can continue to detect flicker of different periods when another frequency is already being cancelled.
+ * \brief Flicker period detected in microseconds.
+ *
+ * The value reported here indicates the currently detected flicker
+ * period, or zero if no flicker at all is detected.
+ *
+ * When AeFlickerMode is set to FlickerAuto, there may be a period during
+ * which the value reported here remains zero. Once a non-zero value is
+ * reported, then this is the flicker period that has been detected and is
+ * now being cancelled.
+ *
+ * In the case of 50Hz mains flicker, the value would be 10000
+ * (corresponding to 100Hz), or 8333 (120Hz) for 60Hz mains flicker.
+ *
+ * It is implementation dependent whether the system can continue to detect
+ * flicker of different periods when another frequency is already being
+ * cancelled.
+ *
  * \sa AeFlickerMode
  */
 
 /**
  * \var Brightness
- * \brief Specify a fixed brightness parameter. Positive values (up to 1.0)
- * produce brighter images; negative values (up to -1.0) produce darker
- * images and 0.0 leaves pixels unchanged.
+ * \brief Specify a fixed brightness parameter.
+ *
+ * Positive values (up to 1.0) produce brighter images; negative values
+ * (up to -1.0) produce darker images and 0.0 leaves pixels unchanged.
  */
 
 /**
  * \var Contrast
- * \brief Specify a fixed contrast parameter. Normal contrast is given by the
- * value 1.0; larger values produce images with more contrast.
+ * \brief Specify a fixed contrast parameter.
+ *
+ * Normal contrast is given by the value 1.0; larger values produce images
+ * with more contrast.
  */
 
 /**
  * \var Lux
- * \brief Report an estimate of the current illuminance level in lux. The Lux
- * control can only be returned in metadata.
+ * \brief Report an estimate of the current illuminance level in lux.
+ *
+ * The Lux control can only be returned in metadata.
  */
 
 /**
@@ -319,8 +380,10 @@ namespace controls {
 
 /**
  * \var AwbMode
- * \brief Specify the range of illuminants to use for the AWB algorithm. The modes
- * supported are platform specific, and not all modes may be supported.
+ * \brief Specify the range of illuminants to use for the AWB algorithm.
+ *
+ * The modes supported are platform specific, and not all modes may be
+ * supported.
  */
 
 /**
@@ -337,35 +400,42 @@ namespace controls {
 /**
  * \var ColourGains
  * \brief Pair of gain values for the Red and Blue colour channels, in that
- * order. ColourGains can only be applied in a Request when the AWB is
- * disabled.
+ * order.
+ *
+ * ColourGains can only be applied in a Request when the AWB is disabled.
  *
  * \sa AwbEnable
  */
 
 /**
  * \var ColourTemperature
- * \brief Report the current estimate of the colour temperature, in kelvin, for this frame. The ColourTemperature control can only be returned in metadata.
+ * \brief Report the estimate of the colour temperature for the frame, in kelvin.
+ *
+ * The ColourTemperature control can only be returned in metadata.
  */
 
 /**
  * \var Saturation
- * \brief Specify a fixed saturation parameter. Normal saturation is given by
- * the value 1.0; larger values produce more saturated colours; 0.0
- * produces a greyscale image.
+ * \brief Specify a fixed saturation parameter.
+ *
+ * Normal saturation is given by the value 1.0; larger values produce more
+ * saturated colours; 0.0 produces a greyscale image.
  */
 
 /**
  * \var SensorBlackLevels
- * \brief Reports the sensor black levels used for processing a frame, in the
- * order R, Gr, Gb, B. These values are returned as numbers out of a 16-bit
- * pixel range (as if pixels ranged from 0 to 65535). The SensorBlackLevels
- * control can only be returned in metadata.
+ * \brief Reports the sensor black levels used for processing a frame.
+ *
+ * The values are in the order R, Gr, Gb, B. They are returned as numbers
+ * out of a 16-bit pixel range (as if pixels ranged from 0 to 65535). The
+ * SensorBlackLevels control can only be returned in metadata.
  */
 
 /**
  * \var Sharpness
- * \brief A value of 0.0 means no sharpening. The minimum value means
+ * \brief Intensity of the sharpening applied to the image.
+ *
+ * A value of 0.0 means no sharpening. The minimum value means
  * minimal sharpening, and shall be 0.0 unless the camera can't
  * disable sharpening completely. The default value shall give a
  * "reasonable" level of sharpening, suitable for most use cases.
@@ -378,6 +448,7 @@ namespace controls {
 /**
  * \var FocusFoM
  * \brief Reports a Figure of Merit (FoM) to indicate how in-focus the frame is.
+ *
  * A larger FocusFoM value indicates a more in-focus frame. This singular
  * value may be based on a combination of statistics gathered from
  * multiple focus regions within an image. The number of focus regions and
@@ -388,20 +459,24 @@ namespace controls {
 
 /**
  * \var ColourCorrectionMatrix
- * \brief The 3x3 matrix that converts camera RGB to sRGB within the
- * imaging pipeline. This should describe the matrix that is used
- * after pixels have been white-balanced, but before any gamma
- * transformation. The 3x3 matrix is stored in conventional reading
- * order in an array of 9 floating point values.
+ * \brief The 3x3 matrix that converts camera RGB to sRGB within the imaging
+ * pipeline.
+ *
+ * This should describe the matrix that is used after pixels have been
+ * white-balanced, but before any gamma transformation. The 3x3 matrix is
+ * stored in conventional reading order in an array of 9 floating point
+ * values.
  */
 
 /**
  * \var ScalerCrop
  * \brief Sets the image portion that will be scaled to form the whole of
- * the final output image. The (x,y) location of this rectangle is
- * relative to the PixelArrayActiveAreas that is being used. The units
- * remain native sensor pixels, even if the sensor is being used in
- * a binning or skipping mode.
+ * the final output image.
+ *
+ * The (x,y) location of this rectangle is relative to the
+ * PixelArrayActiveAreas that is being used. The units remain native
+ * sensor pixels, even if the sensor is being used in a binning or
+ * skipping mode.
  *
  * This control is only present when the pipeline supports scaling. Its
  * maximum valid value is given by the properties::ScalerCropMaximum
@@ -428,8 +503,9 @@ namespace controls {
 /**
  * \var FrameDuration
  * \brief The instantaneous frame duration from start of frame exposure to start
- * of next exposure, expressed in microseconds. This control is meant to
- * be returned in metadata.
+ * of next exposure, expressed in microseconds.
+ *
+ * This control is meant to be returned in metadata.
  */
 
 /**
@@ -469,9 +545,11 @@ namespace controls {
 
 /**
  * \var SensorTemperature
- * \brief Temperature measure from the camera sensor in Celsius. This is typically
- * obtained by a thermal sensor present on-die or in the camera module. The
- * range of reported temperatures is device dependent.
+ * \brief Temperature measure from the camera sensor in Celsius.
+ *
+ * This value is typically obtained by a thermal sensor present on-die or
+ * in the camera module. The range of reported temperatures is device
+ * dependent.
  *
  * The SensorTemperature control will only be returned in metadata if a
  * thermal sensor is present.
@@ -496,12 +574,12 @@ namespace controls {
  * \brief Supported AfMode values
  *
  * \var AfModeManual
- * \brief The AF algorithm is in manual mode. In this mode it will never
- * perform any action nor move the lens of its own accord, but an
- * application can specify the desired lens position using the
- * LensPosition control.
+ * \brief The AF algorithm is in manual mode.
  *
- * In this mode the AfState will always report AfStateIdle.
+ * In this mode it will never perform any action nor move the lens of
+ * its own accord, but an application can specify the desired lens
+ * position using the LensPosition control. The AfState will always
+ * report AfStateIdle.
  *
  * If the camera is started in AfModeManual, it will move the focus
  * lens to the position specified by the LensPosition control.
@@ -511,30 +589,33 @@ namespace controls {
  * CameraLocationExternal) may use a different default value.
  *
  * \var AfModeAuto
- * \brief The AF algorithm is in auto mode. This means that the algorithm
- * will never move the lens or change state unless the AfTrigger
- * control is used. The AfTrigger control can be used to initiate a
- * focus scan, the results of which will be reported by AfState.
+ * \brief The AF algorithm is in auto mode.
  *
- * If the autofocus algorithm is moved from AfModeAuto to another
- * mode while a scan is in progress, the scan is cancelled
- * immediately, without waiting for the scan to finish.
+ * In this mode the algorithm will never move the lens or change state
+ * unless the AfTrigger control is used. The AfTrigger control can be
+ * used to initiate a focus scan, the results of which will be
+ * reported by AfState.
  *
- * When first entering this mode the AfState will report
- * AfStateIdle. When a trigger control is sent, AfState will
- * report AfStateScanning for a period before spontaneously
- * changing to AfStateFocused or AfStateFailed, depending on
- * the outcome of the scan. It will remain in this state until
- * another scan is initiated by the AfTrigger control. If a scan is
- * cancelled (without changing to another mode), AfState will return
- * to AfStateIdle.
+ * If the autofocus algorithm is moved from AfModeAuto to another mode
+ * while a scan is in progress, the scan is cancelled immediately,
+ * without waiting for the scan to finish.
+ *
+ * When first entering this mode the AfState will report AfStateIdle.
+ * When a trigger control is sent, AfState will report AfStateScanning
+ * for a period before spontaneously changing to AfStateFocused or
+ * AfStateFailed, depending on the outcome of the scan. It will remain
+ * in this state until another scan is initiated by the AfTrigger
+ * control. If a scan is cancelled (without changing to another mode),
+ * AfState will return to AfStateIdle.
  *
  * \var AfModeContinuous
- * \brief The AF algorithm is in continuous mode. This means that the lens can
- * re-start a scan spontaneously at any moment, without any user
- * intervention. The AfState still reports whether the algorithm is
- * currently scanning or not, though the application has no ability to
- * initiate or cancel scans, nor to move the lens for itself.
+ * \brief The AF algorithm is in continuous mode.
+ *
+ * In this mode the lens can re-start a scan spontaneously at any
+ * moment, without any user intervention. The AfState still reports
+ * whether the algorithm is currently scanning or not, though the
+ * application has no ability to initiate or cancel scans, nor to move
+ * the lens for itself.
  *
  * However, applications can pause the AF algorithm from continuously
  * scanning by using the AfPause control. This allows video or still
@@ -557,7 +638,7 @@ namespace controls {
 
 /**
  * \var AfMode
- * \brief Control to set the mode of the AF (autofocus) algorithm.
+ * \brief The mode of the AF (autofocus) algorithm.
  *
  * An implementation may choose not to implement all the modes.
  */
@@ -567,18 +648,20 @@ namespace controls {
  * \brief Supported AfRange values
  *
  * \var AfRangeNormal
- * \brief A wide range of focus distances is scanned, all the way from
- * infinity down to close distances, though depending on the
- * implementation, possibly not including the very closest macro
- * positions.
+ * \brief A wide range of focus distances is scanned.
+ *
+ * Scanned distances cover all the way from infinity down to close
+ * distances, though depending on the implementation, possibly not
+ * including the very closest macro positions.
  *
  * \var AfRangeMacro
  * \brief Only close distances are scanned.
  *
  * \var AfRangeFull
- * \brief The full range of focus distances is scanned just as with
- * AfRangeNormal but this time including the very closest macro
- * positions.
+ * \brief The full range of focus distances is scanned.
+ *
+ * This range is similar to AfRangeNormal but includes the very
+ * closest macro positions.
  */
 
 /**
@@ -593,8 +676,9 @@ namespace controls {
 
 /**
  * \var AfRange
- * \brief Control to set the range of focus distances that is scanned. An
- * implementation may choose not to implement all the options here.
+ * \brief The range of focus distances that is scanned.
+ *
+ * An implementation may choose not to implement all the options here.
  */
 
 /**
@@ -620,11 +704,13 @@ namespace controls {
 
 /**
  * \var AfSpeed
- * \brief Control that determines whether the AF algorithm is to move the lens
- * as quickly as possible or more steadily. For example, during video
- * recording it may be desirable not to move the lens too abruptly, but
- * when in a preview mode (waiting for a still capture) it may be
- * helpful to move the lens as quickly as is reasonably possible.
+ * \brief Determine whether the AF is to move the lens as quickly as possible or
+ * more steadily.
+ *
+ * For example, during video recording it may be desirable not to move the
+ * lens too abruptly, but when in a preview mode (waiting for a still
+ * capture) it may be helpful to move the lens as quickly as is reasonably
+ * possible.
  */
 
 /**
@@ -632,10 +718,12 @@ namespace controls {
  * \brief Supported AfMetering values
  *
  * \var AfMeteringAuto
- * \brief The AF algorithm should decide for itself where it will measure focus.
+ * \brief Let the AF algorithm decide for itself where it will measure focus.
  *
  * \var AfMeteringWindows
- * \brief The AF algorithm should use the rectangles defined by the AfWindows control to measure focus. If no windows are specified the behaviour is platform dependent.
+ * \brief Use the rectangles defined by the AfWindows control to measure focus.
+ *
+ * If no windows are specified the behaviour is platform dependent.
  */
 
 /**
@@ -650,15 +738,16 @@ namespace controls {
 
 /**
  * \var AfMetering
- * \brief Instruct the AF algorithm how it should decide which parts of the image
- * should be used to measure focus.
+ * \brief The parts of the image used by the AF algorithm to measure focus.
  */
 
 /**
  * \var AfWindows
- * \brief Sets the focus windows used by the AF algorithm when AfMetering is set
- * to AfMeteringWindows. The units used are pixels within the rectangle
- * returned by the ScalerCropMaximum property.
+ * \brief The focus windows used by the AF algorithm when AfMetering is set to
+ * AfMeteringWindows.
+ *
+ * The units used are pixels within the rectangle returned by the
+ * ScalerCropMaximum property.
  *
  * In order to be activated, a rectangle must be programmed with non-zero
  * width and height. Internally, these rectangles are intersected with the
@@ -684,10 +773,16 @@ namespace controls {
  * \brief Supported AfTrigger values
  *
  * \var AfTriggerStart
- * \brief Start an AF scan. Ignored if a scan is in progress.
+ * \brief Start an AF scan.
+ *
+ * Setting the control to AfTriggerStart is ignored if a scan is in
+ * progress.
  *
  * \var AfTriggerCancel
- * \brief Cancel an AF scan. This does not cause the lens to move anywhere else. Ignored if no scan is in progress.
+ * \brief Cancel an AF scan.
+ *
+ * This does not cause the lens to move anywhere else. Ignored if no
+ * scan is in progress.
  */
 
 /**
@@ -702,10 +797,11 @@ namespace controls {
 
 /**
  * \var AfTrigger
- * \brief This control starts an autofocus scan when AfMode is set to AfModeAuto,
- * and can also be used to terminate a scan early.
+ * \brief Start an autofocus scan.
  *
- * It is ignored if AfMode is set to AfModeManual or AfModeContinuous.
+ * This control starts an autofocus scan when AfMode is set to AfModeAuto,
+ * and is ignored if AfMode is set to AfModeManual or AfModeContinuous. It
+ * can also be used to terminate a scan early.
  */
 
 /**
@@ -713,16 +809,20 @@ namespace controls {
  * \brief Supported AfPause values
  *
  * \var AfPauseImmediate
- * \brief Pause the continuous autofocus algorithm immediately, whether or not
- * any kind of scan is underway. AfPauseState will subsequently report
+ * \brief Pause the continuous autofocus algorithm immediately.
+ *
+ * The autofocus algorithm is paused whether or not any kind of scan
+ * is underway. AfPauseState will subsequently report
  * AfPauseStatePaused. AfState may report any of AfStateScanning,
  * AfStateFocused or AfStateFailed, depending on the algorithm's state
  * when it received this control.
  *
  * \var AfPauseDeferred
- * \brief This is similar to AfPauseImmediate, and if the AfState is currently
- * reporting AfStateFocused or AfStateFailed it will remain in that
- * state and AfPauseState will report AfPauseStatePaused.
+ * \brief Pause the continuous autofocus algorithm at the end of the scan.
+ *
+ * This is similar to AfPauseImmediate, and if the AfState is
+ * currently reporting AfStateFocused or AfStateFailed it will remain
+ * in that state and AfPauseState will report AfPauseStatePaused.
  *
  * However, if the algorithm is scanning (AfStateScanning),
  * AfPauseState will report AfPauseStatePausing until the scan is
@@ -731,9 +831,10 @@ namespace controls {
  * AfPauseStatePaused.
  *
  * \var AfPauseResume
- * \brief Resume continuous autofocus operation. The algorithm starts again
- * from exactly where it left off, and AfPauseState will report
- * AfPauseStateRunning.
+ * \brief Resume continuous autofocus operation.
+ *
+ * The algorithm starts again from exactly where it left off, and
+ * AfPauseState will report AfPauseStateRunning.
  */
 
 /**
@@ -748,7 +849,9 @@ namespace controls {
 
 /**
  * \var AfPause
- * \brief This control has no effect except when in continuous autofocus mode
+ * \brief Pause lens movements when in continuous autofocus mode.
+ *
+ * This control has no effect except when in continuous autofocus mode
  * (AfModeContinuous). It can be used to pause any lens movements while
  * (for example) images are captured. The algorithm remains inactive
  * until it is instructed to resume.
@@ -756,8 +859,10 @@ namespace controls {
 
 /**
  * \var LensPosition
- * \brief Acts as a control to instruct the lens to move to a particular position
- * and also reports back the position of the lens for each frame.
+ * \brief Set and report the focus lens position.
+ *
+ * This control instructs the lens to move to a particular position and
+ * also reports back the position of the lens for each frame.
  *
  * The LensPosition control is ignored unless the AfMode is set to
  * AfModeManual, though the value is reported back unconditionally in all
@@ -771,16 +876,16 @@ namespace controls {
  *
  * For example:
  *
- * 0 moves the lens to infinity.
- * 0.5 moves the lens to focus on objects 2m away.
- * 2 moves the lens to focus on objects 50cm away.
- * And larger values will focus the lens closer.
+ * - 0 moves the lens to infinity.
+ * - 0.5 moves the lens to focus on objects 2m away.
+ * - 2 moves the lens to focus on objects 50cm away.
+ * - And larger values will focus the lens closer.
  *
- * The default value of the control should indicate a good general position
- * for the lens, often corresponding to the hyperfocal distance (the
- * closest position for which objects at infinity are still acceptably
- * sharp). The minimum will often be zero (meaning infinity), and the
- * maximum value defines the closest focus position.
+ * The default value of the control should indicate a good general
+ * position for the lens, often corresponding to the hyperfocal distance
+ * (the closest position for which objects at infinity are still
+ * acceptably sharp). The minimum will often be zero (meaning infinity),
+ * and the maximum value defines the closest focus position.
  *
  * \todo Define a property to report the Hyperfocal distance of calibrated
  * lenses.
@@ -797,11 +902,12 @@ namespace controls {
  *
  * \var AfStateScanning
  * \brief The AF algorithm is in auto mode (AfModeAuto), and a scan has been
- * started using the AfTrigger control. The scan can be cancelled by
- * sending AfTriggerCancel at which point the algorithm will either
- * move back to AfStateIdle or, if the scan actually completes before
- * the cancel request is processed, to one of AfStateFocused or
- * AfStateFailed.
+ * started using the AfTrigger control.
+ *
+ * The scan can be cancelled by sending AfTriggerCancel at which point
+ * the algorithm will either move back to AfStateIdle or, if the scan
+ * actually completes before the cancel request is processed, to one
+ * of AfStateFocused or AfStateFailed.
  *
  * Alternatively the AF algorithm could be in continuous mode
  * (AfModeContinuous) at which point it may enter this state
@@ -830,22 +936,25 @@ namespace controls {
 
 /**
  * \var AfState
- * \brief Reports the current state of the AF algorithm in conjunction with the
- * reported AfMode value and (in continuous AF mode) the AfPauseState
- * value. The possible state changes are described below, though we note
- * the following state transitions that occur when the AfMode is changed.
+ * \brief The current state of the AF algorithm.
+ *
+ * This control reports the current state of the AF algorithm in
+ * conjunction with the reported AfMode value and (in continuous AF mode)
+ * the AfPauseState value. The possible state changes are described below,
+ * though we note the following state transitions that occur when the
+ * AfMode is changed.
  *
  * If the AfMode is set to AfModeManual, then the AfState will always
- * report AfStateIdle (even if the lens is subsequently moved). Changing to
- * the AfModeManual state does not initiate any lens movement.
+ * report AfStateIdle (even if the lens is subsequently moved). Changing
+ * to the AfModeManual state does not initiate any lens movement.
  *
  * If the AfMode is set to AfModeAuto then the AfState will report
- * AfStateIdle. However, if AfModeAuto and AfTriggerStart are sent together
- * then AfState will omit AfStateIdle and move straight to AfStateScanning
- * (and start a scan).
+ * AfStateIdle. However, if AfModeAuto and AfTriggerStart are sent
+ * together then AfState will omit AfStateIdle and move straight to
+ * AfStateScanning (and start a scan).
  *
- * If the AfMode is set to AfModeContinuous then the AfState will initially
- * report AfStateScanning.
+ * If the AfMode is set to AfModeContinuous then the AfState will
+ * initially report AfStateScanning.
  */
 
 /**
@@ -858,13 +967,17 @@ namespace controls {
  *
  * \var AfPauseStatePausing
  * \brief Continuous AF has been sent an AfPauseDeferred control, and will
- * pause as soon as any in-progress scan completes (and then report
- * AfPauseStatePaused). No new scans will be start spontaneously until
+ * pause as soon as any in-progress scan completes.
+ *
+ * When the scan completes, the AfPauseState control will report
+ * AfPauseStatePaused. No new scans will be start spontaneously until
  * the AfPauseResume control is sent.
  *
  * \var AfPauseStatePaused
- * \brief Continuous AF is paused. No further state changes or lens movements
- * will occur until the AfPauseResume control is sent.
+ * \brief Continuous AF is paused.
+ *
+ * No further state changes or lens movements will occur until the
+ * AfPauseResume control is sent.
  */
 
 /**
@@ -879,9 +992,12 @@ namespace controls {
 
 /**
  * \var AfPauseState
- * \brief Only applicable in continuous (AfModeContinuous) mode, this reports
- * whether the algorithm is currently running, paused or pausing (that is,
- * will pause as soon as any in-progress scan completes).
+ * \brief Report whether the autofocus is currently running, paused or pausing.
+ *
+ * This control is only applicable in continuous (AfModeContinuous) mode,
+ * and reports whether the algorithm is currently running, paused or
+ * pausing (that is, will pause as soon as any in-progress scan
+ * completes).
  *
  * Any change to AfMode will cause AfPauseStateRunning to be reported.
  */
@@ -891,23 +1007,27 @@ namespace controls {
  * \brief Supported HdrMode values
  *
  * \var HdrModeOff
- * \brief HDR is disabled. Metadata for this frame will not include the
- * HdrChannel control.
+ * \brief HDR is disabled.
+ *
+ * Metadata for this frame will not include the HdrChannel control.
  *
  * \var HdrModeMultiExposureUnmerged
  * \brief Multiple exposures will be generated in an alternating fashion.
- * However, they will not be merged together and will be returned to
- * the application as they are. Each image will be tagged with the
- * correct HDR channel, indicating what kind of exposure it is. The
- * tag should be the same as in the HdrModeMultiExposure case.
+ *
+ * The multiple exposures will not be merged together and will be
+ * returned to the application as they are. Each image will be tagged
+ * with the correct HDR channel, indicating what kind of exposure it
+ * is. The tag should be the same as in the HdrModeMultiExposure case.
  *
  * The expectation is that an application using this mode would merge
  * the frames to create HDR images for itself if it requires them.
  *
  * \var HdrModeMultiExposure
  * \brief Multiple exposures will be generated and merged to create HDR
- * images. Each image will be tagged with the HDR channel (long, medium
- * or short) that arrived and which caused this image to be output.
+ * images.
+ *
+ * Each image will be tagged with the HDR channel (long, medium or
+ * short) that arrived and which caused this image to be output.
  *
  * Systems that use two channels for HDR will return images tagged
  * alternately as the short and long channel. Systems that use three
@@ -916,13 +1036,16 @@ namespace controls {
  *
  * \var HdrModeSingleExposure
  * \brief Multiple frames all at a single exposure will be used to create HDR
- * images. These images should be reported as all corresponding to the
- * HDR short channel.
+ * images.
+ *
+ * These images should be reported as all corresponding to the HDR
+ * short channel.
  *
  * \var HdrModeNight
- * \brief Multiple frames will be combined to produce "night mode" images. It
- * is up to the implementation exactly which HDR channels it uses, and
- * the images will all be tagged accordingly with the correct HDR
+ * \brief Multiple frames will be combined to produce "night mode" images.
+ *
+ * It is up to the implementation exactly which HDR channels it uses,
+ * and the images will all be tagged accordingly with the correct HDR
  * channel information.
  */
 
@@ -938,10 +1061,11 @@ namespace controls {
 
 /**
  * \var HdrMode
- * \brief Control to set the mode to be used for High Dynamic Range (HDR)
- * imaging. HDR techniques typically include multiple exposure, image
- * fusion and tone mapping techniques to improve the dynamic range of the
- * resulting images.
+ * \brief Set the mode to be used for High Dynamic Range (HDR) imaging.
+ *
+ * HDR techniques typically include multiple exposure, image fusion and
+ * tone mapping techniques to improve the dynamic range of the resulting
+ * images.
  *
  * When using an HDR mode, images are captured with different sets of AGC
  * settings called HDR channels. Channels indicate in particular the type
@@ -982,17 +1106,26 @@ namespace controls {
 
 /**
  * \var HdrChannel
- * \brief This value is reported back to the application so that it can discover
- * whether this capture corresponds to the short or long exposure image (or
- * any other image used by the HDR procedure). An application can monitor
- * the HDR channel to discover when the differently exposed images have
- * arrived.
+ * \brief The HDR channel used to capture the frame.
+ *
+ * This value is reported back to the application so that it can discover
+ * whether this capture corresponds to the short or long exposure image
+ * (or any other image used by the HDR procedure). An application can
+ * monitor the HDR channel to discover when the differently exposed images
+ * have arrived.
  *
  * This metadata is only available when an HDR mode has been enabled.
  *
  * \sa HdrMode
  */
 
+/**
+ * \var Gamma
+ * \brief Specify a fixed gamma value.
+ *
+ * The default gamma value must be 2.2 which closely mimics sRGB gamma.
+ * Note that this is camera gamma, so it is applied as 1.0/gamma.
+ */
 
 /**
  * \brief Namespace for draft controls
@@ -1305,11 +1438,13 @@ namespace draft {
 
 } /* namespace draft */
 
+
 #ifndef __DOXYGEN__
 /*
  * Keep the controls definitions hidden from doxygen as it incorrectly parses
  * them as functions.
  */
+
 extern const Control<bool> AeEnable(AE_ENABLE, "AeEnable");
 extern const Control<bool> AeLocked(AE_LOCKED, "AeLocked");
 extern const std::array<const ControlValue, 4> AeMeteringModeValues = {
@@ -1520,11 +1655,9 @@ extern const std::map<std::string, int32_t> HdrChannelNameValueMap = {
 	{ "HdrChannelLong", HdrChannelLong },
 };
 extern const Control<int32_t> HdrChannel(HDR_CHANNEL, "HdrChannel");
+extern const Control<float> Gamma(GAMMA, "Gamma");
 
 
-/**
- * \brief Namespace for draft controls
- */
 namespace draft {
 
 extern const std::array<const ControlValue, 3> AePrecaptureTriggerValues = {
@@ -1624,9 +1757,10 @@ extern const std::map<std::string, int32_t> TestPatternModeNameValueMap = {
 };
 extern const Control<int32_t> TestPatternMode(TEST_PATTERN_MODE, "TestPatternMode");
 
+
 } /* namespace draft */
 
-#endif
+#endif /* __DOXYGEN__ */
 
 /**
  * \brief List of all supported libcamera controls
@@ -1635,16 +1769,6 @@ extern const Control<int32_t> TestPatternMode(TEST_PATTERN_MODE, "TestPatternMod
  * set through Request::controls() and returned out through Request::metadata().
  */
 extern const ControlIdMap controls {
-	{ draft::AE_PRECAPTURE_TRIGGER, &draft::AePrecaptureTrigger },
-	{ draft::NOISE_REDUCTION_MODE, &draft::NoiseReductionMode },
-	{ draft::COLOR_CORRECTION_ABERRATION_MODE, &draft::ColorCorrectionAberrationMode },
-	{ draft::AE_STATE, &draft::AeState },
-	{ draft::AWB_STATE, &draft::AwbState },
-	{ draft::SENSOR_ROLLING_SHUTTER_SKEW, &draft::SensorRollingShutterSkew },
-	{ draft::LENS_SHADING_MAP_MODE, &draft::LensShadingMapMode },
-	{ draft::PIPELINE_DEPTH, &draft::PipelineDepth },
-	{ draft::MAX_LATENCY, &draft::MaxLatency },
-	{ draft::TEST_PATTERN_MODE, &draft::TestPatternMode },
 	{ AE_ENABLE, &AeEnable },
 	{ AE_LOCKED, &AeLocked },
 	{ AE_METERING_MODE, &AeMeteringMode },
@@ -1687,6 +1811,17 @@ extern const ControlIdMap controls {
 	{ AF_PAUSE_STATE, &AfPauseState },
 	{ HDR_MODE, &HdrMode },
 	{ HDR_CHANNEL, &HdrChannel },
+	{ GAMMA, &Gamma },
+	{ draft::AE_PRECAPTURE_TRIGGER, &draft::AePrecaptureTrigger },
+	{ draft::NOISE_REDUCTION_MODE, &draft::NoiseReductionMode },
+	{ draft::COLOR_CORRECTION_ABERRATION_MODE, &draft::ColorCorrectionAberrationMode },
+	{ draft::AE_STATE, &draft::AeState },
+	{ draft::AWB_STATE, &draft::AwbState },
+	{ draft::SENSOR_ROLLING_SHUTTER_SKEW, &draft::SensorRollingShutterSkew },
+	{ draft::LENS_SHADING_MAP_MODE, &draft::LensShadingMapMode },
+	{ draft::PIPELINE_DEPTH, &draft::PipelineDepth },
+	{ draft::MAX_LATENCY, &draft::MaxLatency },
+	{ draft::TEST_PATTERN_MODE, &draft::TestPatternMode },
 };
 
 } /* namespace controls */

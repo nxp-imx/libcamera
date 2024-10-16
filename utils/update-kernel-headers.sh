@@ -9,7 +9,7 @@ if [ $# != 1 ] ; then
 fi
 
 header_dir="$(dirname "$(realpath "$0")")/../include/linux"
-kernel_dir="$1"
+kernel_dir="$(realpath "$1")"
 
 # Bail out if the directory doesn't contain kernel sources
 line=$(head -3 "${kernel_dir}/Kbuild" 2>/dev/null | tail -1)
@@ -52,6 +52,7 @@ headers="
 	linux/media-bus-format.h
 	linux/media.h
 	linux/rkisp1-config.h
+	linux/udmabuf.h
 	linux/v4l2-common.h
 	linux/v4l2-controls.h
 	linux/v4l2-mediabus.h

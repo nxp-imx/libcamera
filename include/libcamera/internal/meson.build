@@ -2,13 +2,6 @@
 
 subdir('tracepoints')
 
-libcamera_tracepoint_header = custom_target(
-    'tp_header',
-    input : ['tracepoints.h.in', tracepoint_files],
-    output : 'tracepoints.h',
-    command : [gen_tracepoints_header, include_build_dir, '@OUTPUT@', '@INPUT@'],
-)
-
 libcamera_internal_headers = files([
     'bayer_format.h',
     'byte_stream_buffer.h',
@@ -25,12 +18,14 @@ libcamera_internal_headers = files([
     'device_enumerator.h',
     'device_enumerator_sysfs.h',
     'device_enumerator_udev.h',
-    'dma_heaps.h',
+    'dma_buf_allocator.h',
     'formats.h',
     'framebuffer.h',
+    'ipa_data_serializer.h',
     'ipa_manager.h',
     'ipa_module.h',
     'ipa_proxy.h',
+    'ipc_pipe.h',
     'ipc_unixsocket.h',
     'mapped_framebuffer.h',
     'media_device.h',
@@ -48,6 +43,15 @@ libcamera_internal_headers = files([
     'v4l2_videodevice.h',
     'yaml_parser.h',
 ])
+
+tracepoints_h = custom_target(
+    'tp_header',
+    input : ['tracepoints.h.in', tracepoint_files],
+    output : 'tracepoints.h',
+    command : [gen_tracepoints, include_build_dir, '@OUTPUT@', '@INPUT@'],
+)
+
+libcamera_internal_headers += tracepoints_h
 
 subdir('converter')
 subdir('software_isp')

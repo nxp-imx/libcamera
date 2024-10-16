@@ -2,13 +2,14 @@
 /*
  * Copyright (C) 2019, Google Inc.
  *
- * Property ID list
+ * Properties ID list
  *
  * This file is auto-generated. Do not edit.
  */
 
 #pragma once
 
+#include <array>
 #include <map>
 #include <stdint.h>
 #include <string>
@@ -18,6 +19,8 @@
 namespace libcamera {
 
 namespace properties {
+
+extern const ControlIdMap properties;
 
 enum {
 	LOCATION = 1,
@@ -50,9 +53,6 @@ extern const Control<Rectangle> ScalerCropMaximum;
 extern const Control<float> SensorSensitivity;
 extern const Control<Span<const int64_t>> SystemDevices;
 
-extern const ControlIdMap properties;
-
-
 namespace draft {
 
 #define LIBCAMERA_HAS_DRAFT_VENDOR_PROPERTIES
@@ -74,7 +74,6 @@ extern const std::map<std::string, int32_t> ColorFilterArrangementNameValueMap;
 extern const Control<int32_t> ColorFilterArrangement;
 
 } /* namespace draft */
-
 
 } /* namespace properties */
 

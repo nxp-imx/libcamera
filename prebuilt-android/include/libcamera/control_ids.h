@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2019, Google Inc.
  *
- * Control ID list
+ * Controls ID list
  *
  * This file is auto-generated. Do not edit.
  */
@@ -19,6 +19,8 @@
 namespace libcamera {
 
 namespace controls {
+
+extern const ControlIdMap controls;
 
 enum {
 	AE_ENABLE = 1,
@@ -63,6 +65,7 @@ enum {
 	AF_PAUSE_STATE = 40,
 	HDR_MODE = 41,
 	HDR_CHANNEL = 42,
+	GAMMA = 43,
 };
 
 extern const Control<bool> AeEnable;
@@ -221,9 +224,7 @@ enum HdrChannelEnum {
 extern const std::array<const ControlValue, 4> HdrChannelValues;
 extern const std::map<std::string, int32_t> HdrChannelNameValueMap;
 extern const Control<int32_t> HdrChannel;
-
-extern const ControlIdMap controls;
-
+extern const Control<float> Gamma;
 
 namespace draft {
 
@@ -311,7 +312,6 @@ extern const std::map<std::string, int32_t> TestPatternModeNameValueMap;
 extern const Control<int32_t> TestPatternMode;
 
 } /* namespace draft */
-
 
 } /* namespace controls */
 

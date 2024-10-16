@@ -15,8 +15,8 @@
 #include <libcamera/controls.h>
 #include <libcamera/fence.h>
 #include <libcamera/formats.h>
-#include <libcamera/framebuffer_allocator.h>
 #include <libcamera/framebuffer.h>
+#include <libcamera/framebuffer_allocator.h>
 #include <libcamera/geometry.h>
 #include <libcamera/logging.h>
 #include <libcamera/orientation.h>

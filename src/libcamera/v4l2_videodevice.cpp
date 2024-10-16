@@ -10,7 +10,6 @@
 #include <algorithm>
 #include <array>
 #include <fcntl.h>
-#include <iomanip>
 #include <sstream>
 #include <string.h>
 #include <sys/ioctl.h>
@@ -803,12 +802,19 @@ std::string V4L2VideoDevice::logPrefix() const
  */
 int V4L2VideoDevice::getFormat(V4L2DeviceFormat *format)
 {
-	if (caps_.isMeta())
-		return getFormatMeta(format);
-	else if (caps_.isMultiplanar())
-		return getFormatMultiplane(format);
-	else
+	switch (bufferType_) {
+	case V4L2_BUF_TYPE_VIDEO_CAPTURE:
+	case V4L2_BUF_TYPE_VIDEO_OUTPUT:
 		return getFormatSingleplane(format);
+	case V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE:
+	case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
+		return getFormatMultiplane(format);
+	case V4L2_BUF_TYPE_META_CAPTURE:
+	case V4L2_BUF_TYPE_META_OUTPUT:
+		return getFormatMeta(format);
+	default:
+		return -EINVAL;
+	}
 }
 
 /**
@@ -823,12 +829,19 @@ int V4L2VideoDevice::getFormat(V4L2DeviceFormat *format)
  */
 int V4L2VideoDevice::tryFormat(V4L2DeviceFormat *format)
 {
-	if (caps_.isMeta())
-		return trySetFormatMeta(format, false);
-	else if (caps_.isMultiplanar())
-		return trySetFormatMultiplane(format, false);
-	else
+	switch (bufferType_) {
+	case V4L2_BUF_TYPE_VIDEO_CAPTURE:
+	case V4L2_BUF_TYPE_VIDEO_OUTPUT:
 		return trySetFormatSingleplane(format, false);
+	case V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE:
+	case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
+		return trySetFormatMultiplane(format, false);
+	case V4L2_BUF_TYPE_META_CAPTURE:
+	case V4L2_BUF_TYPE_META_OUTPUT:
+		return trySetFormatMeta(format, false);
+	default:
+		return -EINVAL;
+	}
 }
 
 /**
@@ -842,13 +855,25 @@ int V4L2VideoDevice::tryFormat(V4L2DeviceFormat *format)
  */
 int V4L2VideoDevice::setFormat(V4L2DeviceFormat *format)
 {
-	int ret = 0;
-	if (caps_.isMeta())
-		ret = trySetFormatMeta(format, true);
-	else if (caps_.isMultiplanar())
-		ret = trySetFormatMultiplane(format, true);
-	else
+	int ret;
+
+	switch (bufferType_) {
+	case V4L2_BUF_TYPE_VIDEO_CAPTURE:
+	case V4L2_BUF_TYPE_VIDEO_OUTPUT:
 		ret = trySetFormatSingleplane(format, true);
+		break;
+	case V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE:
+	case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
+		ret = trySetFormatMultiplane(format, true);
+		break;
+	case V4L2_BUF_TYPE_META_CAPTURE:
+	case V4L2_BUF_TYPE_META_OUTPUT:
+		ret = trySetFormatMeta(format, true);
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
 
 	/* Cache the set format on success. */
 	if (ret)
@@ -1815,7 +1840,7 @@ FrameBuffer *V4L2VideoDevice::dequeueBuffer()
 	 * Detect kernel drivers which do not reset the sequence number to zero
 	 * on stream start.
 	 */
-	if (!firstFrame_) {
+	if (!firstFrame_.has_value()) {
 		if (buf.sequence)
 			LOG(V4L2, Info)
 				<< "Zero sequence expected for first frame (got "
