@@ -47,7 +47,8 @@ struct IPASessionConfiguration {
 		utils::Duration lineDuration;
 		Size size;
 		uint32_t bpp;
-		const ControlInfoMap *mdControlInfoMap;
+
+		size_t metaDataSize;
 	} sensor;
 
 	struct {
@@ -114,6 +115,7 @@ struct IPAFrameContext : public FrameContext {
 		uint32_t exposure;
 		double gain;
 		ControlList mdControls;
+		bool metaDataValid;
 	} sensor;
 };
 
