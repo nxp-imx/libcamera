@@ -184,22 +184,14 @@ ExposureModeHelper::splitExposure(utils::Duration exposure) const
 
 		if (stageShutter * lastStageGain >= exposure) {
 			shutter = clampShutter(exposure / clampGain(lastStageGain));
-#ifdef ANDROID
-			gain = clampGain(exposure.get<std::nano>() / shutter.get<std::nano>());
-#else
 			gain = clampGain(exposure / shutter);
-#endif
 
 			return { shutter, gain, exposure / (shutter * gain) };
 		}
 
 		if (stageShutter * stageGain >= exposure) {
 			shutter = clampShutter(exposure / clampGain(stageGain));
-#ifdef ANDROID
-			gain = clampGain(exposure.get<std::nano>() / shutter.get<std::nano>());
-#else
 			gain = clampGain(exposure / shutter);
-#endif
 
 			return { shutter, gain, exposure / (shutter * gain) };
 		}
@@ -213,11 +205,7 @@ ExposureModeHelper::splitExposure(utils::Duration exposure) const
 	 * shutter time is maxed before gain is touched at all.
 	 */
 	shutter = clampShutter(exposure / clampGain(stageGain));
-#ifdef ANDROID
-	gain = clampGain(exposure.get<std::nano>() / shutter.get<std::nano>());
-#else
 	gain = clampGain(exposure / shutter);
-#endif
 
 	return { shutter, gain, exposure / (shutter * gain) };
 }
