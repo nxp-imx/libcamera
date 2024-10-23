@@ -220,18 +220,28 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 			 [[maybe_unused]] const std::map<uint32_t, IPAStream> &streamConfig,
 			 ControlInfoMap *ipaControls)
 {
-	sensorControls_ = ipaConfig.sensorControls;
+	const IPACameraSensorInfo *sensorInfo = &ipaConfig.sensorInfo;
 
-	uint32_t minExposure, maxExposure;
-	camHelper_->controlInfoMapGetExposureRange(&sensorControls_,
-						   &minExposure, &maxExposure);
-	uint32_t minGainCode, maxGainCode;
-	camHelper_->controlInfoMapGetGainRange(&sensorControls_,
-					       &minGainCode, &maxGainCode);
+	CameraMode mode;
+	mode.pixelRate = sensorInfo->pixelRate;
+	mode.minLineLength = sensorInfo->minLineLength;
+	mode.maxLineLength = sensorInfo->maxLineLength;
+	mode.minFrameLength = sensorInfo->minFrameLength;
+	mode.maxFrameLength = sensorInfo->maxFrameLength;
+	camHelper_->setCameraMode(mode);
+
+	sensorControls_ = ipaConfig.sensorControls;
+	std::vector<double> vMinExposure, vMaxExposure, vDefExposure;
+	camHelper_->controlInfoMapGetExposureRange(
+		&sensorControls_, &vMinExposure, &vMaxExposure, &vDefExposure);
+
+	std::vector<double> vMinGain, vMaxGain, vDefGain;
+	camHelper_->controlInfoMapGetAnalogGainRange(
+		&sensorControls_, &vMinGain, &vMaxGain, &vDefGain);
 
 	LOG(NxpNeoIPA, Debug)
-		<< "Exposure: [" << minExposure << ", " << maxExposure
-		<< "], gain: [" << minGainCode << ", " << maxGainCode << "]";
+		<< "Exposure: [" << vMinExposure[0] << ", " << vMaxExposure[0]
+		<< "], gain: [" << vMinGain[0] << ", " << vMaxGain[0] << "]";
 
 	/* Clear the IPA context before the streaming session. */
 	context_.configuration = {};
@@ -258,20 +268,25 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	 *
 	 * \todo take VBLANK into account for maximum shutter speed
 	 */
-	context_.configuration.sensor.minShutterSpeed =
-		minExposure * context_.configuration.sensor.lineDuration;
-	context_.configuration.sensor.maxShutterSpeed =
-		maxExposure * context_.configuration.sensor.lineDuration;
+	context_.configuration.sensor.minShutterSpeed = vMinExposure[0] * 1.0s;
+	context_.configuration.sensor.maxShutterSpeed = vMaxExposure[0] * 1.0s;
 
-	context_.configuration.sensor.minAnalogueGain =
-		camHelper_->gain(minGainCode);
-	context_.configuration.sensor.maxAnalogueGain =
-		camHelper_->gain(maxGainCode);
+	context_.configuration.sensor.minAnalogueGain = vMinGain[0];
+	context_.configuration.sensor.maxAnalogueGain = vMaxGain[0];
 
-	/* embedded data parameters */
-	context_.configuration.sensor.bpp = ipaConfig.sensorInfo.bitsPerPixel;
-	context_.configuration.sensor.mdControlInfoMap =
-		&camHelper_->attributes()->mdParams.controls;
+	uint32_t bpp = ipaConfig.sensorInfo.bitsPerPixel;
+
+	context_.configuration.sensor.bpp = bpp;
+
+	/* Embedded metadata size computation */
+	size_t bytepp;
+	if (bpp <= 8)
+		bytepp = sizeof(uint8_t);
+	else
+		bytepp = sizeof(uint16_t);
+	uint32_t topLines = camHelper_->attributes()->mdParams.topLines;
+	context_.configuration.sensor.metaDataSize =
+		topLines * context_.configuration.sensor.size.width * bytepp;
 
 	/* Active streams */
 	std::vector<IPAStream> &streams = context_.configuration.streams;
@@ -355,25 +370,16 @@ void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
 
 	const IPASessionConfiguration &sessionConfig = context_.configuration;
 
-	const ControlInfoMap &mdControlInfoMap =
-		*context_.configuration.sensor.mdControlInfoMap;
 	ControlList &controls = frameContext.sensor.mdControls;
-	controls = ControlList(mdControlInfoMap);
+	controls = ControlList(md::controlIdMap);
 
-	size_t bytepp;
-	if (sessionConfig.sensor.bpp <= 8)
-		bytepp = sizeof(uint8_t);
-	else
-		bytepp = sizeof(uint16_t);
-
-	uint32_t topLines = camHelper_->attributes()->mdParams.topLines;
-	size_t metadataSize =
-		topLines * sessionConfig.sensor.size.width * bytepp;
-
+	frameContext.sensor.metaDataValid = false;
+	size_t metadataSize = sessionConfig.sensor.metaDataSize;
 	if (metadataSize && mappedBuffers_.count(rawBufferId)) {
 		uint8_t *metadata = mappedBuffers_.at(rawBufferId).planes()[0].data();
 		Span<uint8_t> mdBuffer(metadata, metadataSize);
-		camHelper_->parseEmbedded(mdBuffer, &controls);
+		int ret = camHelper_->parseEmbedded(mdBuffer, &controls);
+		frameContext.sensor.metaDataValid = (ret == 0);
 	}
 
 	/* Prepare parameters buffer. */
@@ -399,26 +405,55 @@ void IPANxpNeo::processStatsBuffer(const uint32_t frame, const uint32_t bufferId
 	stats = reinterpret_cast<neoisp_meta_stats_s *>(
 		mappedBuffers_.at(bufferId).planes()[0].data());
 
-	ControlList *mdControls = &frameContext.sensor.mdControls;
+	ControlList &mdControls = frameContext.sensor.mdControls;
 
-	std::optional<int32_t> mdExposure = mdControls->get(md::Exposure);
-	uint32_t exposure;
-	if (mdExposure.has_value())
-		exposure = static_cast<uint32_t>(mdExposure.value());
-	else
-		exposure = camHelper_->controlListGetExposure(&sensorControls);
-	frameContext.sensor.exposure = exposure;
+	if (!frameContext.sensor.metaDataValid) {
+		mdControls = ControlList(md::controlIdMap);
+		camHelper_->sensorControlsToMetaData(&sensorControls, &mdControls);
+	}
 
-	std::optional<int32_t> mdAnalogueGain = mdControls->get(md::AnalogueGain);
-	uint32_t gainCode;
-	if (mdAnalogueGain.has_value())
-		gainCode = static_cast<uint32_t>(mdAnalogueGain.value());
-	else
-		gainCode = camHelper_->controlListGetGain(&sensorControls);
-	frameContext.sensor.gain = camHelper_->gain(gainCode);
+	float exposure = 0.0f;
+	if (mdControls.contains(md::Exposure.id())) {
+		const ControlValue &exposureValue =
+			mdControls.get(md::Exposure.id());
+		Span<const float> exposuresSpan =
+			exposureValue.get<Span<const float>>();
+		exposure = exposuresSpan[0];
+	} else {
+		LOG(NxpNeoIPA, Warning) << "No exposure metadata";
+	}
+
+	double lineDuration =
+		context_.configuration.sensor.lineDuration.get<std::ratio<1>>();
+	double linesF = exposure / lineDuration;
+	uint32_t linesInt = static_cast<uint32_t>(std::round(linesF));
+	frameContext.sensor.exposure = linesInt;
+
+	float aGain = 1.0f;
+	if (mdControls.contains(md::AnalogueGain.id())) {
+		const ControlValue &aGainValue =
+			mdControls.get(md::AnalogueGain.id());
+		Span<const float> aGainsSpan =
+			aGainValue.get<Span<const float>>();
+		aGain = aGainsSpan[0];
+	} else {
+		LOG(NxpNeoIPA, Warning) << "No analog gain metadata";
+	}
+
+	float dGain = 1.0f;
+	if (mdControls.contains(md::DigitalGain.id())) {
+		const ControlValue &dGainValue =
+			mdControls.get(md::DigitalGain.id());
+		Span<const float> dGainsSpan =
+			dGainValue.get<Span<const float>>();
+		dGain = dGainsSpan[0];
+	} else {
+		LOG(NxpNeoIPA, Warning) << "No digital gain metadata";
+	}
+
+	frameContext.sensor.gain = aGain * dGain;
 
 	ControlList metadata(controls::controls);
-
 	for (auto const &a : algorithms()) {
 		Algorithm *algo = static_cast<Algorithm *>(a.get());
 		if (algo->disabled_)
@@ -441,31 +476,28 @@ void IPANxpNeo::updateControls(const IPACameraSensorInfo &sensorInfo,
 	 * Compute exposure time limits from the exposure control limits and
 	 * the line duration.
 	 */
-	double lineDuration = context_.configuration.sensor.lineDuration.get<std::micro>();
-	uint32_t minExposure, maxExposure, defExposure;
-	camHelper_->controlInfoMapGetExposureRange(&sensorControls,
-						   &minExposure, &maxExposure, &defExposure);
-	minExposure *= lineDuration;
-	maxExposure *= lineDuration;
-	defExposure *= lineDuration;
+	std::vector<double> vMinExposure, vMaxExposure, vDefExposure;
+	camHelper_->controlInfoMapGetExposureRange(
+		&sensorControls, &vMinExposure, &vMaxExposure, &vDefExposure);
+	/* ExposureTime range is in microseconds */
 	ctrlMap.emplace(std::piecewise_construct,
 			std::forward_as_tuple(&controls::ExposureTime),
 			std::forward_as_tuple(
-				static_cast<int32_t>(minExposure),
-				static_cast<int32_t>(maxExposure),
-				static_cast<int32_t>(defExposure)));
+				static_cast<int32_t>(vMinExposure[0] * 1.0e6f),
+				static_cast<int32_t>(vMaxExposure[0] * 1.0e6f),
+				static_cast<int32_t>(vDefExposure[0] * 1.0e6f)));
 
 	/* Compute the analogue gain limits. */
-	uint32_t minGainCode, maxGainCode, defGainCode;
-	camHelper_->controlInfoMapGetGainRange(&sensorControls,
-					       &minGainCode, &maxGainCode, &defGainCode);
+	std::vector<double> vMinGain, vMaxGain, vDefGain;
+	camHelper_->controlInfoMapGetAnalogGainRange(
+		&sensorControls, &vMinGain, &vMaxGain, &vDefGain);
 
-	float minGain = camHelper_->gain(minGainCode);
-	float maxGain = camHelper_->gain(maxGainCode);
-	float defGain = camHelper_->gain(defGainCode);
 	ctrlMap.emplace(std::piecewise_construct,
 			std::forward_as_tuple(&controls::AnalogueGain),
-			std::forward_as_tuple(minGain, maxGain, defGain));
+			std::forward_as_tuple(
+				static_cast<float>(vMinGain[0]),
+				static_cast<float>(vMaxGain[0]),
+				static_cast<float>(vDefGain[0])));
 
 	/*
 	 * Compute the frame duration limits.
@@ -518,12 +550,14 @@ void IPANxpNeo::setControls(unsigned int frame)
 	 * This effect can be addressed later by configuring some startup
 	 * frames to be hidden.
 	 */
+	double lineDuration =
+		context_.configuration.sensor.lineDuration.get<std::ratio<1>>();
+	double exposure = frameContext.agc.exposure * lineDuration;
 	if (frame)
-		camHelper_->controlListSetAGC(&ctrls,
-					      frameContext.agc.exposure,
-					      frameContext.agc.gain);
+		camHelper_->controlListSetAGC(&ctrls, exposure, frameContext.agc.gain);
 
-	LOG(NxpNeoControlList, Debug) << logSensorParams(frame, &frameContext.sensor.mdControls, &ctrls);
+	LOG(NxpNeoControlList, Debug)
+		<< logSensorParams(frame, &frameContext.sensor.mdControls, &ctrls);
 
 	setSensorControls.emit(frame, ctrls);
 }
@@ -533,7 +567,9 @@ std::string IPANxpNeo::controlListToString(const ControlList *ctrls) const
 	std::stringstream log;
 	for (auto it = ctrls->begin(); it != ctrls->end(); ++it) {
 		ControlValue value = it->second;
-		log << it->first << ": val=" << value.toString() << "\n";
+		if (it != ctrls->begin())
+			log << "\n";
+		log << it->first << ": val=" << value.toString();
 	}
 
 	return log.str();
@@ -545,14 +581,10 @@ std::string IPANxpNeo::logSensorParams(const unsigned int frame,
 {
 	std::stringstream log;
 
-	log << "Sensor parameter status:\n"
-	    << "--------------" << frame << "-----------\n"
-	    << "Current sensor params:\n"
+	log << "\n--- frame [" << frame << "] meta data:\n"
 	    << controlListToString(ctrlsApplied)
-	    << "------\n"
-	    << "New sensor params to apply:\n"
-	    << controlListToString(ctrlsToApply)
-	    << "----------------------------\n";
+	    << "\nupdate:\n"
+	    << controlListToString(ctrlsToApply);
 
 	return log.str();
 }

@@ -403,3 +403,11 @@ prebuilt_etc {
     src: "src/ipa/nxp/neo/data/os08a20.yaml",
     vendor: true,
 }
+
+// mx95mbcam.yaml
+prebuilt_etc {
+    name: "mx95mbcam.yaml",
+    sub_dir: "configs/libcamera/nxp/neo",
+    src: "src/ipa/nxp/neo/data/mx95mbcam.yaml",
+    vendor: true,
+}

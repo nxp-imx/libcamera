@@ -140,14 +140,8 @@ int Agc::configure(IPAContext &context, const IPACameraSensorInfo &configInfo)
 {
 	/* Configure the default exposure and gain. */
 	context.activeState.agc.automatic.gain = context.configuration.sensor.minAnalogueGain;
-#ifdef ANDROID
-	context.activeState.agc.automatic.exposure =
-		((utils::Duration)10ms).get<std::milli>() /
-		context.configuration.sensor.lineDuration.get<std::milli>();
-#else
 	context.activeState.agc.automatic.exposure =
 		10ms / context.configuration.sensor.lineDuration;
-#endif
 	context.activeState.agc.manual.gain = context.activeState.agc.automatic.gain;
 	context.activeState.agc.manual.exposure = context.activeState.agc.automatic.exposure;
 	context.activeState.agc.autoEnabled = true;
@@ -192,13 +186,9 @@ void Agc::queueRequest(IPAContext &context,
 
 	const auto &exposure = controls.get(controls::ExposureTime);
 	if (exposure && !agc.autoEnabled) {
-#ifdef ANDROID
-		agc.manual.exposure = *exposure * ((utils::Duration)1.0us).get<std::micro>()
-						/ context.configuration.sensor.lineDuration.get<std::micro>();
-#else
 		agc.manual.exposure = *exposure * 1.0us
 				    / context.configuration.sensor.lineDuration;
-#endif
+
 		LOG(NxpNeoAlgoAgc, Debug)
 			<< "Set exposure to " << agc.manual.exposure;
 	}
@@ -431,12 +421,7 @@ void Agc::process(IPAContext &context, [[maybe_unused]] const uint32_t frame,
 
 	IPAActiveState &activeState = context.activeState;
 	/* Update the estimated exposure and gain. */
-#ifdef ANDROID
-	activeState.agc.automatic.exposure = shutterTime.get<std::nano>() /
-		context.configuration.sensor.lineDuration.get<std::nano>();
-#else
 	activeState.agc.automatic.exposure = shutterTime / context.configuration.sensor.lineDuration;
-#endif
 	activeState.agc.automatic.gain = aGain;
 
 	/*

@@ -285,10 +285,30 @@ int GstLibcameraSrcState::processRequest()
 	GstFlowReturn ret = GST_FLOW_OK;
 	gst_flow_combiner_reset(src_->flow_combiner);
 
-	for (GstPad *srcpad : srcpads_) {
+	for (gsize i = 0; i < srcpads_.size(); i++) {
+		GstPad *srcpad = srcpads_[i];
 		Stream *stream = gst_libcamera_pad_get_stream(srcpad);
 		GstBuffer *buffer = wrap->detachBuffer(stream);
+		StreamConfiguration &stream_cfg = src_->state->config_->at(i);
+		GstVideoInfo info;
+		g_autoptr(GstCaps) caps = gst_pad_get_current_caps(srcpad);
 
+		if (!gst_video_info_from_caps(&info, caps)) {
+			GST_WARNING("Failed to create video info");
+		} else {
+			guint k, stride;
+			gsize offset = 0;
+			for (k = 0; k < GST_VIDEO_INFO_N_PLANES(&info); k++) {
+				stride = gst_video_format_info_extrapolate_stride(info.finfo, k, stream_cfg.stride);
+				info.stride[k] = stride;
+				info.offset[k] = offset;
+				offset += stride * GST_VIDEO_FORMAT_INFO_SCALE_HEIGHT(info.finfo, k, GST_VIDEO_INFO_HEIGHT(&info));
+			}
+			gst_buffer_add_video_meta_full(buffer, GST_VIDEO_FRAME_FLAG_NONE,
+						       GST_VIDEO_INFO_FORMAT(&info), GST_VIDEO_INFO_WIDTH(&info),
+						       GST_VIDEO_INFO_HEIGHT(&info), GST_VIDEO_INFO_N_PLANES(&info),
+						       info.offset, info.stride);
+		}
 		FrameBuffer *fb = gst_libcamera_buffer_get_frame_buffer(buffer);
 
 		if (GST_CLOCK_TIME_IS_VALID(wrap->pts_)) {
@@ -700,8 +720,10 @@ gst_libcamera_src_task_leave([[maybe_unused]] GstTask *task,
 
 	{
 		GLibRecLocker locker(&self->stream_lock);
-		for (GstPad *srcpad : state->srcpads_)
+		for (GstPad *srcpad : state->srcpads_) {
+			gst_libcamera_pad_set_latency(srcpad, GST_CLOCK_TIME_NONE);
 			gst_libcamera_pad_set_pool(srcpad, nullptr);
+		}
 	}
 
 	g_clear_object(&self->allocator);
