@@ -743,10 +743,11 @@ int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 		aGains = Span<float>(embeddedPreviousFrame_.analogGain);
 	else
 		aGains = Span<float>(aGainsArray);
+	mdControls->set(md::AnalogueGain, aGains);
+	/* store current embedded data for next frame */
 	ASSERT(aGainsArray.size() == embeddedPreviousFrame_.analogGain.size());
 	std::copy(aGainsArray.begin(), aGainsArray.end(),
 		  embeddedPreviousFrame_.analogGain.begin());
-	mdControls->set(md::AnalogueGain, aGains);
 
 	/* Digital gain */
 	uint32_t hcgDigitalGainCode =
@@ -774,10 +775,11 @@ int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 		dGains = Span<float>(embeddedPreviousFrame_.digitalGain);
 	else
 		dGains = Span<float>(dGainsArray);
+	mdControls->set(md::DigitalGain, dGains);
+	/* store current embedded data for next frame */
 	ASSERT(dGainsArray.size() == embeddedPreviousFrame_.digitalGain.size());
 	std::copy(dGainsArray.begin(), dGainsArray.end(),
 		  embeddedPreviousFrame_.digitalGain.begin());
-	mdControls->set(md::DigitalGain, dGains);
 
 	uint32_t dcgExposure =
 		(registers[AecHcgCtrl01Reg] << 8U) | registers[AecHcgCtrl02Reg];
@@ -800,10 +802,11 @@ int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 		exposures = Span<float>(embeddedPreviousFrame_.exposure);
 	else
 		exposures = Span<float>(exposuresArray);
+	mdControls->set(md::Exposure, exposures);
+	/* store current embedded data for next frame */
 	ASSERT(exposuresArray.size() == embeddedPreviousFrame_.exposure.size());
 	std::copy(exposuresArray.begin(), exposuresArray.end(),
 		  embeddedPreviousFrame_.exposure.begin());
-	mdControls->set(md::Exposure, exposures);
 
 	/* White balance */
 	uint32_t blueGain =
@@ -830,10 +833,11 @@ int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 		wbGains = Span<float>(embeddedPreviousFrame_.whiteBalanceGain);
 	else
 		wbGains = Span<float>(wbGainsArray);
+	mdControls->set(md::WhiteBalanceGain, wbGains);
+	/* store current embedded data for next frame */
 	ASSERT(wbGainsArray.size() == embeddedPreviousFrame_.whiteBalanceGain.size());
 	std::copy(wbGainsArray.begin(), wbGainsArray.end(),
 		  embeddedPreviousFrame_.whiteBalanceGain.begin());
-	mdControls->set(md::WhiteBalanceGain, wbGains);
 
 	/* Sensor temperature is UQ8.8 and negative above 0xc000 */
 	static constexpr uint32_t kTemperatureMax = 0xc000U;
@@ -851,8 +855,9 @@ int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 		temp = embeddedPreviousFrame_.temperature;
 	else
 		temp = temperature;
-	embeddedPreviousFrame_.temperature = temperature;
 	mdControls->set(md::Temperature, temp);
+	/* store current embedded data for next frame */
+	embeddedPreviousFrame_.temperature = temperature;
 
 	embeddedInitialized_ = true;
 
