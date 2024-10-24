@@ -44,6 +44,7 @@
 #include "libcamera/internal/ipa_manager.h"
 #include "libcamera/internal/media_device.h"
 #include "libcamera/internal/pipeline_handler.h"
+#include "libcamera/internal/request.h"
 
 #include "frames.h"
 #include "isi_device.h"
@@ -77,7 +78,6 @@ public:
 	void stopDevice();
 
 	void queuePendingRequests();
-	void cancelPendingRequests();
 
 	int init();
 	PipelineHandlerNxpNeo *pipe();
@@ -115,7 +115,8 @@ private:
 				    V4L2SubdeviceFormat &sdFormat);
 	int configureFrontEndLinks() const;
 
-	bool screenCancelledBuffer(FrameBuffer *buffer, NxpNeoFrames::Info *info);
+	bool completeCancelledBufferRequest(FrameBuffer *buffer, NxpNeoFrames::Info *info);
+	void completeProcessingRequest(Request *request);
 
 	int prepareISIPipeBuffers(ISIPipe *pipe, unsigned int bufferCount, unsigned int &id);
 
@@ -204,7 +205,6 @@ public:
 	void stopDevice(Camera *camera) override;
 
 	int queueRequestDevice(Camera *camera, Request *request) override;
-	void cancelRequest(Request *request);
 
 	bool match(DeviceEnumerator *enumerator) override;
 
@@ -623,25 +623,6 @@ int PipelineHandlerNxpNeo::queueRequestDevice(Camera *camera, Request *request)
 	data->queuePendingRequests();
 
 	return 0;
-}
-
-/**
- * \brief Cancel a \a Request.
- * \param[in] request The request to be cancelled
- *
- * Cancelling a request involves marking all its associated buffers as cancelled
- * before reporting them as complete with completeBuffer(). Finally, the request
- * itself is reported as complete with completeRequest().
- */
-void PipelineHandlerNxpNeo::cancelRequest(Request *request)
-{
-	for (auto it : request->buffers()) {
-		FrameBuffer *buffer = it.second;
-		buffer->_d()->cancel();
-		completeBuffer(request, buffer);
-	}
-
-	completeRequest(request);
 }
 
 bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
@@ -1098,7 +1079,32 @@ void NxpNeoCameraData::stopDevice()
 
 	LOG(NxpNeoPipe, Debug) << "Stop device " << cameraName();
 
-	cancelPendingRequests();
+	/*
+	 * Requests in the pending queue have not been pushed into the pipeline,
+	 * thus cancelled buffers and requests can be completed immediately.
+	 * Conversely, requests in the processing list are in flight in the
+	 * pipeline. Associated buffers are cancelled and completed along with
+	 * their requests. Bundled Frame::info object is deleted so that those
+	 * will be ignored during pipeline termination.
+	 */
+	while (!pendingRequests_.empty()) {
+		Request *request = pendingRequests_.front();
+		request->_d()->cancel();
+		pipe()->completeRequest(request);
+		pendingRequests_.pop();
+	}
+
+	while (!processingRequests_.empty()) {
+		Request *request = processingRequests_.front();
+		NxpNeoFrames::Info *info = frameInfos_.find(request);
+		if (info)
+			frameInfos_.remove(info);
+		else
+			LOG(NxpNeoPipe, Debug) << "Frame info for request not found";
+		request->_d()->cancel();
+		pipe()->completeRequest(request);
+		processingRequests_.pop();
+	}
 
 	ipa_->stop();
 
@@ -1151,7 +1157,8 @@ void NxpNeoCameraData::queuePendingRequests()
 		if (ret) {
 			LOG(NxpNeoPipe, Error)
 				<< "Failed to queue buffers, unbalanced queues";
-			pipe()->cancelRequest(request);
+			request->_d()->cancel();
+			pipe()->completeRequest(request);
 			frameInfos_.remove(info);
 			return;
 		}
@@ -1166,17 +1173,6 @@ void NxpNeoCameraData::queuePendingRequests()
 	}
 
 	return;
-}
-
-void NxpNeoCameraData::cancelPendingRequests()
-{
-	processingRequests_ = {};
-
-	while (!pendingRequests_.empty()) {
-		Request *request = pendingRequests_.front();
-		pipe()->cancelRequest(request);
-		pendingRequests_.pop();
-	}
 }
 
 /**
@@ -1677,7 +1673,6 @@ int NxpNeoCameraData::freeBuffers()
  *
  * \return 0 in case of success or a negative error code.
  */
-
 int NxpNeoCameraData::setupCameraIsiPipes()
 {
 	ISIDevice *isi = pipe()->isiDevice();
@@ -1865,15 +1860,22 @@ int NxpNeoCameraData::configureFrontEndLinks() const
  * Such buffers shall be detected so that every other buffer bundled to
  * the same frame and associated request can be marked as cancelled and
  * completed.
+ * When the request is completed because of a frame cancellation, the \a info
+ * object associated to the frame is also deleted and should no longer be
+ * accessed by the caller.
+ *
+ * \return True if buffer was cancelled, request completed and \a info entry
+ * deleted.
  */
-bool NxpNeoCameraData::screenCancelledBuffer(FrameBuffer *buffer,
-					     NxpNeoFrames::Info *info)
+bool NxpNeoCameraData::completeCancelledBufferRequest(FrameBuffer *buffer,
+						      NxpNeoFrames::Info *info)
 {
 	Request *request = info->request;
 
 	/* If the buffer is cancelled force a complete of the whole request. */
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
-		pipe()->cancelRequest(request);
+		request->_d()->cancel();
+		completeProcessingRequest(request);
 
 		frameInfos_.remove(info);
 
@@ -1881,6 +1883,27 @@ bool NxpNeoCameraData::screenCancelledBuffer(FrameBuffer *buffer,
 	}
 
 	return false;
+}
+
+/**
+ * \brief Complete an active request in the pipeline
+ * \param[in] request The request to be complete
+ *
+ * Active requests in flight in the pipeline are tracked in the
+ * processingRequest queue where they are processed in order.
+ * When a request completes, either because it has been served by the pipeline,
+ * or because it was aborted, it has to be removed from the processing queue
+ * before reporting it completed to the framework.
+ */
+void NxpNeoCameraData::completeProcessingRequest(Request *request)
+{
+	std::queue<Request *> &queue = processingRequests_;
+	if (queue.empty() || queue.front() != request)
+		LOG(NxpNeoPipe, Warning) << "Processing request not found";
+	else
+		queue.pop();
+
+	pipe()->completeRequest(request);
 }
 
 /**
@@ -1928,7 +1951,7 @@ void NxpNeoCameraData::isiInput0BufferReady(FrameBuffer *buffer)
 	if (!info)
 		return;
 
-	if (screenCancelledBuffer(buffer, info))
+	if (completeCancelledBufferRequest(buffer, info))
 		return;
 
 	Request *request = info->request;
@@ -1968,7 +1991,7 @@ void NxpNeoCameraData::isiInput0BufferReady(FrameBuffer *buffer)
 				       info->input0Buffer->cookie());
 	} else {
 		if (frameInfos_.tryComplete(info))
-			pipe()->completeRequest(request);
+			completeProcessingRequest(request);
 	}
 }
 
@@ -1986,7 +2009,7 @@ void NxpNeoCameraData::isiInput1BufferReady(FrameBuffer *buffer)
 	if (!info)
 		return;
 
-	if (screenCancelledBuffer(buffer, info))
+	if (completeCancelledBufferRequest(buffer, info))
 		return;
 
 	Request *request = info->request;
@@ -2013,7 +2036,7 @@ void NxpNeoCameraData::isiEdBufferReady(FrameBuffer *buffer)
 	if (!info)
 		return;
 
-	if (screenCancelledBuffer(buffer, info))
+	if (completeCancelledBufferRequest(buffer, info))
 		return;
 
 	/*
@@ -2027,7 +2050,6 @@ void NxpNeoCameraData::isiEdBufferReady(FrameBuffer *buffer)
  */
 void NxpNeoCameraData::neoInput0BufferReady([[maybe_unused]] FrameBuffer *buffer)
 {
-	/* Nothing to do - buffer will be recycled when request completes */
 }
 
 /**
@@ -2052,14 +2074,14 @@ void NxpNeoCameraData::neoOutputBufferReady(FrameBuffer *buffer)
 	if (!info)
 		return;
 
-	if (screenCancelledBuffer(buffer, info))
+	if (completeCancelledBufferRequest(buffer, info))
 		return;
 
 	Request *request = info->request;
 	pipe()->completeBuffer(request, buffer);
 
 	if (frameInfos_.tryComplete(info))
-		pipe()->completeRequest(request);
+		completeProcessingRequest(request);
 }
 
 /**
@@ -2074,16 +2096,10 @@ void NxpNeoCameraData::neoParamsBufferReady(FrameBuffer *buffer)
 
 	info->paramDequeued = true;
 
-	/*
-	 * tryComplete() will delete info if it completes the NxpNeoFrame.
-	 * In that event, we must have obtained the Request before hand.
-	 *
-	 * \todo Improve the FrameInfo API to avoid this type of issue
-	 */
 	Request *request = info->request;
 
 	if (frameInfos_.tryComplete(info))
-		pipe()->completeRequest(request);
+		completeProcessingRequest(request);
 }
 
 /**
@@ -2096,7 +2112,7 @@ void NxpNeoCameraData::neoStatsBufferReady(FrameBuffer *buffer)
 	if (!info)
 		return;
 
-	if (screenCancelledBuffer(buffer, info))
+	if (completeCancelledBufferRequest(buffer, info))
 		return;
 
 	ipa_->processStatsBuffer(info->id, info->statsBuffer->cookie(),
@@ -2128,7 +2144,6 @@ void NxpNeoCameraData::frameStart(uint32_t sequence)
 	 * \todo Synchronize with the sequence number
 	 */
 	Request *request = processingRequests_.front();
-	processingRequests_.pop();
 
 	const auto &testPatternMode = request->controls().get(controls::draft::TestPatternMode);
 	if (!testPatternMode)
@@ -2185,7 +2200,7 @@ void NxpNeoCameraData::ipaMetadataReady(unsigned int id, const ControlList &meta
 
 	info->metadataProcessed = true;
 	if (frameInfos_.tryComplete(info))
-		pipe()->completeRequest(request);
+		completeProcessingRequest(request);
 }
 
 void NxpNeoCameraData::ipaSetSensorControls([[maybe_unused]] unsigned int id,
