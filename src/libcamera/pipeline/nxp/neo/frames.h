@@ -64,6 +64,7 @@ public:
 
 	Info *find(unsigned int id);
 	Info *find(FrameBuffer *buffer);
+	Info *find(Request *request);
 
 	Signal<> bufferAvailable;
 
