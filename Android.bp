@@ -22,6 +22,34 @@ genrule {
     cmd: "$(location utils/codegen/gen-ipa-pub-key.py) $(in) $(out)",
 }
 
+filegroup {
+    name: "libcamera_sources",
+    srcs: [
+        ".git/**/*",
+        ".gitignore",
+        ".clang*",
+        ".reuse/**/*",
+        "subprojects/.gitignore",
+        "**/*",
+        "**/.style*",
+    ],
+}
+
+genrule {
+    name: "libcamera_gen_version_cpp",
+    tool_files: [
+        ":libcamera_sources",
+        "utils/gen-version.sh",
+    ],
+    srcs: [ "src/libcamera/version.cpp.in", ],
+    out: ["version.cpp"],
+    cmd: "SBROOT=$$(realpath .) && " +
+        "cd $$(dirname $$(dirname $(location utils/gen-version.sh))) && " +
+        "GITVERSION=$$(./utils/gen-version.sh | awk '{print $$1}') && " +
+        "cd $$SBROOT && " +
+        "sed \"s~@VCS_TAG@~$$GITVERSION~g\" $(in) > $(out)"
+}
+
 // libcamera-base.so
 cc_library_shared {
     name: "libcamera-base",
@@ -118,8 +146,8 @@ cc_library_shared {
         "src/libcamera/pipeline/imx8-isi/*.cpp",
         "prebuilt-android/src/libcamera/controls_ids.cpp",
         "prebuilt-android/src/libcamera/property_ids.cpp",
-        "prebuilt-android/src/libcamera/version.cpp",
         "prebuilt-android/src/libcamera/proxy/nxpneo_ipa_proxy.cpp",
+        ":libcamera_gen_version_cpp",
         ":libcamera_gen_ipa_pub_key",
     ],
 
