@@ -9,10 +9,9 @@
 
 #include <vector>
 
-#include <libcamera/base/event_dispatcher.h>
 #include <libcamera/base/log.h>
+#include <libcamera/base/mutex.h>
 #include <libcamera/base/thread.h>
-#include <libcamera/base/timer.h>
 
 #include "libcamera/internal/ipc_pipe.h"
 #include "libcamera/internal/ipc_unixsocket.h"
@@ -24,23 +23,211 @@ namespace libcamera {
 
 LOG_DECLARE_CATEGORY(IPCPipe)
 
+class IPCUnixSocketWrapper : Thread
+{
+public:
+	IPCUnixSocketWrapper(Signal<const IPCMessage &> *recv)
+		: recv_(recv), ready_(false), sendSyncPending_(false),
+		  sendSyncCookie_(0)
+	{
+		start();
+	}
+
+	~IPCUnixSocketWrapper()
+	{
+		exit();
+		wait();
+	}
+
+	void run() override
+	{
+		/*
+		 * IPC socket construction and connection to its readyRead
+		 * signal has to be done from the IPC thread so that the
+		 * relevant Object instances (EventNotifier, slot) are bound to
+		 * its context.
+		 */
+		init();
+		exec();
+		deinit();
+	}
+
+	int fd() { return fd_.get(); }
+	int sendSync(const IPCMessage &in, IPCMessage *out);
+	int sendAsync(const IPCMessage &data);
+	bool waitReady();
+
+private:
+	void init();
+	void deinit();
+	void readyRead();
+
+	UniqueFD fd_;
+	Signal<const IPCMessage &> *recv_;
+	ConditionVariable cv_;
+	Mutex mutex_;
+	bool ready_;
+	bool sendSyncPending_;
+	uint32_t sendSyncCookie_;
+	IPCUnixSocket::Payload *sendSyncResponse_;
+
+	/* Socket shall be constructed and destructed from IPC thread context */
+	std::unique_ptr<IPCUnixSocket> socket_;
+};
+
+int IPCUnixSocketWrapper::sendSync(const IPCMessage &in, IPCMessage *out)
+{
+	int ret;
+	IPCUnixSocket::Payload response;
+
+	mutex_.lock();
+	ASSERT(!sendSyncPending_);
+	sendSyncPending_ = true;
+	sendSyncCookie_ = in.header().cookie;
+	sendSyncResponse_ = &response;
+	mutex_.unlock();
+
+	ret = socket_->send(in.payload());
+	if (ret) {
+		LOG(IPCPipe, Error) << "Failed to send sync message";
+		goto cleanup;
+	}
+
+	bool complete;
+	{
+		MutexLocker locker(mutex_);
+		auto syncComplete = ([&]() {
+			return sendSyncPending_ == false;
+		});
+		complete = cv_.wait_for(locker, 1000ms, syncComplete);
+	}
+
+	if (!complete) {
+		LOG(IPCPipe, Error) << "Timeout sending sync message";
+		ret = -ETIMEDOUT;
+		goto cleanup;
+	}
+
+	if (out)
+		*out = IPCMessage(response);
+
+	return 0;
+
+cleanup:
+	mutex_.lock();
+	sendSyncPending_ = false;
+	mutex_.unlock();
+
+	return ret;
+}
+
+int IPCUnixSocketWrapper::sendAsync(const IPCMessage &data)
+{
+	int ret;
+	ret = socket_->send(data.payload());
+	if (ret)
+		LOG(IPCPipe, Error) << "Failed to send sync message";
+	return ret;
+}
+
+bool IPCUnixSocketWrapper::waitReady()
+{
+	bool ready;
+	{
+		MutexLocker locker(mutex_);
+		auto isReady = ([&]() {
+			return ready_;
+		});
+		ready = cv_.wait_for(locker, 1000ms, isReady);
+	}
+
+	return ready;
+}
+
+void IPCUnixSocketWrapper::init()
+{
+	/* Init is to be done from the IPC thread context */
+	ASSERT(Thread::current() == this);
+
+	socket_ = std::make_unique<IPCUnixSocket>();
+	fd_ = socket_->create();
+	if (!fd_.isValid()) {
+		LOG(IPCPipe, Error) << "Failed to create socket";
+		return;
+	}
+
+	socket_->readyRead.connect(this, &IPCUnixSocketWrapper::readyRead);
+
+	mutex_.lock();
+	ready_ = true;
+	mutex_.unlock();
+	cv_.notify_one();
+}
+
+void IPCUnixSocketWrapper::deinit()
+{
+	/* Deinit is to be done from the IPC thread context */
+	ASSERT(Thread::current() == this);
+
+	socket_->readyRead.disconnect(this);
+	socket_.reset();
+
+	mutex_.lock();
+	ready_ = false;
+	mutex_.unlock();
+}
+
+void IPCUnixSocketWrapper::readyRead()
+{
+	IPCUnixSocket::Payload payload;
+	int ret = socket_->receive(&payload);
+	if (ret) {
+		LOG(IPCPipe, Error) << "Receive message failed" << ret;
+		return;
+	}
+
+	if (payload.data.size() < sizeof(IPCMessage::Header)) {
+		LOG(IPCPipe, Error) << "Not enough data received";
+		return;
+	}
+
+	const IPCMessage::Header *header =
+		reinterpret_cast<IPCMessage::Header *>(payload.data.data());
+	bool syncComplete = false;
+	mutex_.lock();
+	if (sendSyncPending_ && sendSyncCookie_ == header->cookie) {
+		syncComplete = true;
+		sendSyncPending_ = false;
+		*sendSyncResponse_ = std::move(payload);
+	}
+	mutex_.unlock();
+
+	if (syncComplete) {
+		cv_.notify_one();
+		return;
+	}
+
+	/* Received unexpected data, this means it's a call from the IPA. */
+	IPCMessage ipcMessage(payload);
+	recv_->emit(ipcMessage);
+}
+
 IPCPipeUnixSocket::IPCPipeUnixSocket(const char *ipaModulePath,
 				     const char *ipaProxyWorkerPath)
 	: IPCPipe()
 {
-	std::vector<int> fds;
-	std::vector<std::string> args;
-	args.push_back(ipaModulePath);
-
-	socket_ = std::make_unique<IPCUnixSocket>();
-	UniqueFD fd = socket_->create();
-	if (!fd.isValid()) {
+	socketWrap_ = std::make_unique<IPCUnixSocketWrapper>(&recv);
+	if (!socketWrap_->waitReady()) {
 		LOG(IPCPipe, Error) << "Failed to create socket";
 		return;
 	}
-	socket_->readyRead.connect(this, &IPCPipeUnixSocket::readyRead);
-	args.push_back(std::to_string(fd.get()));
-	fds.push_back(fd.get());
+	int fd = socketWrap_->fd();
+
+	std::vector<int> fds;
+	std::vector<std::string> args;
+	args.push_back(ipaModulePath);
+	args.push_back(std::to_string(fd));
+	fds.push_back(fd);
 
 	proc_ = std::make_unique<Process>();
 	int ret = proc_->start(ipaProxyWorkerPath, args, fds);
@@ -59,89 +246,12 @@ IPCPipeUnixSocket::~IPCPipeUnixSocket()
 
 int IPCPipeUnixSocket::sendSync(const IPCMessage &in, IPCMessage *out)
 {
-	IPCUnixSocket::Payload response;
-
-	int ret = call(in.payload(), &response, in.header().cookie);
-	if (ret) {
-		LOG(IPCPipe, Error) << "Failed to call sync";
-		return ret;
-	}
-
-	if (out)
-		*out = IPCMessage(response);
-
-	return 0;
+	return socketWrap_->sendSync(in, out);
 }
 
 int IPCPipeUnixSocket::sendAsync(const IPCMessage &data)
 {
-	int ret = socket_->send(data.payload());
-	if (ret) {
-		LOG(IPCPipe, Error) << "Failed to call async";
-		return ret;
-	}
-
-	return 0;
-}
-
-void IPCPipeUnixSocket::readyRead()
-{
-	IPCUnixSocket::Payload payload;
-	int ret = socket_->receive(&payload);
-	if (ret) {
-		LOG(IPCPipe, Error) << "Receive message failed" << ret;
-		return;
-	}
-
-	/* \todo Use span to avoid the double copy when callData is found. */
-	if (payload.data.size() < sizeof(IPCMessage::Header)) {
-		LOG(IPCPipe, Error) << "Not enough data received";
-		return;
-	}
-
-	IPCMessage ipcMessage(payload);
-
-	auto callData = callData_.find(ipcMessage.header().cookie);
-	if (callData != callData_.end()) {
-		*callData->second.response = std::move(payload);
-		callData->second.done = true;
-		return;
-	}
-
-	/* Received unexpected data, this means it's a call from the IPA. */
-	recv.emit(ipcMessage);
-}
-
-int IPCPipeUnixSocket::call(const IPCUnixSocket::Payload &message,
-			    IPCUnixSocket::Payload *response, uint32_t cookie)
-{
-	Timer timeout;
-	int ret;
-
-	const auto result = callData_.insert({ cookie, { response, false } });
-	const auto &iter = result.first;
-
-	ret = socket_->send(message);
-	if (ret) {
-		callData_.erase(iter);
-		return ret;
-	}
-
-	/* \todo Make this less dangerous, see IPCPipe::sendSync() */
-	timeout.start(2000ms);
-	while (!iter->second.done) {
-		if (!timeout.isRunning()) {
-			LOG(IPCPipe, Error) << "Call timeout!";
-			callData_.erase(iter);
-			return -ETIMEDOUT;
-		}
-
-		Thread::current()->eventDispatcher()->processEvents();
-	}
-
-	callData_.erase(iter);
-
-	return 0;
+	return socketWrap_->sendAsync(data);
 }
 
 } /* namespace libcamera */
