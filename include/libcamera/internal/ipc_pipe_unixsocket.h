@@ -16,6 +16,7 @@
 namespace libcamera {
 
 class Process;
+class IPCUnixSocketWrapper;
 
 class IPCPipeUnixSocket : public IPCPipe
 {
@@ -29,18 +30,8 @@ public:
 	int sendAsync(const IPCMessage &data) override;
 
 private:
-	struct CallData {
-		IPCUnixSocket::Payload *response;
-		bool done;
-	};
-
-	void readyRead();
-	int call(const IPCUnixSocket::Payload &message,
-		 IPCUnixSocket::Payload *response, uint32_t seq);
-
 	std::unique_ptr<Process> proc_;
-	std::unique_ptr<IPCUnixSocket> socket_;
-	std::map<uint32_t, CallData> callData_;
+	std::unique_ptr<IPCUnixSocketWrapper> socketWrap_;
 };
 
 } /* namespace libcamera */
