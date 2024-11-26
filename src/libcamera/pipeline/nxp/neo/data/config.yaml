@@ -62,19 +62,13 @@
 # stream-input0
 # stream-input1 (optional)
 # stream-embedded (optional)
-#                   = mapping of {links, isi-pipe, mbus-format, embedded-lines}
+#                   = mapping of {links, isi-pipe}
 # links             = sequence of link-entry listing links from the graph of this camera
 # link-entry        = sequence of parameters to describe a link between entities
 #                     listed as
 #                     [source entity name, source pad, source pad stream,
 #                      sink entity name, sink pad, sink pad stream]
 # isi-pipe          = ISI pipe channel index [0..N]
-#
-# \todo remove keys below
-# mbus-code (optional)
-#                   = mbus-code for this stream (input1 and embedded streams only)
-# embedded-lines (optional)
-#                   = number of lines of embedded data (embedded stream only)
 
 %YAML 1.1
 ---

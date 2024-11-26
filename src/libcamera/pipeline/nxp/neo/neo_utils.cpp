@@ -56,9 +56,7 @@ std::string CameraMediaStream::toString() const
 		   << std::endl;
 	}
 
-	ss << "mbus-code " << mbusCode()
-	   << " isi-pipe " << pipe()
-	   << " embedded-lines " << embeddedLines();
+	ss << " isi-pipe " << pipe();
 
 	return ss.str();
 }
@@ -398,9 +396,8 @@ int PipelineConfig::loadAutoDetectCameraStream(MediaDevice *media,
 		lastSinkStreamId = sinkStreamId;
 	}
 
-	uint32_t mbusCode = 0;
-	unsigned int embeddedLines = 0;
-	*cameraMediaStream = CameraMediaStream(slinks, pipe, mbusCode, embeddedLines);
+	CameraMediaStream _cameraMediaStream(slinks, pipe);
+	*cameraMediaStream = std::move(_cameraMediaStream);
 
 	LOG(NxpNeoPipe, Debug)
 		<< "Detected CameraMediaStream for " << sensorEntity->name()
@@ -808,10 +805,6 @@ PipelineConfig::parseMediaStream(const YamlObject &camera,
 		streamLinks.emplace_back(mediaLink, sourceStream, sinkStream);
 	}
 
-	/* mbus-code is optional - may be used for input1 and embedded-data */
-	const YamlObject &mbus = stream["mbus-code"];
-	unsigned int mbusCode = mbus.get<unsigned int>().value_or(0);
-
 	const YamlObject &pipe = stream["isi-pipe"];
 	unsigned int isiPipe = pipe.get<unsigned int>().value_or(maxUint);
 	if (isiPipe == maxUint) {
@@ -819,11 +812,7 @@ PipelineConfig::parseMediaStream(const YamlObject &camera,
 		return std::nullopt;
 	}
 
-	/* embedded-lines is optional - may be used for embedded-data */
-	const YamlObject &lines = stream["embedded-lines"];
-	unsigned int embeddedLines = lines.get<unsigned int>().value_or(0);
-
-	CameraMediaStream mediaStream = { streamLinks, isiPipe, mbusCode, embeddedLines };
+	CameraMediaStream mediaStream{ streamLinks, isiPipe };
 
 	LOG(NxpNeoPipe, Debug)
 		<< "Camera media stream parsed " << std::endl

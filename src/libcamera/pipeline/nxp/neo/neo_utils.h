@@ -36,29 +36,18 @@ public:
 		unsigned int sinkStream_;
 	};
 
-	CameraMediaStream()
-		: mbusCode_(0), embeddedLines_(0) {}
-	CameraMediaStream(std::vector<StreamLink> &links,
-			  unsigned int pipe, uint32_t code, unsigned int lines)
-		: streamLinks_(links),
-		  isiPipe_(pipe), mbusCode_(code), embeddedLines_(lines) {}
+	CameraMediaStream() {}
+	CameraMediaStream(std::vector<StreamLink> &links, unsigned int pipe)
+		: streamLinks_(links), isiPipe_(pipe) {}
 	virtual ~CameraMediaStream() {}
 
 	const std::vector<StreamLink> &streamLinks() const { return streamLinks_; }
 	unsigned int pipe() const { return isiPipe_; }
 	std::string toString() const;
 
-	/* \todo remove those methods */
-	unsigned int mbusCode() const { return mbusCode_; }
-	unsigned int embeddedLines() const { return embeddedLines_; }
-
 private:
 	std::vector<StreamLink> streamLinks_;
 	unsigned int isiPipe_ = 0;
-
-	/* \todo remove those fields */
-	uint32_t mbusCode_;
-	unsigned int embeddedLines_;
 };
 
 class CameraInfo

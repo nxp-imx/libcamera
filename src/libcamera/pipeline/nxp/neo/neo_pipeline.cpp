@@ -1354,86 +1354,59 @@ int NxpNeoCameraData::configureFrontEndFormat(const V4L2SubdeviceFormat &sensorF
 					      Transform transform)
 {
 	int ret;
-	unsigned int stream;
 	CameraSensor *sensor = this->sensor();
+
+	/*
+	 * Configure sensor
+	 * \todo Remove the format copy
+	 * */
+	V4L2SubdeviceFormat _sensorFormat = sensorFormat;
+	ret = sensor->setFormat(&_sensorFormat, transform);
+	if (ret)
+		return ret;
 
 	/* Configure entities media links */
 	ret = configureFrontEndLinks();
 	if (ret)
 		return ret;
 
+	/* Configure the stream formats for each stream */
 	std::map<unsigned int, V4L2SubdeviceFormat> pipesSdFormat;
-	V4L2SubdeviceFormat *sdFormat;
+	for (auto [stream, pipe] : pipes_) {
+		std::optional<const CameraMediaStream *> cameraInfoStream =
+			cameraInfo_->getStream(stream);
+		ASSERT(cameraInfoStream.has_value());
+		const std::vector<CameraMediaStream::StreamLink> &streamLinks =
+			cameraInfoStream.value()->streamLinks();
 
-	/* Configure entities pad formats for each stream present */
-	stream = CameraInfo::STREAM_INPUT0;
-	sdFormat = &pipesSdFormat[stream];
-	*sdFormat = sensorFormat;
+		V4L2SubdeviceFormat format;
+		if (stream == CameraInfo::STREAM_INPUT0) {
+			format = _sensorFormat;
+		} else if (stream == CameraInfo::STREAM_INPUT1) {
+			format = sensor->auxiliaryFormat();
+		} else if (stream == CameraInfo::STREAM_EMBEDDED) {
+			format = sensor->embeddedDataFormat();
+		} else {
+			LOG(NxpNeoPipe, Error) << "Invalid stream " << stream;
+			continue;
+		};
 
-	ret = sensor->setFormat(sdFormat, transform);
-	if (ret)
-		return ret;
-
-	/*
-	 * \todo Factorize streams configuration when the stream formats are
-	 * made available from the sensor class.
-	 */
-
-	auto streamInput0 = cameraInfo_->getStream(stream);
-	ASSERT(streamInput0.has_value());
-	const std::vector<CameraMediaStream::StreamLink> &streamLinksInput0 =
-		streamInput0.value()->streamLinks();
-	ret = configureFrontEndStream(streamLinksInput0, *sdFormat);
-	if (ret)
-		return ret;
-
-	stream = CameraInfo::STREAM_INPUT1;
-	auto streamInput1 = cameraInfo_->getStream(stream);
-	if (streamInput1.has_value()) {
-		/*
-		 * \todo Retrieve input1 format from sensor when we support
-		 * camera stream api.
-		 */
-		sdFormat = &pipesSdFormat[stream];
-		unsigned int code = streamInput1.value()->mbusCode();
-		sdFormat->code = code;
-		sdFormat->size = sensorFormat.size;
-		const std::vector<CameraMediaStream::StreamLink> &streamLinksInput1 =
-			streamInput1.value()->streamLinks();
-		ret = configureFrontEndStream(streamLinksInput1, *sdFormat);
+		ret = configureFrontEndStream(streamLinks, format);
 		if (ret)
 			return ret;
-	}
-
-	stream = CameraInfo::STREAM_EMBEDDED;
-	auto streamEmbedded = cameraInfo_->getStream(stream);
-	if (streamEmbedded.has_value()) {
-		/*
-		 * \todo Retrieve embedded format from sensor when we support
-		 * camera stream api.
-		 */
-		sdFormat = &pipesSdFormat[stream];
-		unsigned int code = streamEmbedded.value()->mbusCode();
-		sdFormat->code = code;
-		unsigned int lines = streamEmbedded.value()->embeddedLines();
-		sdFormat->size = Size(sensorFormat.size.width, lines);
-		const std::vector<CameraMediaStream::StreamLink> &streamLinksEmbedded =
-			streamEmbedded.value()->streamLinks();
-		ret = configureFrontEndStream(streamLinksEmbedded, *sdFormat);
-		if (ret)
-			return ret;
+		pipesSdFormat[stream] = format;
 	}
 
 	/* Configure ISI pipes */
 	pipesDevFormats_.clear();
-	for (auto [_stream, pipe] : pipes_) {
-		auto itFormat = pipesSdFormat.find(_stream);
+	for (auto [stream, pipe] : pipes_) {
+		auto itFormat = pipesSdFormat.find(stream);
 		ASSERT(itFormat != pipesSdFormat.end());
 
 		V4L2SubdeviceFormat &format = itFormat->second;
 		V4L2DeviceFormat devFormat;
 		ret |= pipe->configure(format, &devFormat);
-		pipesDevFormats_[_stream] = std::move(devFormat);
+		pipesDevFormats_[stream] = std::move(devFormat);
 	}
 
 	return ret;
