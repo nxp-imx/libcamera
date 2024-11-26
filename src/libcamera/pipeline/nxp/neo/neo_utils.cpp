@@ -57,7 +57,7 @@ std::string CameraMediaStream::toString() const
 	}
 
 	ss << "mbus-code " << mbusCode()
-	   << " isi-pipe " << pipe()
+	   << " isi-pipe " << pipe().value_or(-1)
 	   << " embedded-lines " << embeddedLines();
 
 	return ss.str();
@@ -84,6 +84,27 @@ bool CameraInfo::hasStream(unsigned int streamId) const
  */
 
 /**
+ * \brief Class destructor
+ */
+PipelineConfig::~PipelineConfig()
+{
+	/* Release allocated ISI channels */
+	if (!isiDevice_)
+		return;
+
+	for (auto &[id, cameraInfo] : cameraMap_) {
+		for (auto &stream : cameraInfo.streams_) {
+			if (stream.has_value()) {
+				std::optional<unsigned int> pipe;
+				pipe = stream->pipe();
+				ASSERT(pipe.has_value());
+				isiDevice_->releasePipe(pipe.value());
+			}
+		}
+	}
+}
+
+/**
  * \brief Load the pipeline configuration
  * \param[in] file The path to the pipeline configuration file
  * \param[in] media The frontend media controller device
@@ -91,19 +112,22 @@ bool CameraInfo::hasStream(unsigned int streamId) const
  *
  * Build the pipeline configuration from either the config file
  * if it exists and lists a setup corresponding to the frontend media controller
- * device. In case no such predefined is available, default to automatic
- * detection mode that works for pipelines that can be automatically discovered.
+ * device. In case no such predefined configuration is available, default to
+ * automatic detection mode, available for pipelines that can be automatically
+ * discovered.
  *
  * \return 0 on success or a negative error code otherwise
  */
 int PipelineConfig::load(std::string filename, MediaDevice *media,
-			 ISIDevice *isiDevice)
+			 std::shared_ptr<ISIDevice> isiDevice)
 {
 	int ret;
 
-	ret = loadFromFile(filename, media, isiDevice);
+	isiDevice_ = isiDevice;
+
+	ret = loadFromFile(filename, media);
 	if (ret)
-		ret = loadAutoDetect(media, isiDevice);
+		ret = loadAutoDetect(media);
 
 	return ret;
 }
@@ -146,7 +170,6 @@ const RoutingMap &PipelineConfig::getRoutingMap() const
 /**
  * \brief Discover the valid camera graphs to the capture video device
  * \param[in] media The frontend media controller device
- * \param[in] isiDevice The ISI Device associated to the media controller device
  *
  * For every camera sensor in the media device, look for a valid link path to
  * the capture video device. Also, build the aggregated global routing table for
@@ -154,14 +177,11 @@ const RoutingMap &PipelineConfig::getRoutingMap() const
  *
  * \return 0 on success or a negative error code otherwise
  */
-int PipelineConfig::loadAutoDetect(MediaDevice *media, ISIDevice *isiDevice)
+int PipelineConfig::loadAutoDetect(MediaDevice *media)
 {
 	int ret;
 
 	if (!media)
-		return -EINVAL;
-
-	if (!isiDevice)
 		return -EINVAL;
 
 	/* Map aggregating stream identifiers for all pads of the media device */
@@ -211,6 +231,7 @@ int PipelineConfig::loadAutoDetect(MediaDevice *media, ISIDevice *isiDevice)
 	}
 
 	/* Discover the topology of every sensor */
+	ISIDevice *isiDevice = isiDevice_.get();
 	for (MediaEntity *entity : sensorsEntities) {
 		unsigned int pipeIndex;
 		LOG(NxpNeoPipe, Debug) << "Auto detect camera " << entity->name();
@@ -235,7 +256,7 @@ int PipelineConfig::loadAutoDetect(MediaDevice *media, ISIDevice *isiDevice)
 		std::map<MediaPad *, unsigned int> streamMap(globalStreamMap);
 		CameraMediaStream cameraMediaStream;
 		ret = loadAutoDetectCameraStream(
-			media, isiDevice, pipeIndex, entity, &streamMap,
+			media, pipeIndex, entity, &streamMap,
 			&routingMap, &cameraMediaStream);
 		if (ret) {
 			isiDevice->releasePipe(pipeIndex);
@@ -268,7 +289,6 @@ int PipelineConfig::loadAutoDetect(MediaDevice *media, ISIDevice *isiDevice)
 /**
  * \brief Discover a valid stream path from the sensor to the video capture device
  * \param[in] media The frontend media controller device
- * \param[in] isiDevice The ISI device instance associated to the media device
  * \param[in] pipe The ISI pipe associated to that stream
  * \param[in] sensorEntity The targeted sensor media entity
  * \param[inout] streamMap The global map with all media pads already involved
@@ -288,7 +308,6 @@ int PipelineConfig::loadAutoDetect(MediaDevice *media, ISIDevice *isiDevice)
  * \return 0 on success or a negative error code otherwise
  */
 int PipelineConfig::loadAutoDetectCameraStream(MediaDevice *media,
-					       ISIDevice *isiDevice,
 					       unsigned int pipe,
 					       MediaEntity *sensorEntity,
 					       std::map<MediaPad *, unsigned int> *streamMap,
@@ -297,6 +316,7 @@ int PipelineConfig::loadAutoDetectCameraStream(MediaDevice *media,
 {
 	int ret;
 
+	ISIDevice *isiDevice = isiDevice_.get();
 	MediaEntity *crossbarEntity =
 		media->getEntityByName(isiDevice->kSDevCrossBarEntityName());
 	if (!crossbarEntity) {
@@ -815,11 +835,9 @@ PipelineConfig::parseMediaStream(const YamlObject &camera,
  * \brief Parse camera entries in a platform node
  * \param[in] platform The platform entry node in yaml file
  * \param[in] media The frontend media controller device
- * \param[in] isiDevice The ISI Device associated to the media controller device
  * \return 0 on success or a negative error code otherwise
  */
-int PipelineConfig::parseCameras(const YamlObject &platform, MediaDevice *media,
-				 ISIDevice *isiDevice)
+int PipelineConfig::parseCameras(const YamlObject &platform, MediaDevice *media)
 {
 	int ret;
 	cameraMap_.clear();
@@ -867,7 +885,7 @@ int PipelineConfig::parseCameras(const YamlObject &platform, MediaDevice *media,
 		cameraMap_[entityName] = cameraInfo;
 	}
 
-	ret = parseReserveIsi(isiDevice);
+	ret = parseReserveIsi();
 	if (ret)
 		cameraMap_.clear();
 
@@ -877,7 +895,6 @@ int PipelineConfig::parseCameras(const YamlObject &platform, MediaDevice *media,
 
 /**
  * \brief Reserve ISI pipes extracted from config file
- * \param[in] isiDevice The ISI Device associated to the media controller device
  *
  * Reserve ISI pipes explicitly defined in the config file. In case of failure,
  * the platform configuration is considered invalid and the associated camera
@@ -886,22 +903,26 @@ int PipelineConfig::parseCameras(const YamlObject &platform, MediaDevice *media,
  *
  * \return 0 on success or a negative error code otherwise
  */
-int PipelineConfig::parseReserveIsi(ISIDevice *isiDevice)
+int PipelineConfig::parseReserveIsi()
 {
 	int ret = 0;
-	int index;
+	std::optional<unsigned int> index;
 
 	Size size(0, 0);
+	ISIDevice *isiDevice = isiDevice_.get();
 	for (auto const &[name, camInfo] : cameraMap_) {
 		index = camInfo.getStreamInput0()->pipe();
-		ret |= isiDevice->reservePipeByIndex(size, index);
+		ASSERT(index.has_value());
+		ret |= isiDevice->reservePipeByIndex(size, index.value());
 		if (camInfo.hasStreamInput1()) {
 			index = camInfo.getStreamInput1()->pipe();
-			ret |= isiDevice->reservePipeByIndex(size, index);
+			ASSERT(index.has_value());
+			ret |= isiDevice->reservePipeByIndex(size, index.value());
 		}
 		if (camInfo.hasStreamEmbedded()) {
 			index = camInfo.getStreamEmbedded()->pipe();
-			ret |= isiDevice->reservePipeByIndex(size, index);
+			ASSERT(index.has_value());
+			ret |= isiDevice->reservePipeByIndex(size, index.value());
 		}
 	}
 
@@ -911,14 +932,17 @@ int PipelineConfig::parseReserveIsi(ISIDevice *isiDevice)
 	/* Some reservations have failed - release all pipes */
 	for (auto const &[name, camInfo] : cameraMap_) {
 		index = camInfo.getStreamInput0()->pipe();
-		isiDevice->releasePipe(index);
+		ASSERT(index.has_value());
+		isiDevice->releasePipe(index.value());
 		if (camInfo.hasStreamInput1()) {
 			index = camInfo.getStreamInput1()->pipe();
-			isiDevice->releasePipe(index);
+			ASSERT(index.has_value());
+			isiDevice->releasePipe(index.value());
 		}
 		if (camInfo.hasStreamEmbedded()) {
 			index = camInfo.getStreamEmbedded()->pipe();
-			isiDevice->releasePipe(index);
+			ASSERT(index.has_value());
+			isiDevice->releasePipe(index.value());
 		}
 	}
 
@@ -929,11 +953,9 @@ int PipelineConfig::parseReserveIsi(ISIDevice *isiDevice)
  * \brief Parse a platform entry in yaml configuration file
  * \param[in] platform The platform entry node in yaml file
  * \param[in] media The frontend media controller device
- * \param[in] isiDevice The ISI Device associated to the media controller device
  * \return 0 on success or a negative error code otherwise
  */
-int PipelineConfig::parsePlatform(const YamlObject &platform,
-				  MediaDevice *media, ISIDevice *isiDevice)
+int PipelineConfig::parsePlatform(const YamlObject &platform, MediaDevice *media)
 {
 	int ret;
 
@@ -950,7 +972,7 @@ int PipelineConfig::parsePlatform(const YamlObject &platform,
 	if (ret)
 		return ret;
 
-	ret = parseCameras(platform, media, isiDevice);
+	ret = parseCameras(platform, media);
 	if (ret)
 		return ret;
 
@@ -961,11 +983,9 @@ int PipelineConfig::parsePlatform(const YamlObject &platform,
  * \brief Load the pipeline configuration from a pipeline configuration file
  * \param[in] filename The path to configuration file
  * \param[in] media The frontend media controller device
- * \param[in] isiDevice The ISI Device associated to the media controller device
  * \return 0 on success or a negative error code otherwise
  */
-int PipelineConfig::loadFromFile(std::string filename, MediaDevice *media,
-				 ISIDevice *isiDevice)
+int PipelineConfig::loadFromFile(std::string filename, MediaDevice *media)
 {
 	File file(filename);
 	int ret;
@@ -1000,7 +1020,7 @@ int PipelineConfig::loadFromFile(std::string filename, MediaDevice *media,
 	LOG(NxpNeoPipe, Debug) << "Parsing pipeline config file " << filename;
 
 	for (const auto &platform : platforms.asList()) {
-		ret = parsePlatform(platform, media, isiDevice);
+		ret = parsePlatform(platform, media);
 		if (!ret)
 			return 0;
 	}

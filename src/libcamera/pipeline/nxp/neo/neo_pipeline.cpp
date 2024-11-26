@@ -69,7 +69,10 @@ public:
 		: Camera::Private(pipe),
 		  sensor_(std::move(sensor)),
 		  neo_(std::move(neo)),
-		  cameraInfo_(cameraInfo){};
+		  cameraInfo_(cameraInfo),
+		  pipeInput0_(nullptr),
+		  pipeInput1_(nullptr),
+		  pipeEmbedded_(nullptr){};
 
 	int configure(CameraConfiguration *c);
 	int exportFrameBuffers(Stream *stream,
@@ -141,9 +144,9 @@ private:
 	const CameraInfo *cameraInfo_;
 
 	/* Front end pipes */
-	std::shared_ptr<ISIPipe> pipeInput0_;
-	std::shared_ptr<ISIPipe> pipeInput1_;
-	std::shared_ptr<ISIPipe> pipeEmbedded_;
+	ISIPipe *pipeInput0_;
+	ISIPipe *pipeInput1_;
+	ISIPipe *pipeEmbedded_;
 
 	/* Front end video device nodes format */
 	V4L2DeviceFormat devFormatInput0_;
@@ -229,7 +232,7 @@ private:
 	PipelineConfig pipelineConfig_;
 
 	unsigned int numCameras_ = 0;
-	std::unique_ptr<ISIDevice> isi_;
+	std::shared_ptr<ISIDevice> isi_;
 	MediaDevice *isiMedia_ = nullptr;
 };
 
@@ -653,7 +656,7 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 	if (!isiMedia_)
 		return false;
 
-	isi_ = std::make_unique<ISIDevice>();
+	isi_ = std::make_shared<ISIDevice>();
 	ret = isi_->init(isiMedia_);
 	if (ret) {
 		LOG(NxpNeoPipe, Debug) << "ISI media device init failed";
@@ -888,7 +891,7 @@ int PipelineHandlerNxpNeo::loadPipelineConfig()
 		file = std::string(NXP_NEO_PIPELINE_DATA_DIR) +
 		       std::string("/config.yaml");
 
-	ret = pipelineConfig_.load(file, isiMedia_, isi_.get());
+	ret = pipelineConfig_.load(file, isiMedia_, isi_);
 
 	return ret;
 }
@@ -1594,25 +1597,22 @@ int NxpNeoCameraData::allocateBuffers()
 		ipaBuffers_.emplace_back(buffer->cookie(), buffer->planes());
 	}
 
-	ISIPipe *pipeInput0 = pipeInput0_.get();
-	ret = prepareISIPipeBuffers(pipeInput0, bufferCount, ipaBufferId);
+	ret = prepareISIPipeBuffers(pipeInput0_, bufferCount, ipaBufferId);
 	if (ret) {
 		freeBuffers();
 		return ret;
 	}
 
-	ISIPipe *pipeInput1 = pipeInput1_.get();
 	if (cameraInfo_->hasStreamInput1()) {
-		ret = prepareISIPipeBuffers(pipeInput1, bufferCount, ipaBufferId);
+		ret = prepareISIPipeBuffers(pipeInput1_, bufferCount, ipaBufferId);
 		if (ret) {
 			freeBuffers();
 			return ret;
 		}
 	}
 
-	ISIPipe *pipeEmbedded = pipeEmbedded_.get();
 	if (cameraInfo_->hasStreamEmbedded()) {
-		ret = prepareISIPipeBuffers(pipeEmbedded, bufferCount, ipaBufferId);
+		ret = prepareISIPipeBuffers(pipeEmbedded_, bufferCount, ipaBufferId);
 		if (ret) {
 			freeBuffers();
 			return ret;
@@ -1622,13 +1622,13 @@ int NxpNeoCameraData::allocateBuffers()
 	ipa_->mapBuffers(ipaBuffers_);
 
 	const std::vector<std::unique_ptr<FrameBuffer>> &input0Buffers =
-		pipeInput0->buffers();
+		pipeInput0_->buffers();
 
 	const std::vector<std::unique_ptr<FrameBuffer>> &input1Buffers =
-		cameraInfo_->hasStreamInput1() ? pipeInput1->buffers() : emptyBufferVector;
+		cameraInfo_->hasStreamInput1() ? pipeInput1_->buffers() : emptyBufferVector;
 
 	const std::vector<std::unique_ptr<FrameBuffer>> &embeddedBuffers =
-		cameraInfo_->hasStreamEmbedded() ? pipeEmbedded->buffers() : emptyBufferVector;
+		cameraInfo_->hasStreamEmbedded() ? pipeEmbedded_->buffers() : emptyBufferVector;
 
 	frameInfos_.init(input0Buffers, input1Buffers,
 			 embeddedBuffers,
@@ -1657,18 +1657,13 @@ int NxpNeoCameraData::freeBuffers()
 
 	neo_->freeBuffers();
 
-	ISIPipe *pipeInput0 = pipeInput0_.get();
-	pipeInput0->freeBuffers();
+	pipeInput0_->freeBuffers();
 
-	if (cameraInfo_->hasStreamInput1()) {
-		ISIPipe *pipeInput1 = pipeInput1_.get();
-		pipeInput1->freeBuffers();
-	}
+	if (cameraInfo_->hasStreamInput1())
+		pipeInput1_->freeBuffers();
 
-	if (cameraInfo_->hasStreamEmbedded()) {
-		ISIPipe *pipeEmbedded = pipeEmbedded_.get();
-		pipeEmbedded->freeBuffers();
-	}
+	if (cameraInfo_->hasStreamEmbedded())
+		pipeEmbedded_->freeBuffers();
 
 	return 0;
 }
@@ -1681,37 +1676,26 @@ int NxpNeoCameraData::freeBuffers()
 int NxpNeoCameraData::setupCameraIsiPipes()
 {
 	ISIDevice *isi = pipe()->isiDevice();
-	unsigned int pipeIndex;
-	auto isiPipeDeleter =
-		[=](ISIPipe *_pipe) { isi->releasePipe(_pipe->index()); };
 
 	const CameraMediaStream *streamInput0 =
 		cameraInfo_->getStreamInput0();
 	ASSERT(streamInput0);
-	pipeIndex = streamInput0->pipe();
-	pipeInput0_ = std::shared_ptr<ISIPipe>(isi->getPipeByIndex(pipeIndex),
-					       isiPipeDeleter);
-	if (!pipeInput0_.get())
-		return -ENODEV;
+	std::optional<unsigned int> pipeIndex = streamInput0->pipe();
+	ASSERT(pipeIndex.has_value());
+	pipeInput0_ = isi->getPipeByIndex(pipeIndex.value());
 
 	if (cameraInfo_->hasStreamInput1()) {
-		const CameraMediaStream *streamInput1 =
-			cameraInfo_->getStreamInput1();
+		const CameraMediaStream *streamInput1 = cameraInfo_->getStreamInput1();
 		pipeIndex = streamInput1->pipe();
-		pipeInput1_ = std::shared_ptr<ISIPipe>(isi->getPipeByIndex(pipeIndex),
-						       isiPipeDeleter);
-		if (!pipeInput1_.get())
-			return -ENODEV;
+		ASSERT(pipeIndex.has_value());
+		pipeInput1_ = isi->getPipeByIndex(pipeIndex.value());
 	}
 
 	if (cameraInfo_->hasStreamEmbedded()) {
-		const CameraMediaStream *streamEmbedded =
-			cameraInfo_->getStreamEmbedded();
+		const CameraMediaStream *streamEmbedded = cameraInfo_->getStreamEmbedded();
 		pipeIndex = streamEmbedded->pipe();
-		pipeEmbedded_ = std::shared_ptr<ISIPipe>(isi->getPipeByIndex(pipeIndex),
-							 isiPipeDeleter);
-		if (!pipeEmbedded_.get())
-			return -ENODEV;
+		ASSERT(pipeIndex.has_value());
+		pipeEmbedded_ = isi->getPipeByIndex(pipeIndex.value());
 	}
 
 	return 0;

@@ -35,7 +35,7 @@ public:
 	};
 
 	CameraMediaStream()
-		: isiPipe_(0), mbusCode_(0), embeddedLines_(0) {}
+		: mbusCode_(0), embeddedLines_(0) {}
 	CameraMediaStream(std::vector<StreamLink> &links,
 			  unsigned int pipe, uint32_t code, unsigned int lines)
 		: streamLinks_(links),
@@ -43,7 +43,7 @@ public:
 	virtual ~CameraMediaStream() {}
 
 	const std::vector<StreamLink> &streamLinks() const { return streamLinks_; }
-	unsigned int pipe() const { return isiPipe_; }
+	std::optional<unsigned int> pipe() const { return isiPipe_; }
 	std::string toString() const;
 
 	/* \todo remove those methods */
@@ -52,7 +52,7 @@ public:
 
 private:
 	std::vector<StreamLink> streamLinks_;
-	unsigned int isiPipe_;
+	std::optional<unsigned int> isiPipe_;
 
 	/* \todo remove those fields */
 	uint32_t mbusCode_;
@@ -101,8 +101,9 @@ class PipelineConfig
 {
 public:
 	PipelineConfig(){};
-	virtual ~PipelineConfig(){};
-	int load(std::string file, MediaDevice *media, ISIDevice *isiDevice);
+	virtual ~PipelineConfig();
+	int load(std::string file, MediaDevice *media,
+		 std::shared_ptr<ISIDevice> isiDevice);
 	const CameraInfo *getCameraInfo(std::string name) const;
 	const RoutingMap &getRoutingMap() const;
 
@@ -110,9 +111,8 @@ private:
 	static constexpr unsigned int kPadAny =
 		std::numeric_limits<unsigned int>::max();
 
-	int loadAutoDetect(MediaDevice *media, ISIDevice *isiDevice);
-	int loadAutoDetectCameraStream(MediaDevice *media,
-				       ISIDevice *isiDevice, unsigned int pipe,
+	int loadAutoDetect(MediaDevice *media);
+	int loadAutoDetectCameraStream(MediaDevice *media, unsigned int pipe,
 				       MediaEntity *sensorEntity,
 				       std::map<MediaPad *, unsigned int> *streamMap,
 				       std::map<MediaEntity *, V4L2Subdevice::Routing> *routingMap,
@@ -133,15 +133,15 @@ private:
 	std::optional<CameraMediaStream>
 	parseMediaStream(const YamlObject &camera, std::string key,
 			 MediaDevice *media);
-	int parseCameras(const YamlObject &platform, MediaDevice *media,
-			 ISIDevice *isiDevice);
-	int parseReserveIsi(ISIDevice *isiDevice);
-	int parsePlatform(const YamlObject &platform, MediaDevice *media,
-			  ISIDevice *isiDevice);
-	int loadFromFile(std::string file, MediaDevice *media, ISIDevice *isiDevice);
+	int parseCameras(const YamlObject &platform, MediaDevice *media);
+	int parseReserveIsi();
+	int parsePlatform(const YamlObject &platform, MediaDevice *media);
+
+	int loadFromFile(std::string file, MediaDevice *media);
 
 	RoutingMap routingMap_;
 	CameraMap cameraMap_;
+	std::shared_ptr<ISIDevice> isiDevice_;
 
 	/* Configuration file routes sequence elements */
 	enum {
