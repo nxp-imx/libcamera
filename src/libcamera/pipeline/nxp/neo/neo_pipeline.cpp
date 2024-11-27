@@ -1356,17 +1356,40 @@ int NxpNeoCameraData::configureFrontEndFormat(const V4L2SubdeviceFormat &sensorF
 	int ret;
 	CameraSensor *sensor = this->sensor();
 
+	/* Configure entities media links */
+	ret = configureFrontEndLinks();
+	if (ret)
+		return ret;
+
+	/* Configure sensor internal streams (disabling may fail for immutable routes) */
+	if (sensor->auxiliaryStream().has_value()) {
+		bool enable = pipes_.count(CameraInfo::STREAM_INPUT1);
+		ret = sensor->setAuxiliaryEnabled(enable);
+		if (ret && enable) {
+			LOG(NxpNeoPipe, Warning)
+				<< "Auxiliary stream configuration failed"
+				<< " [" << enable << "]";
+			return ret;
+		}
+	}
+
+	if (sensor->embeddedDataStream().has_value()) {
+		bool enable = pipes_.count(CameraInfo::STREAM_EMBEDDED);
+		ret = sensor->setEmbeddedDataEnabled(enable);
+		if (ret && enable) {
+			LOG(NxpNeoPipe, Warning)
+				<< "Embedded data stream configuration failed"
+				<< " [" << enable << "]";
+			return ret;
+		}
+	}
+
 	/*
-	 * Configure sensor
+	 * Configure sensor format
 	 * \todo Remove the format copy
 	 * */
 	V4L2SubdeviceFormat _sensorFormat = sensorFormat;
 	ret = sensor->setFormat(&_sensorFormat, transform);
-	if (ret)
-		return ret;
-
-	/* Configure entities media links */
-	ret = configureFrontEndLinks();
 	if (ret)
 		return ret;
 

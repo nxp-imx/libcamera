@@ -50,6 +50,13 @@ private:
 	unsigned int isiPipe_ = 0;
 };
 
+struct CameraProperties {
+	CameraProperties()
+		: hdrStream(false), embeddedStream(false) {}
+	bool hdrStream;
+	bool embeddedStream;
+};
+
 class CameraInfo
 {
 public:
@@ -58,6 +65,8 @@ public:
 
 	std::optional<const CameraMediaStream *> getStream(unsigned int id) const;
 	bool hasStream(unsigned int id) const { return getStream(id).has_value(); }
+
+	const CameraProperties *getCameraProperties() const { return &properties_; }
 
 	enum {
 		STREAM_INPUT0 = 0,
@@ -71,6 +80,7 @@ public:
 
 private:
 	std::map<unsigned int, CameraMediaStream> streams_;
+	CameraProperties properties_;
 
 	friend PipelineConfig;
 };
@@ -95,8 +105,10 @@ private:
 	int loadAutoDetect(MediaDevice *media);
 	int loadAutoDetectCameraStream(MediaDevice *media, unsigned int pipe,
 				       MediaEntity *sensorEntity,
+				       unsigned int sensorPad,
+				       unsigned int sensorStream,
 				       std::map<MediaPad *, unsigned int> *streamMap,
-				       std::map<MediaEntity *, V4L2Subdevice::Routing> *routingMap,
+				       RoutingMap *routingMap,
 				       CameraMediaStream *cameraMediaStream);
 	int loadAutoDetectFindPaths(MediaDevice *media,
 				    MediaEntity *fromEntity, unsigned int fromPad,
@@ -119,10 +131,15 @@ private:
 	int parsePlatform(const YamlObject &platform, MediaDevice *media);
 
 	int loadFromFile(std::string file, MediaDevice *media);
+	const CameraProperties *getCameraProperties(const std::string &name,
+						    const std::string &model);
 
 	RoutingMap routingMap_;
 	CameraMap cameraMap_;
 	std::shared_ptr<ISIDevice> isiDevice_;
+
+	std::map<std::string, CameraProperties> namePropertiesMap_;
+	std::map<std::string, CameraProperties> modelPropertiesMap_;
 
 	/* Configuration file routes sequence elements */
 	enum {
