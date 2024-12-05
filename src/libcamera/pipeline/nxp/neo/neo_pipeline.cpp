@@ -143,6 +143,7 @@ private:
 	std::map<unsigned int, V4L2DeviceFormat> pipesDevFormats_;
 
 	NxpNeoFrames frameInfos_;
+	bool alternatedRawStream_ = false;
 
 	std::unique_ptr<ipa::nxpneo::IPAProxyNxpNeo> ipa_;
 	ControlInfoMap ipaControls_;
@@ -913,6 +914,11 @@ int NxpNeoCameraData::configure(CameraConfiguration *c)
 	V4L2DeviceFormat devFormatFrame = {};
 	V4L2DeviceFormat devFormatIr = {};
 
+	V4L2DeviceFormat &devFormatInput0 =
+		pipesDevFormats_[CameraInfo::STREAM_INPUT0];
+	V4L2DeviceFormat &devFormatInput1 =
+		pipesDevFormats_[CameraInfo::STREAM_INPUT1];
+
 	rawStreamOnly_ = ((config->size() == 1) &&
 			  ((*config)[0].stream() == &streamRaw_));
 	if (!rawStreamOnly_) {
@@ -943,11 +949,6 @@ int NxpNeoCameraData::configure(CameraConfiguration *c)
 				devFormat.colorSpace = cfg.colorSpace;
 		}
 
-		V4L2DeviceFormat &devFormatInput0 =
-			pipesDevFormats_[CameraInfo::STREAM_INPUT0];
-		V4L2DeviceFormat &devFormatInput1 =
-			pipesDevFormats_[CameraInfo::STREAM_INPUT1];
-
 		NeoDevice::PipeConfig pipeConfig = {};
 		pipeConfig.topLines = embeddedTopLines_;
 		ret = neo_->configure(pipeConfig,
@@ -956,6 +957,18 @@ int NxpNeoCameraData::configure(CameraConfiguration *c)
 		if (ret)
 			return ret;
 	}
+
+	/*
+	 * For sensors using an auxiliary stream, when the raw stream is present
+	 * distribute it alternately between the two input streams if they share
+	 * the same video format, meaning that they can share the same buffers.
+	 */
+	if (devFormatInput0.fourcc == devFormatInput1.fourcc &&
+	    devFormatInput0.size == devFormatInput1.size)
+		alternatedRawStream_ = true;
+	else
+		alternatedRawStream_ = false;
+	LOG(NxpNeoPipe, Debug) << "alternated raw streams " << alternatedRawStream_;
 
 	/*
 	 * IPA configuration
@@ -1640,8 +1653,10 @@ int NxpNeoCameraData::allocateBuffers()
 	const std::vector<std::unique_ptr<FrameBuffer>> &embeddedBuffers =
 		pipes_.count(stream) ? pipes_[stream]->buffers() : empty;
 
-	frameInfos_.init(input0Buffers, input1Buffers, embeddedBuffers,
-			 neo_->paramsBuffers_, neo_->statsBuffers_);
+	frameInfos_.init(input0Buffers, input1Buffers,
+			 embeddedBuffers,
+			 neo_->paramsBuffers_, neo_->statsBuffers_,
+			 alternatedRawStream_);
 
 	frameInfos_.bufferAvailable.connect(
 		this, &NxpNeoCameraData::queuePendingRequests);

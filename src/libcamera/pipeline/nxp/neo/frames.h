@@ -41,6 +41,8 @@ public:
 		FrameBuffer *paramsBuffer;
 		FrameBuffer *statsBuffer;
 
+		FrameBuffer *rawStreamBuffer;
+
 		ControlList effectiveSensorControls;
 
 		bool input0Pending;
@@ -50,7 +52,6 @@ public:
 		bool paramDequeued;
 		bool metadataProcessed;
 		bool isRawOnly;
-		bool hasRawStreamBuffer;
 	};
 
 	NxpNeoFrames();
@@ -59,7 +60,8 @@ public:
 		  const std::vector<std::unique_ptr<FrameBuffer>> &input1Buffers,
 		  const std::vector<std::unique_ptr<FrameBuffer>> &embeddedBuffers,
 		  const std::vector<std::unique_ptr<FrameBuffer>> &paramsBuffers,
-		  const std::vector<std::unique_ptr<FrameBuffer>> &statsBuffers);
+		  const std::vector<std::unique_ptr<FrameBuffer>> &statsBuffers,
+		  bool alternatedRawStreams);
 	void clear();
 
 	Info *create(Request *request, bool rawOnly, FrameBuffer *rawStreamBuffer);
@@ -85,6 +87,7 @@ private:
 
 	bool hasInput1_ = false;
 	bool hasEmbedded_ = false;
+	bool alternatedRawStreams_;
 };
 
 } /* namespace libcamera */

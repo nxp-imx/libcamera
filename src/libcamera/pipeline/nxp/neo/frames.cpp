@@ -29,7 +29,8 @@ void NxpNeoFrames::init(const std::vector<std::unique_ptr<FrameBuffer>> &input0B
 			const std::vector<std::unique_ptr<FrameBuffer>> &input1Buffers,
 			const std::vector<std::unique_ptr<FrameBuffer>> &embeddedBuffers,
 			const std::vector<std::unique_ptr<FrameBuffer>> &paramsBuffers,
-			const std::vector<std::unique_ptr<FrameBuffer>> &statsBuffers)
+			const std::vector<std::unique_ptr<FrameBuffer>> &statsBuffers,
+			bool alternatedRawStreams)
 {
 	for (const std::unique_ptr<FrameBuffer> &buffer : input0Buffers)
 		availableInput0Buffers_.push(buffer.get());
@@ -53,6 +54,8 @@ void NxpNeoFrames::init(const std::vector<std::unique_ptr<FrameBuffer>> &input0B
 		availableStatsBuffers_.push(buffer.get());
 
 	frameInfo_.clear();
+
+	alternatedRawStreams_ = hasInput1_ && alternatedRawStreams;
 }
 
 void NxpNeoFrames::clear()
@@ -100,20 +103,21 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly,
 		return nullptr;
 	}
 
-	/*
-	 * ISI internal buffers allocation
-	 * Input0 buffer may come from application when raw stream is enabled
-	 */
-	if (!rawStreamBuffer)
+	if (rawStreamBuffer) {
+		/*
+		 * To map the raw stream alternately to both input streams, rely
+		 * on the request sequence number.
+		 */
+		bool evenId = (id % 2 == 0);
+		if (!alternatedRawStreams_ || evenId)
+			input0Buffer = rawStreamBuffer;
+		else
+			input1Buffer = rawStreamBuffer;
+	}
+	if (!input0Buffer)
 		input0Buffer = allocBuffer(&availableInput0Buffers_);
-	else
-		input0Buffer = rawStreamBuffer;
-
-	if (hasInput1_)
+	if (hasInput1_ && !input1Buffer)
 		input1Buffer = allocBuffer(&availableInput1Buffers_);
-	if (hasEmbedded_)
-		embeddedBuffer = allocBuffer(&availableEmbeddedBuffers_);
-
 	if (hasEmbedded_)
 		embeddedBuffer = allocBuffer(&availableEmbeddedBuffers_);
 
@@ -137,7 +141,7 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly,
 	info->embeddedPending = (info->embeddedBuffer);
 
 	info->isRawOnly = rawOnly;
-	info->hasRawStreamBuffer = !!rawStreamBuffer;
+	info->rawStreamBuffer = rawStreamBuffer;
 
 	/* ISP and IPA are bypassed in raw-only */
 	bool doneStatus = rawOnly ? true : false;
@@ -152,9 +156,9 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly,
 void NxpNeoFrames::remove(NxpNeoFrames::Info *info)
 {
 	/* Return internal buffers for reuse. */
-	if (!info->hasRawStreamBuffer)
+	if (info->input0Buffer != info->rawStreamBuffer)
 		availableInput0Buffers_.push(info->input0Buffer);
-	if (hasInput1_)
+	if (info->input1Buffer && info->input1Buffer != info->rawStreamBuffer)
 		availableInput1Buffers_.push(info->input1Buffer);
 	if (info->embeddedBuffer)
 		availableEmbeddedBuffers_.push(info->embeddedBuffer);
