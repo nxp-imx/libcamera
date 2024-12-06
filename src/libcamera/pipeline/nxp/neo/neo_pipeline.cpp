@@ -118,9 +118,10 @@ private:
 	bool completeCancelledBufferRequest(FrameBuffer *buffer, NxpNeoFrames::Info *info);
 	void completeProcessingRequest(Request *request);
 
+	void isiInputBufferReady(NxpNeoFrames::Info *info);
 	void isiInput0BufferReady(FrameBuffer *buffer);
 	void isiInput1BufferReady(FrameBuffer *buffer);
-	void isiEdBufferReady(FrameBuffer *buffer);
+	void isiEmbeddedBufferReady(FrameBuffer *buffer);
 
 	void neoInput0BufferReady(FrameBuffer *buffer);
 	void neoInput1BufferReady(FrameBuffer *buffer);
@@ -1220,7 +1221,7 @@ int NxpNeoCameraData::init()
 	const std::map<unsigned int, void (NxpNeoCameraData::*)(FrameBuffer *)> pipeReadyFuncs{
 		{ CameraInfo::STREAM_INPUT0, &NxpNeoCameraData::isiInput0BufferReady },
 		{ CameraInfo::STREAM_INPUT1, &NxpNeoCameraData::isiInput1BufferReady },
-		{ CameraInfo::STREAM_EMBEDDED, &NxpNeoCameraData::isiEdBufferReady },
+		{ CameraInfo::STREAM_EMBEDDED, &NxpNeoCameraData::isiEmbeddedBufferReady },
 	};
 
 	ISIDevice *isi = pipe()->isiDevice();
@@ -1849,12 +1850,31 @@ void NxpNeoCameraData::completeProcessingRequest(Request *request)
  */
 
 /**
+ * \brief Handle buffers availability at the ISI output
+ * \param[in] info The frame info associated to ongoing request
+ *
+ * In case all front-end buffers associated to the request have been received,
+ * the IPA can be invoked to retrieve ISP parameters. For a raw-only request
+ * IPA is bypassed and request can be completed immediately.
+ */
+void NxpNeoCameraData::isiInputBufferReady(NxpNeoFrames::Info *info)
+{
+	if (info->input0Pending || info->input1Pending || info->embeddedPending)
+		return;
+
+	if (!rawStreamOnly_) {
+		ipa_->fillParamsBuffer(info->id,
+				       info->paramsBuffer->cookie(),
+				       info->input0Buffer->cookie());
+	} else {
+		if (frameInfos_.tryComplete(info))
+			completeProcessingRequest(info->request);
+	}
+}
+
+/**
  * \brief Handle INPUT0 buffers availability at the ISI output
  * \param[in] buffer The completed buffer
- *
- * Once params buffer for ISP has been produced by 3A, input buffers are
- * queued to NEO for further processing.
- * Buffers will be returned after being processed by ISP.
  */
 void NxpNeoCameraData::isiInput0BufferReady(FrameBuffer *buffer)
 {
@@ -1886,33 +1906,16 @@ void NxpNeoCameraData::isiInput0BufferReady(FrameBuffer *buffer)
 	info->effectiveSensorControls =
 		delayedCtrls_->get(buffer->metadata().sequence);
 
-	if (request->findBuffer(&streamRaw_))
+	if (request->findBuffer(&streamRaw_) == buffer)
 		pipe()->completeBuffer(request, buffer);
 
-	if (!rawStreamOnly_) {
-		/*
-		 * INPUT0 frame will be queue into ISP once params buffer for
-		 * the frame have been produced by IPA.
-		 * \todo: in case of ISP operation with INPUT0 + INPUT1 inputs,
-		 * wait for both frames to be available before invoking
-		 * ipa_->fillParamsBuffer()
-		 */
-		ipa_->fillParamsBuffer(info->id,
-				       info->paramsBuffer->cookie(),
-				       info->input0Buffer->cookie());
-	} else {
-		if (frameInfos_.tryComplete(info))
-			completeProcessingRequest(request);
-	}
+	info->input0Pending = false;
+	isiInputBufferReady(info);
 }
 
 /**
  * \brief Handle INPUT1 buffers availability at the ISI output
  * \param[in] buffer The completed buffer
- *
- * Once params buffer for ISP has been produced by 3A, input buffers are
- * queue to NEO for further processing.
- * Buffer will be returned after being ingested by ISP.
  */
 void NxpNeoCameraData::isiInput1BufferReady(FrameBuffer *buffer)
 {
@@ -1926,12 +1929,14 @@ void NxpNeoCameraData::isiInput1BufferReady(FrameBuffer *buffer)
 	Request *request = info->request;
 	(void)request;
 
-	/*
-	 * \todo: in case of ISP operation with INPUT0 + INPUT1 inputs, wait for
-	 *  both frames to be available before invoking ipa_->fillParamsBuffer()
-	 */
+	if (request->findBuffer(&streamRaw_) == buffer)
+		pipe()->completeBuffer(request, buffer);
 
-	ASSERT(pipes_.count(CameraInfo::STREAM_INPUT1));
+	if (info->input0Pending)
+		LOG(NxpNeoPipe, Warning) << "Out of order input frame receipt";
+
+	info->input1Pending = false;
+	isiInputBufferReady(info);
 }
 
 /**
@@ -1941,7 +1946,7 @@ void NxpNeoCameraData::isiInput1BufferReady(FrameBuffer *buffer)
  * Embedded data buffer is to be passed to IPA for 3A algorithms to use
  * along with sensor control info and ISP statistics.
  */
-void NxpNeoCameraData::isiEdBufferReady(FrameBuffer *buffer)
+void NxpNeoCameraData::isiEmbeddedBufferReady(FrameBuffer *buffer)
 {
 	NxpNeoFrames::Info *info = frameInfos_.find(buffer);
 	if (!info)
@@ -1950,9 +1955,8 @@ void NxpNeoCameraData::isiEdBufferReady(FrameBuffer *buffer)
 	if (completeCancelledBufferRequest(buffer, info))
 		return;
 
-	/*
-	 * \todo inform IPA about this buffer
-	 */
+	info->embeddedPending = false;
+	isiInputBufferReady(info);
 }
 
 /**
@@ -1961,6 +1965,7 @@ void NxpNeoCameraData::isiEdBufferReady(FrameBuffer *buffer)
  */
 void NxpNeoCameraData::neoInput0BufferReady([[maybe_unused]] FrameBuffer *buffer)
 {
+	/* Nothing to do - buffer will be recycled when request completes */
 }
 
 /**

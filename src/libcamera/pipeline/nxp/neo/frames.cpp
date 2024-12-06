@@ -5,7 +5,7 @@
  * Copyright (C) 2020, Google Inc.
  *
  * frames.cpp - NXP NEO ISP Frames helper
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  */
 
 #include "frames.h"
@@ -86,7 +86,7 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly,
 	}
 
 	if (hasEmbedded_ && availableEmbeddedBuffers_.empty()) {
-		LOG(NxpNeoPipe, Warning) << "Input1 buffer underrun";
+		LOG(NxpNeoPipe, Warning) << "Embedded buffer underrun";
 		return nullptr;
 	}
 
@@ -111,6 +111,8 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly,
 
 	if (hasInput1_)
 		input1Buffer = allocBuffer(&availableInput1Buffers_);
+	if (hasEmbedded_)
+		embeddedBuffer = allocBuffer(&availableEmbeddedBuffers_);
 
 	if (hasEmbedded_)
 		embeddedBuffer = allocBuffer(&availableEmbeddedBuffers_);
@@ -129,6 +131,10 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly,
 	info->embeddedBuffer = embeddedBuffer;
 	info->paramsBuffer = paramsBuffer;
 	info->statsBuffer = statsBuffer;
+
+	info->input0Pending = true;
+	info->input1Pending = (info->input1Buffer);
+	info->embeddedPending = (info->embeddedBuffer);
 
 	info->isRawOnly = rawOnly;
 	info->hasRawStreamBuffer = !!rawStreamBuffer;
@@ -150,7 +156,7 @@ void NxpNeoFrames::remove(NxpNeoFrames::Info *info)
 		availableInput0Buffers_.push(info->input0Buffer);
 	if (hasInput1_)
 		availableInput1Buffers_.push(info->input1Buffer);
-	if (hasEmbedded_)
+	if (info->embeddedBuffer)
 		availableEmbeddedBuffers_.push(info->embeddedBuffer);
 	availableParamsBuffers_.push(info->paramsBuffer);
 	availableStatsBuffers_.push(info->statsBuffer);

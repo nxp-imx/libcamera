@@ -5,7 +5,7 @@
  * Copyright (C) 2020, Google Inc.
  *
  * frames.h - NXP NEO ISP Frames helper
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  */
 
 #pragma once
@@ -42,6 +42,10 @@ public:
 		FrameBuffer *statsBuffer;
 
 		ControlList effectiveSensorControls;
+
+		bool input0Pending;
+		bool input1Pending;
+		bool embeddedPending;
 
 		bool paramDequeued;
 		bool metadataProcessed;
