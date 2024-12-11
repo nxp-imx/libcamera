@@ -1878,9 +1878,22 @@ void NxpNeoCameraData::isiInputBufferReady(NxpNeoFrames::Info *info)
 		return;
 
 	if (!rawStreamOnly_) {
-		ipa_->fillParamsBuffer(info->id,
-				       info->paramsBuffer->cookie(),
-				       info->input0Buffer->cookie());
+		std::map<uint32_t, uint32_t> bufferIds = {
+			{ ipa::nxpneo::TypeParams, info->paramsBuffer->cookie() },
+			{ ipa::nxpneo::TypeInput0, info->input0Buffer->cookie() },
+		};
+
+		if (info->input1Buffer) {
+			bufferIds.insert(
+				{ ipa::nxpneo::TypeInput1, info->input1Buffer->cookie() });
+		}
+
+		if (info->embeddedBuffer) {
+			bufferIds.insert(
+				{ ipa::nxpneo::TypeEmbedded, info->embeddedBuffer->cookie() });
+		}
+
+		ipa_->fillParamsBuffer(info->id, bufferIds);
 	} else {
 		if (frameInfos_.tryComplete(info))
 			completeProcessingRequest(info->request);
@@ -2046,7 +2059,11 @@ void NxpNeoCameraData::neoStatsBufferReady(FrameBuffer *buffer)
 	if (completeCancelledBufferRequest(buffer, info))
 		return;
 
-	ipa_->processStatsBuffer(info->id, info->statsBuffer->cookie(),
+	std::map<uint32_t, uint32_t> bufferIds = {
+		{ ipa::nxpneo::TypeStats, info->statsBuffer->cookie() },
+	};
+
+	ipa_->processStatsBuffer(info->id, bufferIds,
 				 info->effectiveSensorControls);
 }
 
