@@ -28,6 +28,15 @@ struct SensorConfig {
 	bool rgbIr;
 };
 
+/* Buffer types used as key in buffersId maps */
+enum ISPBufferType {
+	TypeInput0,
+	TypeInput1,
+	TypeEmbedded,
+	TypeParams,
+	TypeStats,
+};
+
 interface IPANxpNeoInterface {
 	init(libcamera.IPASettings settings,
 	     uint32 hwRevision,
@@ -48,9 +57,8 @@ interface IPANxpNeoInterface {
 	unmapBuffers(array<uint32> ids);
 
 	[async] queueRequest(uint32 frame, libcamera.ControlList reqControls);
-	[async] fillParamsBuffer(uint32 frame, uint32 paramsbufferId,
-				 uint32 rawBufferId);
-	[async] processStatsBuffer(uint32 frame, uint32 bufferId,
+	[async] fillParamsBuffer(uint32 frame, map<uint32_t, uint32_t> bufferIds);
+	[async] processStatsBuffer(uint32 frame, map<uint32_t, uint32_t> bufferIds,
 				   libcamera.ControlList sensorControls);
 };
 
