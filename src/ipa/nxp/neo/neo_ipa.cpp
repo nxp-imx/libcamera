@@ -73,9 +73,9 @@ public:
 
 	void queueRequest(const uint32_t frame, const ControlList &controls) override;
 	void fillParamsBuffer(const uint32_t frame,
-			      const uint32_t paramsBufferId,
-			      const uint32_t rawBufferId) override;
-	void processStatsBuffer(const uint32_t frame, const uint32_t bufferId,
+			      const std::map<uint32_t, uint32_t> &bufferIds) override;
+	void processStatsBuffer(const uint32_t frame,
+				const std::map<uint32_t, uint32_t> &bufferIds,
 				const ControlList &sensorControls) override;
 
 protected:
@@ -353,8 +353,7 @@ void IPANxpNeo::queueRequest(const uint32_t frame, const ControlList &controls)
 }
 
 void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
-				 const uint32_t paramsBufferId,
-				 const uint32_t rawBufferId)
+				 const std::map<uint32_t, uint32_t> &bufferIds)
 {
 	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
 
@@ -378,6 +377,10 @@ void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
 
 	frameContext.sensor.metaDataValid = false;
 	size_t metadataSize = sessionConfig.sensor.metaDataSize;
+
+	auto input0Iter = bufferIds.find(TypeInput0);
+	unsigned int rawBufferId =
+		input0Iter != bufferIds.end() ? input0Iter->second : 0;
 	if (metadataSize && mappedBuffers_.count(rawBufferId)) {
 		uint8_t *metadata = mappedBuffers_.at(rawBufferId).planes()[0].data();
 		Span<uint8_t> mdBuffer(metadata, metadataSize);
@@ -386,6 +389,10 @@ void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
 	}
 
 	/* Prepare parameters buffer. */
+	auto paramsIter = bufferIds.find(TypeParams);
+	unsigned int paramsBufferId =
+		paramsIter != bufferIds.end() ? paramsIter->second : 0;
+	ASSERT(mappedBuffers_.count(paramsBufferId));
 	neoisp_meta_params_s *params =
 		reinterpret_cast<neoisp_meta_params_s *>(
 			mappedBuffers_.at(paramsBufferId).planes()[0].data());
@@ -399,14 +406,20 @@ void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
 	paramsBufferReady.emit(frame);
 }
 
-void IPANxpNeo::processStatsBuffer(const uint32_t frame, const uint32_t bufferId,
+void IPANxpNeo::processStatsBuffer(const uint32_t frame,
+				   const std::map<uint32_t, uint32_t> &bufferIds,
 				   const ControlList &sensorControls)
 {
 	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
 
 	const neoisp_meta_stats_s *stats;
+
+	auto statsIter = bufferIds.find(TypeStats);
+	unsigned int statsBufferId =
+		statsIter != bufferIds.end() ? statsIter->second : 0;
+	ASSERT(mappedBuffers_.count(statsBufferId));
 	stats = reinterpret_cast<neoisp_meta_stats_s *>(
-		mappedBuffers_.at(bufferId).planes()[0].data());
+		mappedBuffers_.at(statsBufferId).planes()[0].data());
 
 	ControlList &mdControls = frameContext.sensor.mdControls;
 
