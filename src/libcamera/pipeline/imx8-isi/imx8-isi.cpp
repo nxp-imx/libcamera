@@ -144,8 +144,6 @@ private:
 
 	std::unique_ptr<V4L2Subdevice> crossbar_;
 	std::vector<Pipe> pipes_;
-
-	unsigned int sequence_ = 0;
 };
 
 /* -----------------------------------------------------------------------------
@@ -968,9 +966,6 @@ int PipelineHandlerISI::start(Camera *camera,
 {
 	ISICameraData *data = cameraData(camera);
 
-	/* Reset frame counter */
-	sequence_ = 0;
-
 	for (const auto &stream : data->enabledStreams_) {
 		Pipe *pipe = pipeFromStream(camera, stream);
 		const StreamConfiguration &config = stream->configuration();
@@ -1195,13 +1190,6 @@ void PipelineHandlerISI::bufferReady(FrameBuffer *buffer)
 	if (!metadata.contains(controls::SensorTimestamp.id()))
 		metadata.set(controls::SensorTimestamp,
 			     buffer->metadata().timestamp);
-
-	unsigned int seq = buffer->metadata().sequence;
-	if (seq != sequence_)
-		LOG(ISI, Warning)
-			<< "Input frame loss! expected " << sequence_
-			<< " received " << seq;
-	sequence_ = seq + 1;
 
 	completeBuffer(request, buffer);
 	if (request->hasPendingBuffers())
