@@ -186,7 +186,7 @@ NxpNeoFrames::Info *NxpNeoFrames::find(unsigned int id)
 	if (itInfo != frameInfo_.end())
 		return itInfo->second.get();
 
-	LOG(NxpNeoPipe, Info) << "Can't find tracking information for frame " << id;
+	LOG(NxpNeoPipe, Debug) << "Can't find tracking information for frame " << id;
 
 	return nullptr;
 }
@@ -206,7 +206,20 @@ NxpNeoFrames::Info *NxpNeoFrames::find(FrameBuffer *buffer)
 			return info;
 	}
 
-	LOG(NxpNeoPipe, Info) << "Can't find tracking information from buffer";
+	LOG(NxpNeoPipe, Debug) << "Can't find tracking information from buffer";
+
+	return nullptr;
+}
+
+NxpNeoFrames::Info *NxpNeoFrames::find(Request *request)
+{
+	for (auto const &itInfo : frameInfo_) {
+		Info *info = itInfo.second.get();
+		if (info->request == request)
+			return info;
+	}
+
+	LOG(NxpNeoPipe, Debug) << "Can't find tracking information from request";
 
 	return nullptr;
 }
