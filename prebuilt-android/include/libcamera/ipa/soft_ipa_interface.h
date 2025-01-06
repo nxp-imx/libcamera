@@ -38,7 +38,9 @@ enum class _SoftCmd {
 	Start = 2,
 	Stop = 3,
 	Configure = 4,
-	ProcessStats = 5,
+	QueueRequest = 5,
+	ComputeParams = 6,
+	ProcessStats = 7,
 };
 
 enum class _SoftEventCmd {
@@ -46,6 +48,24 @@ enum class _SoftEventCmd {
 	SetIspParams = 2,
 };
 
+
+struct IPAConfigInfo
+{
+public:
+#ifndef __DOXYGEN__
+	IPAConfigInfo()
+	{
+	}
+
+	IPAConfigInfo(const ControlInfoMap &_sensorControls)
+		: sensorControls(_sensorControls)
+	{
+	}
+#endif
+
+
+	ControlInfoMap sensorControls;
+};
 
 class IPASoftInterface : public IPAInterface
 {
@@ -55,16 +75,26 @@ public:
 		const IPASettings &settings,
 		const SharedFD &fdStats,
 		const SharedFD &fdParams,
-		const ControlInfoMap &sensorCtrlInfoMap) = 0;
+		const ControlInfoMap &sensorCtrlInfoMap,
+		ControlInfoMap *ipaControls) = 0;
 
 	virtual int32_t start() = 0;
 
 	virtual void stop() = 0;
 
 	virtual int32_t configure(
-		const ControlInfoMap &sensorCtrlInfoMap) = 0;
+		const IPAConfigInfo &configInfo) = 0;
+
+	virtual void queueRequest(
+		const uint32_t frame,
+		const ControlList &sensorControls) = 0;
+
+	virtual void computeParams(
+		const uint32_t frame) = 0;
 
 	virtual void processStats(
+		const uint32_t frame,
+		const uint32_t bufferId,
 		const ControlList &sensorControls) = 0;
 
 	Signal<const ControlList &> setSensorControls;

@@ -790,16 +790,26 @@ extern const std::map<std::string, int32_t> LocationNameValueMap = {
 	{ "CameraLocationBack", CameraLocationBack },
 	{ "CameraLocationExternal", CameraLocationExternal },
 };
-extern const Control<int32_t> Location(LOCATION, "Location");
-extern const Control<int32_t> Rotation(ROTATION, "Rotation");
-extern const Control<std::string> Model(MODEL, "Model");
-extern const Control<Size> UnitCellSize(UNIT_CELL_SIZE, "UnitCellSize");
-extern const Control<Size> PixelArraySize(PIXEL_ARRAY_SIZE, "PixelArraySize");
-extern const Control<Span<const Rectangle>> PixelArrayOpticalBlackRectangles(PIXEL_ARRAY_OPTICAL_BLACK_RECTANGLES, "PixelArrayOpticalBlackRectangles");
-extern const Control<Span<const Rectangle>> PixelArrayActiveAreas(PIXEL_ARRAY_ACTIVE_AREAS, "PixelArrayActiveAreas");
-extern const Control<Rectangle> ScalerCropMaximum(SCALER_CROP_MAXIMUM, "ScalerCropMaximum");
-extern const Control<float> SensorSensitivity(SENSOR_SENSITIVITY, "SensorSensitivity");
-extern const Control<Span<const int64_t>> SystemDevices(SYSTEM_DEVICES, "SystemDevices");
+extern const Control<int32_t> Location(LOCATION, "Location", "libcamera", ControlId::Direction::Out, LocationNameValueMap);
+
+extern const Control<int32_t> Rotation(ROTATION, "Rotation", "libcamera", ControlId::Direction::Out);
+
+extern const Control<std::string> Model(MODEL, "Model", "libcamera", ControlId::Direction::Out);
+
+extern const Control<Size> UnitCellSize(UNIT_CELL_SIZE, "UnitCellSize", "libcamera", ControlId::Direction::Out);
+
+extern const Control<Size> PixelArraySize(PIXEL_ARRAY_SIZE, "PixelArraySize", "libcamera", ControlId::Direction::Out);
+
+extern const Control<Span<const Rectangle>> PixelArrayOpticalBlackRectangles(PIXEL_ARRAY_OPTICAL_BLACK_RECTANGLES, "PixelArrayOpticalBlackRectangles", "libcamera", ControlId::Direction::Out);
+
+extern const Control<Span<const Rectangle>> PixelArrayActiveAreas(PIXEL_ARRAY_ACTIVE_AREAS, "PixelArrayActiveAreas", "libcamera", ControlId::Direction::Out);
+
+extern const Control<Rectangle> ScalerCropMaximum(SCALER_CROP_MAXIMUM, "ScalerCropMaximum", "libcamera", ControlId::Direction::Out);
+
+extern const Control<float> SensorSensitivity(SENSOR_SENSITIVITY, "SensorSensitivity", "libcamera", ControlId::Direction::Out);
+
+extern const Control<Span<const int64_t>> SystemDevices(SYSTEM_DEVICES, "SystemDevices", "libcamera", ControlId::Direction::Out);
+
 
 
 namespace draft {
@@ -820,7 +830,8 @@ extern const std::map<std::string, int32_t> ColorFilterArrangementNameValueMap =
 	{ "RGB", RGB },
 	{ "MONO", MONO },
 };
-extern const Control<int32_t> ColorFilterArrangement(COLOR_FILTER_ARRANGEMENT, "ColorFilterArrangement");
+extern const Control<int32_t> ColorFilterArrangement(COLOR_FILTER_ARRANGEMENT, "ColorFilterArrangement", "draft", ControlId::Direction::Out, ColorFilterArrangementNameValueMap);
+
 
 
 } /* namespace draft */

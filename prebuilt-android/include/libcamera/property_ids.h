@@ -22,6 +22,7 @@ namespace properties {
 
 extern const ControlIdMap properties;
 
+
 enum {
 	LOCATION = 1,
 	ROTATION = 2,
@@ -34,6 +35,7 @@ enum {
 	SENSOR_SENSITIVITY = 9,
 	SYSTEM_DEVICES = 10,
 };
+
 
 enum LocationEnum {
 	CameraLocationFront = 0,
@@ -57,9 +59,11 @@ namespace draft {
 
 #define LIBCAMERA_HAS_DRAFT_VENDOR_PROPERTIES
 
+
 enum {
 	COLOR_FILTER_ARRANGEMENT = 10001,
 };
+
 
 enum ColorFilterArrangementEnum {
 	RGGB = 0,

@@ -22,6 +22,7 @@ namespace controls {
 
 extern const ControlIdMap controls;
 
+
 enum {
 	AE_ENABLE = 1,
 	AE_LOCKED = 2,
@@ -66,7 +67,9 @@ enum {
 	HDR_MODE = 41,
 	HDR_CHANNEL = 42,
 	GAMMA = 43,
+	DEBUG_METADATA_ENABLE = 44,
 };
+
 
 extern const Control<bool> AeEnable;
 extern const Control<bool> AeLocked;
@@ -225,10 +228,12 @@ extern const std::array<const ControlValue, 4> HdrChannelValues;
 extern const std::map<std::string, int32_t> HdrChannelNameValueMap;
 extern const Control<int32_t> HdrChannel;
 extern const Control<float> Gamma;
+extern const Control<bool> DebugMetadataEnable;
 
 namespace draft {
 
 #define LIBCAMERA_HAS_DRAFT_VENDOR_CONTROLS
+
 
 enum {
 	AE_PRECAPTURE_TRIGGER = 10001,
@@ -241,7 +246,13 @@ enum {
 	PIPELINE_DEPTH = 10008,
 	MAX_LATENCY = 10009,
 	TEST_PATTERN_MODE = 10010,
+	FACE_DETECT_MODE = 10011,
+	FACE_DETECT_FACE_RECTANGLES = 10012,
+	FACE_DETECT_FACE_SCORES = 10013,
+	FACE_DETECT_FACE_LANDMARKS = 10014,
+	FACE_DETECT_FACE_IDS = 10015,
 };
+
 
 enum AePrecaptureTriggerEnum {
 	AePrecaptureTriggerIdle = 0,
@@ -310,8 +321,29 @@ enum TestPatternModeEnum {
 extern const std::array<const ControlValue, 6> TestPatternModeValues;
 extern const std::map<std::string, int32_t> TestPatternModeNameValueMap;
 extern const Control<int32_t> TestPatternMode;
+enum FaceDetectModeEnum {
+	FaceDetectModeOff = 0,
+	FaceDetectModeSimple = 1,
+	FaceDetectModeFull = 2,
+};
+extern const std::array<const ControlValue, 3> FaceDetectModeValues;
+extern const std::map<std::string, int32_t> FaceDetectModeNameValueMap;
+extern const Control<int32_t> FaceDetectMode;
+extern const Control<Span<const Rectangle>> FaceDetectFaceRectangles;
+extern const Control<Span<const uint8_t>> FaceDetectFaceScores;
+extern const Control<Span<const Point>> FaceDetectFaceLandmarks;
+extern const Control<Span<const int32_t>> FaceDetectFaceIds;
 
 } /* namespace draft */
+
+namespace debug {
+
+#define LIBCAMERA_HAS_DEBUG_VENDOR_CONTROLS
+
+
+
+
+} /* namespace debug */
 
 } /* namespace controls */
 
