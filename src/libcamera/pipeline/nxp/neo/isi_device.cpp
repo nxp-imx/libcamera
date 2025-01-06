@@ -165,6 +165,7 @@ int ISIPipe::configure(const V4L2SubdeviceFormat &sinkFormat,
 
 	sourceFormat->fourcc = formats.at(code);
 	sourceFormat->size = sinkFormat.size;
+	sourceFormat->colorSpace = sinkFormat.colorSpace;
 
 	/* \todo Set stride and format. */
 	ret = output_->setFormat(sourceFormat);
@@ -267,6 +268,10 @@ const std::map<uint32_t, V4L2PixelFormat> &ISIPipe::mediaBusToPixelFormats()
 		{ MEDIA_BUS_FMT_SGBRG16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_SGBRG16) },
 		{ MEDIA_BUS_FMT_SGRBG16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_SGRBG16) },
 		{ MEDIA_BUS_FMT_SRGGB16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_SRGGB16) },
+		{ MEDIA_BUS_FMT_Y8_1X8, V4L2PixelFormat(V4L2_PIX_FMT_GREY) },
+		{ MEDIA_BUS_FMT_Y10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_Y10) },
+		{ MEDIA_BUS_FMT_Y12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_Y12) },
+		{ MEDIA_BUS_FMT_Y16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_Y16) },
 	};
 
 	return formats;

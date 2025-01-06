@@ -20,6 +20,7 @@
 #include <libcamera/ipa/core_ipa_interface.h>
 
 #include <libipa/fc_queue.h>
+#include <libipa/matrix.h>
 
 namespace libcamera {
 
@@ -91,6 +92,10 @@ struct IPAActiveState {
 		unsigned int temperatureK;
 		bool autoEnabled;
 	} awb;
+
+	struct {
+		Matrix<float, 3, 3> ccm;
+	} ccm;
 };
 
 struct IPAFrameContext : public FrameContext {
@@ -117,6 +122,10 @@ struct IPAFrameContext : public FrameContext {
 		ControlList mdControls;
 		bool metaDataValid;
 	} sensor;
+
+	struct {
+		Matrix<float, 3, 3> ccm;
+	} ccm;
 };
 
 struct IPAContext {

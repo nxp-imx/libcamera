@@ -119,6 +119,7 @@ public:
 	virtual int32_t init(
 		const IPASettings &settings,
 		const uint32_t hwRevision,
+		const std::string &sensorId,
 		const IPACameraSensorInfo &sensorInfo,
 		const ControlInfoMap &sensorControls,
 		ControlInfoMap *ipaControls,

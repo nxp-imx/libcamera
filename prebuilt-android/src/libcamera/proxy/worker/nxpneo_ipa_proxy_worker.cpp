@@ -74,12 +74,14 @@ public:
 		                
                 	[[maybe_unused]] const size_t settingsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 0);
                 	[[maybe_unused]] const size_t hwRevisionBufSize = readPOD<uint32_t>(_ipcMessage.data(), 4);
-                	[[maybe_unused]] const size_t sensorInfoBufSize = readPOD<uint32_t>(_ipcMessage.data(), 8);
-                	[[maybe_unused]] const size_t sensorControlsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 12);
+                	[[maybe_unused]] const size_t sensorIdBufSize = readPOD<uint32_t>(_ipcMessage.data(), 8);
+                	[[maybe_unused]] const size_t sensorInfoBufSize = readPOD<uint32_t>(_ipcMessage.data(), 12);
+                	[[maybe_unused]] const size_t sensorControlsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 16);
 
-                	const size_t settingsStart = 16;
+                	const size_t settingsStart = 20;
                 	const size_t hwRevisionStart = settingsStart + settingsBufSize;
-                	const size_t sensorInfoStart = hwRevisionStart + hwRevisionBufSize;
+                	const size_t sensorIdStart = hwRevisionStart + hwRevisionBufSize;
+                	const size_t sensorInfoStart = sensorIdStart + sensorIdBufSize;
                 	const size_t sensorControlsStart = sensorInfoStart + sensorInfoBufSize;
 
 
@@ -92,6 +94,11 @@ public:
                         IPADataSerializer<uint32_t>::deserialize(
                         	_ipcMessage.data().cbegin() + hwRevisionStart,
                         	_ipcMessage.data().cbegin() + hwRevisionStart + hwRevisionBufSize);
+
+                	std::string sensorId =
+                        IPADataSerializer<std::string>::deserialize(
+                        	_ipcMessage.data().cbegin() + sensorIdStart,
+                        	_ipcMessage.data().cbegin() + sensorIdStart + sensorIdBufSize);
 
                 	IPACameraSensorInfo sensorInfo =
                         IPADataSerializer<IPACameraSensorInfo>::deserialize(
@@ -109,7 +116,7 @@ public:
 
 			SensorConfig sensorConfig;
 
-			int32_t _callRet =ipa_->init(settings, hwRevision, sensorInfo, sensorControls, &ipaControls, &sensorConfig);
+			int32_t _callRet =ipa_->init(settings, hwRevision, sensorId, sensorInfo, sensorControls, &ipaControls, &sensorConfig);
 
 			IPCMessage::Header header = { _ipcMessage.header().cmd, _ipcMessage.header().cookie };
 			IPCMessage _response(header);

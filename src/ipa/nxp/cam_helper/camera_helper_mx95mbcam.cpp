@@ -16,6 +16,7 @@
 #include "md_parser_ox.h"
 
 #define ENABLE_EMBEDDED_DATA 1
+#define USE_CUSTOM_CONTROLS 0
 
 #define Q8_1 (0x100U)
 #define Q10_1 (0x400U)
@@ -30,34 +31,34 @@ namespace nxp {
 /*
  * Registers included in embedded data
  * List comes from Linux driver init, defined by access control configuration
- * for group 4 hold (register address 0x3804).
+ * for group 4 hold (register address 0x3208).
  */
-constexpr uint32_t AecHcgCtrl01Reg = 0x3501;
-constexpr uint32_t AecHcgCtrl02Reg = 0x3502;
-constexpr uint32_t AecHcgCtrl08Reg = 0x3508;
-constexpr uint32_t AecHcgCtrl09Reg = 0x3509;
-constexpr uint32_t AecHcgCtrl0aReg = 0x350a;
-constexpr uint32_t AecHcgCtrl0bReg = 0x350b;
-constexpr uint32_t AecHcgCtrl0cReg = 0x350c;
-constexpr uint32_t AecSpdCtrl01Reg = 0x3541;
-constexpr uint32_t AecSpdCtrl02Reg = 0x3542;
-constexpr uint32_t AecSpdCtrl08Reg = 0x3548;
-constexpr uint32_t AecSpdCtrl09Reg = 0x3549;
-constexpr uint32_t AecSpdCtrl0aReg = 0x354a;
-constexpr uint32_t AecSpdCtrl0bReg = 0x354b;
-constexpr uint32_t AecSpdCtrl0cReg = 0x354c;
-constexpr uint32_t AecLcgCtrl08Reg = 0x3588;
-constexpr uint32_t AecLcgCtrl09Reg = 0x3589;
-constexpr uint32_t AecLcgCtrl0aReg = 0x358a;
-constexpr uint32_t AecLcgCtrl0bReg = 0x358b;
-constexpr uint32_t AecLcgCtrl0cReg = 0x358c;
-constexpr uint32_t AecVsCtrl01Reg = 0x35c1;
-constexpr uint32_t AecVsCtrl02Reg = 0x35c2;
-constexpr uint32_t AecVsCtrl08Reg = 0x35c8;
-constexpr uint32_t AecVsCtrl09Reg = 0x35c9;
-constexpr uint32_t AecVsCtrl0aReg = 0x35ca;
-constexpr uint32_t AecVsCtrl0bReg = 0x35cb;
-constexpr uint32_t AecVsCtrl0cReg = 0x35cc;
+constexpr uint32_t AecHcgCtrl0eReg = 0x350e;
+constexpr uint32_t AecHcgCtrl0fReg = 0x350f;
+constexpr uint32_t AecHcgCtrl14Reg = 0x3514;
+constexpr uint32_t AecHcgCtrl15Reg = 0x3515;
+constexpr uint32_t AecHcgCtrl18Reg = 0x3518;
+constexpr uint32_t AecHcgCtrl19Reg = 0x3519;
+constexpr uint32_t AecHcgCtrl1aReg = 0x351a;
+constexpr uint32_t AecSpdCtrl0eReg = 0x354e;
+constexpr uint32_t AecSpdCtrl0fReg = 0x354f;
+constexpr uint32_t AecSpdCtrl14Reg = 0x3554;
+constexpr uint32_t AecSpdCtrl15Reg = 0x3555;
+constexpr uint32_t AecSpdCtrl18Reg = 0x3558;
+constexpr uint32_t AecSpdCtrl19Reg = 0x3559;
+constexpr uint32_t AecSpdCtrl1aReg = 0x355a;
+constexpr uint32_t AecLcgCtrl14Reg = 0x3594;
+constexpr uint32_t AecLcgCtrl15Reg = 0x3595;
+constexpr uint32_t AecLcgCtrl18Reg = 0x3598;
+constexpr uint32_t AecLcgCtrl19Reg = 0x3599;
+constexpr uint32_t AecLcgCtrl1aReg = 0x359a;
+constexpr uint32_t AecVsCtrl0eReg = 0x35ce;
+constexpr uint32_t AecVsCtrl0fReg = 0x35cf;
+constexpr uint32_t AecVsCtrl14Reg = 0x35d4;
+constexpr uint32_t AecVsCtrl15Reg = 0x35d5;
+constexpr uint32_t AecVsCtrl18Reg = 0x35d8;
+constexpr uint32_t AecVsCtrl19Reg = 0x35d9;
+constexpr uint32_t AecVsCtrl1aReg = 0x35da;
 constexpr uint32_t MipiCtrl3eReg = 0x483e;
 constexpr uint32_t MipiCtrl3fReg = 0x483f;
 constexpr uint32_t TmpReg26Reg = 0x4d2a;
@@ -94,34 +95,36 @@ constexpr uint32_t AwbGainVs4Reg = 0x5884;
 constexpr uint32_t AwbGainVs5Reg = 0x5885;
 constexpr uint32_t AwbGainVs6Reg = 0x5886;
 constexpr uint32_t AwbGainVs7Reg = 0x5887;
+constexpr uint32_t AwbGainVs8Reg = 0x5888;
+constexpr uint32_t AwbGainVs9Reg = 0x5889;
 
 constexpr std::initializer_list<uint32_t> registerList [[maybe_unused]] = {
-	AecHcgCtrl01Reg,
-	AecHcgCtrl02Reg,
-	AecHcgCtrl08Reg,
-	AecHcgCtrl09Reg,
-	AecHcgCtrl0aReg,
-	AecHcgCtrl0bReg,
-	AecHcgCtrl0cReg,
-	AecSpdCtrl01Reg,
-	AecSpdCtrl02Reg,
-	AecSpdCtrl08Reg,
-	AecSpdCtrl09Reg,
-	AecSpdCtrl0aReg,
-	AecSpdCtrl0bReg,
-	AecSpdCtrl0cReg,
-	AecLcgCtrl08Reg,
-	AecLcgCtrl09Reg,
-	AecLcgCtrl0aReg,
-	AecLcgCtrl0bReg,
-	AecLcgCtrl0cReg,
-	AecVsCtrl01Reg,
-	AecVsCtrl02Reg,
-	AecVsCtrl08Reg,
-	AecVsCtrl09Reg,
-	AecVsCtrl0aReg,
-	AecVsCtrl0bReg,
-	AecVsCtrl0cReg,
+	AecHcgCtrl0eReg,
+	AecHcgCtrl0fReg,
+	AecHcgCtrl14Reg,
+	AecHcgCtrl15Reg,
+	AecHcgCtrl18Reg,
+	AecHcgCtrl19Reg,
+	AecHcgCtrl1aReg,
+	AecSpdCtrl0eReg,
+	AecSpdCtrl0fReg,
+	AecSpdCtrl14Reg,
+	AecSpdCtrl15Reg,
+	AecSpdCtrl18Reg,
+	AecSpdCtrl19Reg,
+	AecSpdCtrl1aReg,
+	AecLcgCtrl14Reg,
+	AecLcgCtrl15Reg,
+	AecLcgCtrl18Reg,
+	AecLcgCtrl19Reg,
+	AecLcgCtrl1aReg,
+	AecVsCtrl0eReg,
+	AecVsCtrl0fReg,
+	AecVsCtrl14Reg,
+	AecVsCtrl15Reg,
+	AecVsCtrl18Reg,
+	AecVsCtrl19Reg,
+	AecVsCtrl1aReg,
 	MipiCtrl3eReg,
 	MipiCtrl3fReg,
 	TmpReg26Reg,
@@ -158,6 +161,8 @@ constexpr std::initializer_list<uint32_t> registerList [[maybe_unused]] = {
 	AwbGainVs5Reg,
 	AwbGainVs6Reg,
 	AwbGainVs7Reg,
+	AwbGainVs8Reg,
+	AwbGainVs9Reg,
 };
 
 class CameraHelperMx95mbcam : public CameraHelper
@@ -168,8 +173,10 @@ public:
 	uint32_t gainCode(double gain) const override;
 	double gain(uint32_t gainCode) const override;
 
+#if USE_CUSTOM_CONTROLS
 	void controlListSetAGC(
 		ControlList *ctrls, double exposure, double gain) const override;
+#endif
 
 	virtual void controlInfoMapGetExposureRange(
 		const ControlInfoMap *ctrls, std::vector<double> *minExposure,
@@ -179,13 +186,17 @@ public:
 		const ControlInfoMap *ctrls, std::vector<double> *minGain,
 		std::vector<double> *maxGain, std::vector<double> *defGain) const;
 
+#if USE_CUSTOM_CONTROLS
 	void controlListSetAWB(
 		ControlList *ctrls, const Span<const double, 4> gains) const override;
+#endif
 
 	int parseEmbedded(Span<const uint8_t> buffer, ControlList *mdControls) override;
 
+#if USE_CUSTOM_CONTROLS
 	int sensorControlsToMetaData(
 		const ControlList *sensorCtrls, ControlList *mdCtrls) const override;
+#endif
 
 private:
 	uint32_t calcConvRatio(uint32_t ratio) const;
@@ -278,7 +289,16 @@ private:
 	/* 23281us */
 	static constexpr uint32_t kMaxExposureLines = kVts - kMaxVsExposureLines - 12U - 1U;
 
+#if USE_CUSTOM_CONTROLS
 	static constexpr uint32_t kRowTimeNs = (kHts * 1000U) / kSclk;
+#else
+	/*
+	 * Use the actual values from the driver because the ones defined by the
+	 * camHelper distribution function are not correct:
+	 * double row time = 2 * hts / pixel clock = 2 * 2186 / 90MHz
+	 */
+	static constexpr uint32_t kRowTimeNs = (2 * 2186 * 1000 / 90);
+#endif
 
 	/* gain conversion ratio of HCG/LCG \todo should get from OTP sensor data */
 	static constexpr uint32_t kConvGainQ16 = 7.32f * Q16_1;
@@ -294,22 +314,15 @@ private:
 	static constexpr uint32_t kRatioL2VsQ16 = 1024U * Q16_1;
 
 	std::unique_ptr<MdParser> parser_;
-	/* Embedded data from previous frame */
-	struct embeddedData {
-		std::array<float, 3> analogGain;
-		std::array<float, 3> digitalGain;
-		std::array<float, 3> exposure;
-		std::array<float, 4> whiteBalanceGain;
-		float temperature;
-	};
-	embeddedData embeddedPreviousFrame_;
-	bool embeddedInitialized_;
 };
 
 CameraHelperMx95mbcam::CameraHelperMx95mbcam()
 {
 	/* Adapt the default delayedControls for the ox03c10 custom controls */
 	attributes_.delayedControlParams = {
+		{ V4L2_CID_ANALOGUE_GAIN, { 3, false } },
+		{ V4L2_CID_DIGITAL_GAIN, { 3, false } },
+		{ V4L2_CID_EXPOSURE, { 3, false } },
 		{ V4L2_CID_OX03C10_ANALOGUE_GAIN, { 3, false } },
 		{ V4L2_CID_OX03C10_DIGITAL_GAIN, { 3, false } },
 		{ V4L2_CID_OX03C10_EXPOSURE, { 3, false } },
@@ -325,37 +338,20 @@ CameraHelperMx95mbcam::CameraHelperMx95mbcam()
 #endif
 
 	parser_ = std::make_unique<MdParserOmniOx>(registerList);
-	embeddedPreviousFrame_ = {};
-	embeddedInitialized_ = false;
 
 	/* Note: gainType / gainConstants_ are unused */
 }
 
 uint32_t CameraHelperMx95mbcam::gainCode(double gain) const
 {
-	/* Analog gain is Q4.4 with variable fractional resolution */
-	if (gain >= kMaxAnalogGain)
-		gain = kMaxAnalogGain;
-	else if (gain < kMinAnalogGain)
-		gain = kMinAnalogGain;
-
-	uint32_t code;
-	if (gain >= 8.0)
-		code = (static_cast<int>(std::ceil(gain * 2.0)) << 3);
-	else if (gain >= 4.0)
-		code = (static_cast<int>(std::ceil(gain * 4.0)) << 2);
-	else if (gain >= 2.0)
-		code = (static_cast<int>(std::ceil(gain * 8.0)) << 1);
-	else
-		code = static_cast<int>(std::ceil(gain * 16.0));
-
-	return code;
+	/* V4L2_CID_ANALOGUE_GAIN code is Q16.16 */
+	return static_cast<uint32_t>(gain * (1 << 16));
 }
 
 double CameraHelperMx95mbcam::gain(uint32_t gainCode) const
 {
-	/* Analog gain is Q4.4 */
-	return static_cast<double>(gainCode) * 0.0625;
+	/* V4L2_CID_ANALOGUE_GAIN code is Q16.16 */
+	return (gainCode * 1.0 /  (1 << 16));
 }
 
 /**
@@ -457,6 +453,7 @@ uint32_t CameraHelperMx95mbcam::distributeDigitalGain(
 	return gain;
 }
 
+#if USE_CUSTOM_CONTROLS
 void CameraHelperMx95mbcam::controlListSetAGC(
 	ControlList *ctrls, double exposure, double gain) const
 {
@@ -519,7 +516,7 @@ void CameraHelperMx95mbcam::controlListSetAGC(
 		/* minGain for L, recalculated by conv_ratio */
 		lMinGainL = lMinGainS * sensorConversionRatio / Q16_1;
 	} else {
-		/* minGain for S, recalculated by ratio */
+		/* minGain for L, recalculated by ratio */
 		lMinGainL = lMinGainS * lRatioL2S / Q16_1;
 	}
 
@@ -561,7 +558,7 @@ void CameraHelperMx95mbcam::controlListSetAGC(
 		/**
 		 * \note <= is used instead of < because if kMinVsExposureLines is 0
 		 * then the expression would be always false and the compiler
-		 * might issue a warning than will be treated as error due to compiler flags
+		 * might issue a warning that will be treated as error due to compiler flags
 		 */
 		if (lExpVSinRows <= kMinVsExposureLines) {
 			lExpVSinRows = kMinVsExposureLines;
@@ -664,6 +661,7 @@ void CameraHelperMx95mbcam::controlListSetAGC(
 		sizeof(v4l2DigitalGains));
 	ctrls->set(V4L2_CID_OX03C10_DIGITAL_GAIN, digitalGainsData);
 }
+#endif
 
 void CameraHelperMx95mbcam::controlInfoMapGetExposureRange(
 	const ControlInfoMap *ctrls, std::vector<double> *minExposure,
@@ -705,7 +703,7 @@ void CameraHelperMx95mbcam::controlInfoMapGetAnalogGainRange(
 }
 
 int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
-					  ControlList *mdControls)
+					 ControlList *mdControls)
 {
 	if (!buffer.size())
 		return -1;
@@ -718,14 +716,14 @@ int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 
 	/* Analog gain */
 	uint32_t hcgAnalogGainCode =
-		((registers[AecHcgCtrl08Reg] & 0x0fU) << 4U) |
-		((registers[AecHcgCtrl09Reg] & 0xf0U) >> 4U);
+		((registers[AecHcgCtrl14Reg] & 0x1fU) << 7U) |
+		(registers[AecHcgCtrl15Reg] & 0x7fU);
 	uint32_t lcgAnalogGainCode =
-		((registers[AecLcgCtrl08Reg] & 0x0fU) << 4U) |
-		((registers[AecLcgCtrl09Reg] & 0xf0U) >> 4U);
+		((registers[AecLcgCtrl14Reg] & 0x1fU) << 7U) |
+		(registers[AecLcgCtrl15Reg] & 0x7fU);
 	uint32_t vsAnalogGainCode =
-		((registers[AecVsCtrl08Reg] & 0x0fU) << 4U) |
-		((registers[AecVsCtrl09Reg] & 0xf0U) >> 4U);
+		((registers[AecVsCtrl14Reg] & 0x1fU) << 7U) |
+		(registers[AecVsCtrl15Reg] & 0x7fU);
 
 	std::array<uint32_t, 3> aGainCodes = { hcgAnalogGainCode,
 					       lcgAnalogGainCode,
@@ -737,31 +735,22 @@ int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 	const uint32_t sensorConversionRatioQ16 = calcConvRatio(kConvGainQ16);
 	aGainsArray[0] *= (static_cast<float>(sensorConversionRatioQ16) / Q16_1);
 
-	/* workaround: add one frame delay in reported metadata */
-	Span<float> aGains;
-	if (embeddedInitialized_)
-		aGains = Span<float>(embeddedPreviousFrame_.analogGain);
-	else
-		aGains = Span<float>(aGainsArray);
+	Span<float> aGains = Span<float>(aGainsArray);
 	mdControls->set(md::AnalogueGain, aGains);
-	/* store current embedded data for next frame */
-	ASSERT(aGainsArray.size() == embeddedPreviousFrame_.analogGain.size());
-	std::copy(aGainsArray.begin(), aGainsArray.end(),
-		  embeddedPreviousFrame_.analogGain.begin());
 
 	/* Digital gain */
 	uint32_t hcgDigitalGainCode =
-		((registers[AecHcgCtrl0aReg] & 0x0fU) << 10U) |
-		(registers[AecHcgCtrl0bReg] << 2U) |
-		((registers[AecHcgCtrl0cReg] & 0xc0U) >> 6U);
+		((registers[AecHcgCtrl18Reg] & 0x0fU) << 10U) |
+		(registers[AecHcgCtrl19Reg] << 2U) |
+		(registers[AecHcgCtrl1aReg] & 0x03U);
 	uint32_t lcgDigitalGainCode =
-		((registers[AecLcgCtrl0aReg] & 0x0fU) << 10U) |
-		(registers[AecLcgCtrl0bReg] << 2U) |
-		((registers[AecLcgCtrl0cReg] & 0xc0U) >> 6U);
+		((registers[AecLcgCtrl18Reg] & 0x0fU) << 10U) |
+		(registers[AecLcgCtrl19Reg] << 2U) |
+		(registers[AecLcgCtrl1aReg] & 0x03U);
 	uint32_t vsDigitalGainCode =
-		((registers[AecVsCtrl0aReg] & 0x0fU) << 10U) |
-		(registers[AecVsCtrl0bReg] << 2U) |
-		((registers[AecVsCtrl0cReg] & 0xc0U) >> 6U);
+		((registers[AecVsCtrl18Reg] & 0x0fU) << 10U) |
+		(registers[AecVsCtrl19Reg] << 2U) |
+		(registers[AecVsCtrl1aReg] & 0x03U);
 
 	std::array<uint32_t, 3> dGainCodes = { hcgDigitalGainCode,
 					       lcgDigitalGainCode,
@@ -769,22 +758,14 @@ int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 	std::array<float, 3> dGainsArray;
 	digitalGains(Span<uint32_t>(dGainCodes), Span<float>(dGainsArray));
 
-	/* workaround: add one frame delay in reported metadata */
-	Span<float> dGains;
-	if (embeddedInitialized_)
-		dGains = Span<float>(embeddedPreviousFrame_.digitalGain);
-	else
-		dGains = Span<float>(dGainsArray);
+	Span<float> dGains = Span<float>(dGainsArray);
 	mdControls->set(md::DigitalGain, dGains);
-	/* store current embedded data for next frame */
-	ASSERT(dGainsArray.size() == embeddedPreviousFrame_.digitalGain.size());
-	std::copy(dGainsArray.begin(), dGainsArray.end(),
-		  embeddedPreviousFrame_.digitalGain.begin());
 
+	/* Exposure */
 	uint32_t dcgExposure =
-		(registers[AecHcgCtrl01Reg] << 8U) | registers[AecHcgCtrl02Reg];
+		(registers[AecHcgCtrl0eReg] << 8U) | registers[AecHcgCtrl0fReg];
 	uint32_t vsExposure =
-		(registers[AecVsCtrl01Reg] << 8U) | registers[AecVsCtrl02Reg];
+		(registers[AecVsCtrl0eReg] << 8U) | registers[AecVsCtrl0fReg];
 
 	float dcgExposureS =
 		dcgExposure * kRowTimeNs / 1.0e9f;
@@ -796,17 +777,8 @@ int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 						dcgExposureS,
 						vsExposureS };
 
-	/* workaround: add one frame delay in reported metadata */
-	Span<float> exposures;
-	if (embeddedInitialized_)
-		exposures = Span<float>(embeddedPreviousFrame_.exposure);
-	else
-		exposures = Span<float>(exposuresArray);
+	Span<float> exposures = Span<float>(exposuresArray);
 	mdControls->set(md::Exposure, exposures);
-	/* store current embedded data for next frame */
-	ASSERT(exposuresArray.size() == embeddedPreviousFrame_.exposure.size());
-	std::copy(exposuresArray.begin(), exposuresArray.end(),
-		  embeddedPreviousFrame_.exposure.begin());
 
 	/* White balance */
 	uint32_t blueGain =
@@ -824,20 +796,10 @@ int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 
 	std::array<uint32_t, 4> wbGainCodes = { redGain, greenRGain, greenBGain, blueGain };
 	std::array<float, 4> wbGainsArray;
-
 	whiteBalanceGains(Span<uint32_t>(wbGainCodes), Span<float>(wbGainsArray));
 
-	/* workaround: add one frame delay in reported metadata */
-	Span<float> wbGains;
-	if (embeddedInitialized_)
-		wbGains = Span<float>(embeddedPreviousFrame_.whiteBalanceGain);
-	else
-		wbGains = Span<float>(wbGainsArray);
+	Span<float> wbGains = Span<float>(wbGainsArray);
 	mdControls->set(md::WhiteBalanceGain, wbGains);
-	/* store current embedded data for next frame */
-	ASSERT(wbGainsArray.size() == embeddedPreviousFrame_.whiteBalanceGain.size());
-	std::copy(wbGainsArray.begin(), wbGainsArray.end(),
-		  embeddedPreviousFrame_.whiteBalanceGain.begin());
 
 	/* Sensor temperature is UQ8.8 and negative above 0xc000 */
 	static constexpr uint32_t kTemperatureMax = 0xc000U;
@@ -849,21 +811,12 @@ int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 	else
 		temperature = -((uTemperature - kTemperatureMax) * 1.0f / Q8_1);
 
-	/* workaround: add one frame delay in reported metadata */
-	float temp;
-	if (embeddedInitialized_)
-		temp = embeddedPreviousFrame_.temperature;
-	else
-		temp = temperature;
-	mdControls->set(md::Temperature, temp);
-	/* store current embedded data for next frame */
-	embeddedPreviousFrame_.temperature = temperature;
-
-	embeddedInitialized_ = true;
+	mdControls->set(md::Temperature, temperature);
 
 	return 0;
 }
 
+#if USE_CUSTOM_CONTROLS
 void CameraHelperMx95mbcam::controlListSetAWB(
 	ControlList *ctrls, Span<const double, 4> gains) const
 {
@@ -978,7 +931,16 @@ int CameraHelperMx95mbcam::sensorControlsToMetaData(const ControlList *sensorCtr
 			reinterpret_cast<const struct ox03c10_wb_capture_gain *>(data.data());
 
 		std::array<uint32_t, 4> wbGainCodes = { wb->r, wb->gr, wb->gb, wb->b };
-		whiteBalanceGains(Span<uint32_t>(wbGainCodes), Span<float>(wbGainsArray));
+		auto iter = std::find(wbGainCodes.begin(), wbGainCodes.end(), 0);
+		/*
+		 * In case WB gains are reported from sensor with value 0.0f,
+		 * wbGain should be forced to default value 1.0f for
+		 * valid processing.
+		 * Hence avoid updating wbGainArray with wbGainCodes
+		 */
+		if (iter == wbGainCodes.end())
+			whiteBalanceGains(Span<uint32_t>(wbGainCodes),
+					  Span<float>(wbGainsArray));
 	} else {
 		/* Do nothing - optional control */
 	}
@@ -990,6 +952,7 @@ int CameraHelperMx95mbcam::sensorControlsToMetaData(const ControlList *sensorCtr
 
 	return ret;
 }
+#endif
 
 Span<float> CameraHelperMx95mbcam::analogGains(
 	Span<const uint32_t> gainCodes, Span<float> gains) const

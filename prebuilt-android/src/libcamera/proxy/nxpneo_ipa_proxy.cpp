@@ -126,26 +126,28 @@ void IPAProxyNxpNeo::recvMessage(const IPCMessage &data)
 int32_t IPAProxyNxpNeo::init(
 	const IPASettings &settings,
 	const uint32_t hwRevision,
+	const std::string &sensorId,
 	const IPACameraSensorInfo &sensorInfo,
 	const ControlInfoMap &sensorControls,
 	ControlInfoMap *ipaControls,
 	SensorConfig *sensorConfig)
 {
 	if (isolate_)
-		return initIPC(settings, hwRevision, sensorInfo, sensorControls, ipaControls, sensorConfig);
+		return initIPC(settings, hwRevision, sensorId, sensorInfo, sensorControls, ipaControls, sensorConfig);
 	else
-		return initThread(settings, hwRevision, sensorInfo, sensorControls, ipaControls, sensorConfig);
+		return initThread(settings, hwRevision, sensorId, sensorInfo, sensorControls, ipaControls, sensorConfig);
 }
 
 int32_t IPAProxyNxpNeo::initThread(
 	const IPASettings &settings,
 	const uint32_t hwRevision,
+	const std::string &sensorId,
 	const IPACameraSensorInfo &sensorInfo,
 	const ControlInfoMap &sensorControls,
 	ControlInfoMap *ipaControls,
 	SensorConfig *sensorConfig)
 {
-	int32_t _ret = ipa_->init(settings, hwRevision, sensorInfo, sensorControls, ipaControls, sensorConfig);
+	int32_t _ret = ipa_->init(settings, hwRevision, sensorId, sensorInfo, sensorControls, ipaControls, sensorConfig);
 
 	proxy_.moveToThread(&thread_);
 
@@ -155,6 +157,7 @@ int32_t IPAProxyNxpNeo::initThread(
 int32_t IPAProxyNxpNeo::initIPC(
 	const IPASettings &settings,
 	const uint32_t hwRevision,
+	const std::string &sensorId,
 	const IPACameraSensorInfo &sensorInfo,
 	const ControlInfoMap &sensorControls,
 	ControlInfoMap *ipaControls,
@@ -173,6 +176,10 @@ int32_t IPAProxyNxpNeo::initIPC(
 	std::tie(hwRevisionBuf, std::ignore) =
 		IPADataSerializer<uint32_t>::serialize(hwRevision
 );
+	std::vector<uint8_t> sensorIdBuf;
+	std::tie(sensorIdBuf, std::ignore) =
+		IPADataSerializer<std::string>::serialize(sensorId
+);
 	std::vector<uint8_t> sensorInfoBuf;
 	std::tie(sensorInfoBuf, std::ignore) =
 		IPADataSerializer<IPACameraSensorInfo>::serialize(sensorInfo
@@ -183,10 +190,12 @@ int32_t IPAProxyNxpNeo::initIPC(
 , &controlSerializer_);
 	appendPOD<uint32_t>(_ipcInputBuf.data(), settingsBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), hwRevisionBuf.size());
+	appendPOD<uint32_t>(_ipcInputBuf.data(), sensorIdBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), sensorInfoBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), sensorControlsBuf.size());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), settingsBuf.begin(), settingsBuf.end());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), hwRevisionBuf.begin(), hwRevisionBuf.end());
+	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), sensorIdBuf.begin(), sensorIdBuf.end());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), sensorInfoBuf.begin(), sensorInfoBuf.end());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), sensorControlsBuf.begin(), sensorControlsBuf.end());
 

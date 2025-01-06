@@ -153,7 +153,8 @@ int KMSSink::configure(const libcamera::CameraConfiguration &config)
 	colorEncoding_ = std::nullopt;
 	colorRange_ = std::nullopt;
 
-	if (cfg.colorSpace->ycbcrEncoding == libcamera::ColorSpace::YcbcrEncoding::None)
+	if (!cfg.colorSpace.has_value() ||
+	    cfg.colorSpace->ycbcrEncoding == libcamera::ColorSpace::YcbcrEncoding::None)
 		return 0;
 
 	/*

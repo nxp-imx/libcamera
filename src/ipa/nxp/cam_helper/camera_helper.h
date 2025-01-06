@@ -49,7 +49,6 @@ extern const ControlIdMap controlIdMap;
 
 } /* namespace md */
 
-
 /* Subset of IPACameraSensorInfo structure*/
 struct CameraMode {
 	uint64_t pixelRate;

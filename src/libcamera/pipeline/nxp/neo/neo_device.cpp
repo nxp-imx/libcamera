@@ -585,6 +585,10 @@ const std::vector<V4L2PixelFormat> &NeoDevice::frameFormats()
 		V4L2PixelFormat(V4L2_PIX_FMT_NV21),
 		V4L2PixelFormat(V4L2_PIX_FMT_NV16),
 		V4L2PixelFormat(V4L2_PIX_FMT_NV61),
+		V4L2PixelFormat(V4L2_PIX_FMT_GREY),
+		V4L2PixelFormat(V4L2_PIX_FMT_Y10),
+		V4L2PixelFormat(V4L2_PIX_FMT_Y12),
+		V4L2PixelFormat(V4L2_PIX_FMT_Y16),
 	};
 
 	return formats;
@@ -623,6 +627,10 @@ const std::vector<V4L2PixelFormat> &NeoDevice::input0Formats()
 		V4L2PixelFormat(V4L2_PIX_FMT_SGBRG16),
 		V4L2PixelFormat(V4L2_PIX_FMT_SGRBG16),
 		V4L2PixelFormat(V4L2_PIX_FMT_SRGGB16),
+		V4L2PixelFormat(V4L2_PIX_FMT_GREY),
+		V4L2PixelFormat(V4L2_PIX_FMT_Y10),
+		V4L2PixelFormat(V4L2_PIX_FMT_Y12),
+		V4L2PixelFormat(V4L2_PIX_FMT_Y16),
 	};
 
 	return formats;
@@ -651,6 +659,10 @@ const std::vector<V4L2PixelFormat> &NeoDevice::input1Formats()
 		V4L2PixelFormat(V4L2_PIX_FMT_SGBRG16),
 		V4L2PixelFormat(V4L2_PIX_FMT_SGRBG16),
 		V4L2PixelFormat(V4L2_PIX_FMT_SRGGB16),
+		V4L2PixelFormat(V4L2_PIX_FMT_GREY),
+		V4L2PixelFormat(V4L2_PIX_FMT_Y10),
+		V4L2PixelFormat(V4L2_PIX_FMT_Y12),
+		V4L2PixelFormat(V4L2_PIX_FMT_Y16),
 	};
 
 	return formats;

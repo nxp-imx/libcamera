@@ -25,7 +25,7 @@ private:
 	MdParser::Status fetchRegister(libcamera::Span<const uint8_t> buffer,
 				       uint32_t registerOffset, uint8_t *value);
 
-	static constexpr unsigned int kTag = 0xDA;
+	static constexpr unsigned int kTag = 0xda;
 	std::vector<uint32_t> registerList_;
 	uint32_t registerCount_;
 };

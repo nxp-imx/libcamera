@@ -77,7 +77,7 @@ public:
 	int start(const ControlList *controls);
 	void stopDevice();
 
-	void queuePendingRequests();
+	int queuePendingRequests();
 
 	int init();
 	PipelineHandlerNxpNeo *pipe();
@@ -89,6 +89,7 @@ public:
 				    Transform transform);
 
 	CameraSensor *sensor() const { return sensor_.get(); }
+	NeoDevice *neoDevice() const { return neo_.get(); }
 	std::string cameraName() const { return sensor_->entity()->name(); }
 
 	bool rawStreamOnly_ = false;
@@ -312,8 +313,20 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 			   (info.planes[0].bytesPerGroup <= 2) &&
 			   (info.planes[1].bytesPerGroup == 0)) {
 			/*  pixel formats Rn detection (grey/Yn) */
-			irCount++;
-			cfg.setStream(streamIr);
+			if (data_->sensorIsRgbIr()) {
+				/* iR stream handles only Y8 and Y16 formats */
+				if ((irCount == 0) &&
+				    ((info.bitsPerPixel % 8u) == 0)) {
+					irCount++;
+					cfg.setStream(streamIr);
+				} else {
+					yuvRgbCount++;
+					cfg.setStream(streamFrame);
+				}
+			} else {
+				yuvRgbCount++;
+				cfg.setStream(streamFrame);
+			}
 		} else if ((info.colourEncoding == PixelFormatInfo::ColourEncodingYUV) ||
 			   (info.colourEncoding == PixelFormatInfo::ColourEncodingRGB)) {
 			yuvRgbCount++;
@@ -332,9 +345,6 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 		return Invalid;
 	} else if (irCount > 1) {
 		LOG(NxpNeoPipe, Debug) << "Multiple Ir streams not supported";
-		return Invalid;
-	} else if ((irCount > 1) && !data_->sensorIsRgbIr()) {
-		LOG(NxpNeoPipe, Debug) << "Sensor has no RGB-Ir support";
 		return Invalid;
 	}
 
@@ -403,10 +413,30 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 			cfg->stride = info.stride(cfg->size.width, 0, 1);
 			cfg->frameSize = info.frameSize(cfg->size, 1);
 
+			V4L2DeviceFormat format = {};
+			format.size = cfg->size;
+			format.fourcc = (V4L2PixelFormat::fromPixelFormat(cfg->pixelFormat))[0];
+			format.colorSpace = cfg->colorSpace;
+
+			/* For frame stream, the user can choose the
+			 * sRGB colorspace for the RGB output formats.
+			 * The sRGB colorspace conversion from libcamera
+			 * to v4l2 is not directly supported, so use
+			 * libcamera sYCC instead that maps to v4l2
+			 * JPEG colorspace that is a v4l2 sRGB alias.
+			 */
+			if (format.colorSpace == ColorSpace::Srgb)
+				format.colorSpace = ColorSpace::Sycc;
+
+			if (isFrame) {
+				data_->neoDevice()->frame_->tryFormat(&format);
+				cfg->colorSpace = format.colorSpace;
+			}
+
 			LOG(NxpNeoPipe, Debug) << "Assigned " << cfg->toString()
-					   << " to the "
-					   << (isFrame ? "frame" : "ir")
-					   << " stream";
+					       << " to the "
+					       << (isFrame ? "frame" : "ir")
+					       << " stream";
 		} else if (isRaw) {
 			cfg->pixelFormat = rawPixelFormat;
 			cfg->size = sensorSize;
@@ -416,35 +446,13 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 			cfg->frameSize = info.frameSize(cfg->size, 64);
 
 			LOG(NxpNeoPipe, Debug) << "Assigned " << cfg->toString()
-					   << " to the raw stream";
+					       << " to the raw stream";
 		} else {
 			LOG(NxpNeoPipe, Error) << "Unknown configuration stream";
 			return Invalid;
 		}
 
 		cfg->bufferCount = NxpNeoCameraConfiguration::kBufferCount;
-
-		/*
-		 * Linux driver currently supports only sRGB color space for the
-		 * decoded frame output.
-		 * Infrared grayscale stream is considered as raw because it has
-		 * full range encoding and is not gamma corrected. Thus, do not
-		 * use ColorSpace::adjust() method here, as that would override
-		 * the linear transfer function, as it considers grayscale to be
-		 * a YUV format unlikely to be linear.
-		 * Thus, both infrared and raw streams are associated to a raw
-		 * color space.
-		 */
-		ColorSpace colorSpace = ColorSpace::Raw;
-		if (isFrame) {
-			const PixelFormatInfo &info = PixelFormatInfo::info(cfg->pixelFormat);
-			colorSpace = ColorSpace::Srgb;
-			if (info.colourEncoding == PixelFormatInfo::ColourEncodingYUV) {
-				colorSpace.ycbcrEncoding = ColorSpace::YcbcrEncoding::Rec601;
-				colorSpace.range = ColorSpace::Range::Limited;
-			}
-		}
-		cfg->colorSpace = colorSpace;
 
 		if (cfg->pixelFormat != originalCfg.pixelFormat ||
 		    cfg->size != originalCfg.size) {
@@ -484,6 +492,7 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 	PixelFormat rawPixelFormat;
 	unsigned int rawCode = data->getRawMediaBusFormat(&rawPixelFormat);
 	std::vector<Size> sensorSizes = sensor->sizes(rawCode);
+	std::optional<ColorSpace> colorSpace;
 
 	/* Top embedded data from sensor are cropped before being fed to ISP */
 	std::vector<Size> pixelSizes(sensorSizes);
@@ -537,9 +546,11 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 			 */
 			if (frameOutputAvailable) {
 				pixelFormat = frameFormats[0].toPixelFormat();
+				colorSpace = ColorSpace::Sycc;
 				frameOutputAvailable = false;
 			} else if (irOutputAvailable) {
 				pixelFormat = irFormats[0].toPixelFormat();
+				colorSpace = ColorSpace::Raw;
 				irOutputAvailable = false;
 			} else {
 				LOG(NxpNeoPipe, Error) << "Too many yuv/rgb streams";
@@ -560,6 +571,7 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 				return nullptr;
 			}
 			pixelFormat = rawPixelFormat;
+			colorSpace = ColorSpace::Raw;
 			streamFormats[pixelFormat] = sensorRanges;
 			rawOutputAvailable = false;
 			cfgSize = sensorSizes.back();
@@ -576,6 +588,7 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 		StreamConfiguration cfg(formats);
 		cfg.size = cfgSize;
 		cfg.pixelFormat = pixelFormat;
+		cfg.colorSpace = colorSpace;
 		cfg.bufferCount = NxpNeoCameraConfiguration::kBufferCount;
 
 		config->addConfiguration(cfg);
@@ -620,15 +633,12 @@ int PipelineHandlerNxpNeo::queueRequestDevice(Camera *camera, Request *request)
 	NxpNeoCameraData *data = cameraData(camera);
 
 	data->pendingRequests_.push(request);
-	data->queuePendingRequests();
-
-	return 0;
+	return data->queuePendingRequests();
 }
 
 bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 {
 	int ret;
-	constexpr unsigned int kMaxNeoDevices = 8;
 
 	/*
 	 * Prerequisite for pipeline operation is that frontend media controller
@@ -650,30 +660,6 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 		return false;
 	}
 
-	/*
-	 * Discover Neo ISP media controller devices
-	 */
-	std::queue<MediaDevice *> neos;
-	MediaDevice *neoDev;
-	DeviceMatch isp(NeoDevice::kDriverName());
-	isp.add(NeoDevice::kSDevNeoEntityName());
-	isp.add(NeoDevice::kVDevInput0EntityName());
-	isp.add(NeoDevice::kVDevInput1EntityName());
-	isp.add(NeoDevice::kVDevEntityParamsName());
-	isp.add(NeoDevice::kVDevEntityFrameName());
-	isp.add(NeoDevice::kVDevEntityIrName());
-	isp.add(NeoDevice::kVDevEntityStatsName());
-
-	for (unsigned int i = 0; i < kMaxNeoDevices; i++) {
-		neoDev = acquireMediaDevice(enumerator, isp);
-		if (neoDev)
-			neos.push(neoDev);
-	}
-	if (!neos.size()) {
-		LOG(NxpNeoPipe, Debug) << "No ISP media device";
-		return false;
-	}
-
 	ret = loadPipelineConfig();
 	if (ret)
 		return false;
@@ -683,21 +669,30 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 	 * Bind each camera to an ISP entity
 	 */
 	numCameras_ = 0;
+
+	DeviceMatch isp(NeoDevice::kDriverName());
+	isp.add(NeoDevice::kSDevNeoEntityName());
+	isp.add(NeoDevice::kVDevInput0EntityName());
+	isp.add(NeoDevice::kVDevInput1EntityName());
+	isp.add(NeoDevice::kVDevEntityParamsName());
+	isp.add(NeoDevice::kVDevEntityFrameName());
+	isp.add(NeoDevice::kVDevEntityIrName());
+	isp.add(NeoDevice::kVDevEntityStatsName());
+
 	for (MediaEntity *entity : isiMedia_->entities()) {
 		if (entity->function() != MEDIA_ENT_F_CAM_SENSOR)
 			continue;
 
-		if (!neos.size())
+		MediaDevice *neoDevice = acquireMediaDevice(enumerator, isp);
+		if (!neoDevice)
 			break;
 
-		ret = createCamera(entity, neos.front(), numCameras_);
-		if (ret) {
+		ret = createCamera(entity, neoDevice, numCameras_);
+		if (ret)
 			LOG(NxpNeoPipe, Warning) << "Failed to probe camera "
 					     << entity->name() << ": " << ret;
-		} else {
+		else
 			numCameras_++;
-			neos.pop();
-		}
 	}
 
 	if (numCameras_ < 1)
@@ -948,7 +943,14 @@ int NxpNeoCameraData::configure(CameraConfiguration *c)
 				stream == &streamFrame_ ? devFormatFrame : devFormatIr;
 			devFormat.size = cfg.size;
 			devFormat.fourcc = fmt;
-			devFormat.colorSpace = cfg.colorSpace;
+
+			/* Use libcamera sYCC colorspace definition that maps
+			 * to a v4l2 sRGB colorspace equivalent.
+			 */
+			if (cfg.colorSpace == ColorSpace::Srgb)
+				devFormat.colorSpace = ColorSpace::Sycc;
+			else
+				devFormat.colorSpace = cfg.colorSpace;
 		}
 
 		NeoDevice::PipeConfig pipeConfig = {};
@@ -1122,7 +1124,7 @@ void NxpNeoCameraData::stopDevice()
 	freeBuffers();
 }
 
-void NxpNeoCameraData::queuePendingRequests()
+int NxpNeoCameraData::queuePendingRequests()
 {
 	FrameBuffer *reqRawBuffer;
 	NxpNeoFrames::Info *info;
@@ -1157,10 +1159,9 @@ void NxpNeoCameraData::queuePendingRequests()
 		if (ret) {
 			LOG(NxpNeoPipe, Error)
 				<< "Failed to queue buffers, unbalanced queues";
-			request->_d()->cancel();
-			pipe()->completeRequest(request);
 			frameInfos_.remove(info);
-			return;
+			pendingRequests_.pop();
+			return ret;
 		}
 
 		info->paramsBuffer->_d()->setRequest(request);
@@ -1172,7 +1173,7 @@ void NxpNeoCameraData::queuePendingRequests()
 		processingRequests_.push(request);
 	}
 
-	return;
+	return 0;
 }
 
 /**
@@ -1512,6 +1513,7 @@ int NxpNeoCameraData::loadIPA()
 	ipa::nxpneo::SensorConfig sensorConfig;
 	ret = ipa_->init(IPASettings{ ipaTuningFile, sensor->model() },
 			 hwRevision,
+			 sensor->id(),
 			 sensorInfo, sensor->controls(),
 			 &ipaControls_,
 			 &sensorConfig);

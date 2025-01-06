@@ -19,7 +19,7 @@ Origin:                     NXP (LGPL-2.1-or-later)
 
 Description:                Libcamera cam and qcam sample applications and unit tests
 Location:                   src/apps/cam/*
-							src/apps/qcam/*
-							test/
+                            src/apps/qcam/*
+                            test/
 License File:               LICENSES/GPL-2.0-or-later
 Origin:                     Libcamera
