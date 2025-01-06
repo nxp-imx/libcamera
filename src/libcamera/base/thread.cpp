@@ -462,7 +462,12 @@ void Thread::setThreadAffinityInternal()
 		return;
 
 	const cpu_set_t &cpuset = data_->cpuset_.value();
+#ifdef ANDROID
+	auto tid = pthread_gettid_np(thread_.native_handle());
+	sched_setaffinity(tid, sizeof(cpuset), &cpuset);
+#else
 	pthread_setaffinity_np(thread_.native_handle(), sizeof(cpuset), &cpuset);
+#endif
 }
 
 /**
