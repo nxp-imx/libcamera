@@ -27,6 +27,7 @@ filegroup {
     srcs: [
         ".git/**/*",
         ".gitignore",
+        ".editorconfig",
         ".clang*",
         ".reuse/**/*",
         "subprojects/.gitignore",
@@ -127,6 +128,7 @@ cc_library_shared {
         "src/libcamera/ipc_pipe_unixsocket.cpp",
         "src/libcamera/ipc_unixsocket.cpp",
         "src/libcamera/mapped_framebuffer.cpp",
+        "src/libcamera/matrix.cpp",
         "src/libcamera/media_device.cpp",
         "src/libcamera/media_object.cpp",
         "src/libcamera/pipeline_handler.cpp",
@@ -141,6 +143,7 @@ cc_library_shared {
         "src/libcamera/v4l2_videodevice.cpp",
         "src/libcamera/yaml_parser.cpp",
         "src/libcamera/sensor/camera_sensor.cpp",
+        "src/libcamera/sensor/camera_sensor_legacy.cpp",
         "src/libcamera/sensor/camera_sensor_properties.cpp",
         "src/libcamera/pipeline/nxp/neo/*.cpp",
         "src/libcamera/pipeline/imx8-isi/*.cpp",
