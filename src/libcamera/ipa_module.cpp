@@ -331,7 +331,7 @@ int IPAModule::loadIPAModuleInfo()
 
 		sign.setFileName(signPath);
 		LOG(IPAModule, Debug)
-				<< "Use customized sign path '" << sign.fileName() << "'";
+			<< "Use customized sign path '" << sign.fileName() << "'";
 	}
 
 	if (!sign.open(File::OpenModeFlag::ReadOnly)) {
