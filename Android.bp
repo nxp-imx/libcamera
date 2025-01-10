@@ -166,7 +166,7 @@ cc_library_shared {
         "-DIPA_PROXY_DIR=\"/vendor/bin\"",
         "-DIPA_CONFIG_DIR=\"/vendor/etc/configs/libcamera\"",
         "-DIPA_MODULE_DIR=\"/vendor/lib64/ipa\"",
-        "-DNXP_NEO_PIPELINE_DATA_DIR=\"/vendor/etc/configs/libcamera\"",
+        "-DNXP_NEO_PIPELINE_DATA_DIR=\"/vendor/etc/configs/libcamera/nxp/neo\"",
         "-DHAVE_IPA_PUBKEY=1",
         "-DHAVE_MEMFD_CREATE=1",
         "-DHAVE_FILE_SEALS=1",
@@ -463,7 +463,7 @@ cc_binary {
 // config.yaml
 prebuilt_etc {
     name: "config.yaml",
-    sub_dir: "configs/libcamera",
+    sub_dir: "configs/libcamera/nxp/neo",
     src: "src/libcamera/pipeline/nxp/neo/data/config.yaml",
     vendor: true,
 }
