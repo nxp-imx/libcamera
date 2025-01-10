@@ -5,7 +5,6 @@ version: 1
 algorithms:
   - Awb:
   - Agc:
-      relativeLuminanceTarget: 0.7
   - Drc:
       # DRC Global Tonemap[1-416] u16 (8.8 format)
       # This global LUT values are universal values which can apply to

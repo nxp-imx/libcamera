@@ -393,8 +393,8 @@ void Agc::process(IPAContext &context, [[maybe_unused]] const uint32_t frame,
 
 	Histogram hist = parseStatistics(stats);
 	rGain_ = context.activeState.awb.gains.automatic.red;
-	gGain_ = context.activeState.awb.gains.automatic.blue;
-	bGain_ = context.activeState.awb.gains.automatic.green;
+	gGain_ = context.activeState.awb.gains.automatic.green;
+	bGain_ = context.activeState.awb.gains.automatic.blue;
 
 	/*
 	 * The Agc algorithm needs to know the effective exposure value that was
