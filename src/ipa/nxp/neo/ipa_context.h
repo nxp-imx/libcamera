@@ -24,10 +24,11 @@
 #include <libipa/fc_queue.h>
 #include <libipa/vector.h>
 
+#include "nxp/cam_helper/camera_helper.h"
+
 namespace libcamera {
 
 namespace ipa::nxpneo {
-
 
 struct IPASessionConfiguration {
 	struct {
@@ -124,6 +125,9 @@ struct IPAContext {
 	FCQueue<IPAFrameContext> frameContexts;
 
 	ControlInfoMap::Map ctrlMap;
+
+	/* Interface to the Camera Helper */
+	std::unique_ptr<nxp::CameraHelper> camHelper;
 };
 
 } /* namespace ipa::nxpneo */

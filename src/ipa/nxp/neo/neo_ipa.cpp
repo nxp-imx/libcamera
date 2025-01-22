@@ -34,7 +34,6 @@
 #include "libcamera/internal/yaml_parser.h"
 
 #include "algorithms/algorithm.h"
-#include "nxp/cam_helper/camera_helper.h"
 
 #include "ipa_context.h"
 
@@ -99,9 +98,6 @@ private:
 	/* revision-specific data */
 	uint32_t hwRevision_;
 
-	/* Interface to the Camera Helper */
-	std::unique_ptr<CameraHelper> camHelper_;
-
 	/* Local parameter storage */
 	struct IPAContext context_;
 };
@@ -118,7 +114,7 @@ const ControlInfoMap::Map nxpneoControls{
 } /* namespace */
 
 IPANxpNeo::IPANxpNeo()
-	: context_({ {}, {}, { kMaxFrameContexts }, {} })
+	: context_({ {}, {}, { kMaxFrameContexts }, {}, {} })
 {
 }
 
@@ -137,8 +133,8 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 	LOG(NxpNeoIPA, Debug) << "Hardware revision is " << hwRevision;
 	LOG(NxpNeoIPA, Debug) << "Sensor id: " << sensorId;
 
-	camHelper_ = CameraHelperFactoryBase::create(settings.sensorModel);
-	if (!camHelper_) {
+	context_.camHelper = CameraHelperFactoryBase::create(settings.sensorModel);
+	if (!context_.camHelper) {
 		LOG(NxpNeoIPA, Error)
 			<< "Failed to create camera sensor helper for "
 			<< settings.sensorModel;
@@ -187,7 +183,7 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 	updateControls(sensorInfo, sensorControls, ipaControls);
 
 	/* Initialize SensorConfig parameters */
-	const CameraHelper::Attributes *attributes = camHelper_->attributes();
+	const CameraHelper::Attributes *attributes = context_.camHelper->attributes();
 	const std::map<int32_t, std::pair<uint32_t, bool>> &camHelperDelayParams =
 		attributes->delayedControlParams;
 
@@ -231,15 +227,15 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	mode.maxLineLength = sensorInfo->maxLineLength;
 	mode.minFrameLength = sensorInfo->minFrameLength;
 	mode.maxFrameLength = sensorInfo->maxFrameLength;
-	camHelper_->setCameraMode(mode);
+	context_.camHelper->setCameraMode(mode);
 
 	sensorControls_ = ipaConfig.sensorControls;
 	std::vector<double> vMinExposure, vMaxExposure, vDefExposure;
-	camHelper_->controlInfoMapGetExposureRange(
+	context_.camHelper->controlInfoMapGetExposureRange(
 		&sensorControls_, &vMinExposure, &vMaxExposure, &vDefExposure);
 
 	std::vector<double> vMinGain, vMaxGain, vDefGain;
-	camHelper_->controlInfoMapGetAnalogGainRange(
+	context_.camHelper->controlInfoMapGetAnalogGainRange(
 		&sensorControls_, &vMinGain, &vMaxGain, &vDefGain);
 
 	LOG(NxpNeoIPA, Debug)
@@ -287,7 +283,7 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 		bytepp = sizeof(uint8_t);
 	else
 		bytepp = sizeof(uint16_t);
-	uint32_t topLines = camHelper_->attributes()->mdParams.topLines;
+	uint32_t topLines = context_.camHelper->attributes()->mdParams.topLines;
 	context_.configuration.sensor.metaDataSize =
 		topLines * context_.configuration.sensor.size.width * bytepp;
 
@@ -384,7 +380,7 @@ void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
 	if (metadataSize && mappedBuffers_.count(rawBufferId)) {
 		uint8_t *metadata = mappedBuffers_.at(rawBufferId).planes()[0].data();
 		Span<uint8_t> mdBuffer(metadata, metadataSize);
-		int ret = camHelper_->parseEmbedded(mdBuffer, &controls);
+		int ret = context_.camHelper->parseEmbedded(mdBuffer, &controls);
 		frameContext.sensor.metaDataValid = (ret == 0);
 	}
 
@@ -425,7 +421,7 @@ void IPANxpNeo::processStatsBuffer(const uint32_t frame,
 
 	if (!frameContext.sensor.metaDataValid) {
 		mdControls = ControlList(md::controlIdMap);
-		camHelper_->sensorControlsToMetaData(&sensorControls, &mdControls);
+		context_.camHelper->sensorControlsToMetaData(&sensorControls, &mdControls);
 	}
 
 	float exposure = 0.0f;
@@ -493,7 +489,7 @@ void IPANxpNeo::updateControls(const IPACameraSensorInfo &sensorInfo,
 	 * the line duration.
 	 */
 	std::vector<double> vMinExposure, vMaxExposure, vDefExposure;
-	camHelper_->controlInfoMapGetExposureRange(
+	context_.camHelper->controlInfoMapGetExposureRange(
 		&sensorControls, &vMinExposure, &vMaxExposure, &vDefExposure);
 	/* ExposureTime range is in microseconds */
 	ctrlMap.emplace(std::piecewise_construct,
@@ -505,7 +501,7 @@ void IPANxpNeo::updateControls(const IPACameraSensorInfo &sensorInfo,
 
 	/* Compute the analogue gain limits. */
 	std::vector<double> vMinGain, vMaxGain, vDefGain;
-	camHelper_->controlInfoMapGetAnalogGainRange(
+	context_.camHelper->controlInfoMapGetAnalogGainRange(
 		&sensorControls, &vMinGain, &vMaxGain, &vDefGain);
 
 	ctrlMap.emplace(std::piecewise_construct,
@@ -570,7 +566,7 @@ void IPANxpNeo::setControls(unsigned int frame)
 		context_.configuration.sensor.lineDuration.get<std::ratio<1>>();
 	double exposure = frameContext.agc.exposure * lineDuration;
 	if (frame)
-		camHelper_->controlListSetAGC(&ctrls, exposure, frameContext.agc.gain);
+		context_.camHelper->controlListSetAGC(&ctrls, exposure, frameContext.agc.gain);
 
 	LOG(NxpNeoControlList, Debug)
 		<< logSensorParams(frame, &frameContext.sensor.mdControls, &ctrls);
