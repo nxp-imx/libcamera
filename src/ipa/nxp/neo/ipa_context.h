@@ -104,7 +104,12 @@ struct IPAFrameContext : public FrameContext {
 		RGB<double> gains;
 		unsigned int temperatureK;
 		bool autoEnabled;
+		bool colorGainsSet;
 	} awb;
+
+	struct {
+		bool colorOffsetsSet;
+	} blc;
 
 	struct {
 		uint32_t exposure;

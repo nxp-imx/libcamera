@@ -146,6 +146,18 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 		gainDouble2Param(frameContext.awb.gains.g());
 	params->regs.obwb[NEO_OBWB_MERGE_PATH].b_ctrl_gain =
 		gainDouble2Param(frameContext.awb.gains.b());
+	frameContext.awb.colorGainsSet = true;
+
+	/*
+	 * When OBWB offsets are not configured by BLC, set some default offsets.
+	 * Zero offset values are configured as default (no BLC).
+	 */
+	if (!frameContext.blc.colorOffsetsSet) {
+		params->regs.obwb[NEO_OBWB_MERGE_PATH].r_ctrl_offset = 0;
+		params->regs.obwb[NEO_OBWB_MERGE_PATH].gr_ctrl_offset = 0;
+		params->regs.obwb[NEO_OBWB_MERGE_PATH].gb_ctrl_offset = 0;
+		params->regs.obwb[NEO_OBWB_MERGE_PATH].b_ctrl_offset = 0;
+	}
 
 	/* If we have already set the CTEMP measurement parameters, return. */
 	if (frame > 0)
