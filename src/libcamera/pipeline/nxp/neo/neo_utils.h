@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <map>
+
 #include <linux/v4l2-subdev.h>
 
 #include "libcamera/internal/camera_sensor.h"
@@ -43,7 +45,7 @@ public:
 	virtual ~CameraMediaStream() {}
 
 	const std::vector<StreamLink> &streamLinks() const { return streamLinks_; }
-	std::optional<unsigned int> pipe() const { return isiPipe_; }
+	unsigned int pipe() const { return isiPipe_; }
 	std::string toString() const;
 
 	/* \todo remove those methods */
@@ -52,7 +54,7 @@ public:
 
 private:
 	std::vector<StreamLink> streamLinks_;
-	std::optional<unsigned int> isiPipe_;
+	unsigned int isiPipe_ = 0;
 
 	/* \todo remove those fields */
 	uint32_t mbusCode_;
@@ -65,31 +67,21 @@ public:
 	CameraInfo() {}
 	virtual ~CameraInfo() {}
 
-	bool hasStream(unsigned int id) const;
-	bool hasStreamInput0() const { return hasStream(STREAM_INPUT0); }
-	bool hasStreamInput1() const { return hasStream(STREAM_INPUT1); }
-	bool hasStreamEmbedded() const { return hasStream(STREAM_EMBEDDED); }
+	std::optional<const CameraMediaStream *> getStream(unsigned int id) const;
+	bool hasStream(unsigned int id) const { return getStream(id).has_value(); }
 
-	const CameraMediaStream *getStream(unsigned int id) const
-	{
-		if ((id < STREAM_MAX) && (streams_[id].has_value()))
-			return &streams_[id].value();
-		else
-			return nullptr;
-	}
-
-	const CameraMediaStream *getStreamInput0() const { return getStream(STREAM_INPUT0); }
-	const CameraMediaStream *getStreamInput1() const { return getStream(STREAM_INPUT1); }
-	const CameraMediaStream *getStreamEmbedded() const { return getStream(STREAM_EMBEDDED); }
-
-private:
 	enum {
 		STREAM_INPUT0 = 0,
 		STREAM_INPUT1,
 		STREAM_EMBEDDED,
 		STREAM_MAX,
 	};
-	std::array<std::optional<CameraMediaStream>, STREAM_MAX> streams_;
+	static constexpr std::array<unsigned int, STREAM_MAX> kCameraStreams = {
+		STREAM_INPUT0, STREAM_INPUT1, STREAM_EMBEDDED
+	};
+
+private:
+	std::map<unsigned int, CameraMediaStream> streams_;
 
 	friend PipelineConfig;
 };

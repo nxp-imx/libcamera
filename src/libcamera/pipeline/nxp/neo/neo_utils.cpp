@@ -57,7 +57,7 @@ std::string CameraMediaStream::toString() const
 	}
 
 	ss << "mbus-code " << mbusCode()
-	   << " isi-pipe " << pipe().value_or(-1)
+	   << " isi-pipe " << pipe()
 	   << " embedded-lines " << embeddedLines();
 
 	return ss.str();
@@ -68,15 +68,22 @@ std::string CameraMediaStream::toString() const
  */
 
 /**
- * \brief Return if a stream exists for the camera
- * \param[in] streamId The stream identifier STREAM_<XYZ>
- * \return True if the stream is configured
+ * \brief Return an optional CameraMediaStream for the camera
+ * \param[in] streamId The CameraInfo stream identifier STREAM_<XYZ>
+ * \return The optional CameraMediaStream
  */
-bool CameraInfo::hasStream(unsigned int streamId) const
+std::optional<const CameraMediaStream *> CameraInfo::getStream(unsigned int id) const
 {
-	if (streamId >= streams_.size())
-		return false;
-	return streams_[streamId].has_value();
+	if (id >= STREAM_MAX) {
+		LOG(NxpNeoPipe, Error) << "Invalid stream " << id;
+		return std::nullopt;
+	}
+
+	auto it = streams_.find(id);
+	if (it != streams_.end())
+		return std::optional<const CameraMediaStream *>(&it->second);
+	else
+		return std::nullopt;
 }
 
 /* -----------------------------------------------------------------------------
@@ -92,15 +99,9 @@ PipelineConfig::~PipelineConfig()
 	if (!isiDevice_)
 		return;
 
-	for (auto &[id, cameraInfo] : cameraMap_) {
-		for (auto &stream : cameraInfo.streams_) {
-			if (stream.has_value()) {
-				std::optional<unsigned int> pipe;
-				pipe = stream->pipe();
-				ASSERT(pipe.has_value());
-				isiDevice_->releasePipe(pipe.value());
-			}
-		}
+	for (auto &[name, cameraInfo] : cameraMap_) {
+		for (auto &[id, stream] : cameraInfo.streams_)
+			isiDevice_->releasePipe(stream.pipe());
 	}
 }
 
@@ -859,28 +860,27 @@ int PipelineConfig::parseCameras(const YamlObject &platform, MediaDevice *media)
 		LOG(NxpNeoPipe, Debug)
 			<< "Parsing camera " << entityName;
 
-		CameraInfo cameraInfo = {};
-		std::optional<CameraMediaStream> stream;
-		stream = parseMediaStream(camera, "stream-input0", media);
-		cameraInfo.streams_[CameraInfo::STREAM_INPUT0] = std::move(stream);
-		stream = parseMediaStream(camera, "stream-input1", media);
-		cameraInfo.streams_[CameraInfo::STREAM_INPUT1] = std::move(stream);
-		stream = parseMediaStream(camera, "stream-embedded", media);
-		cameraInfo.streams_[CameraInfo::STREAM_EMBEDDED] = std::move(stream);
+		const std::map<unsigned int, std::string> kStreamMappingKeys{
+			{ CameraInfo::STREAM_INPUT0, "stream-input0" },
+			{ CameraInfo::STREAM_INPUT1, "stream-input1" },
+			{ CameraInfo::STREAM_EMBEDDED, "stream-embedded" },
+		};
 
-		if (!cameraInfo.hasStreamInput0()) {
-			LOG(NxpNeoPipe, Error)
-				<< "Missing camera stream-input0 definition";
-			return -EINVAL;
+		CameraInfo cameraInfo = {};
+		for (auto &[stream, key] : kStreamMappingKeys) {
+			std::optional<CameraMediaStream> cameraStream;
+			cameraStream = parseMediaStream(camera, key, media);
+			if (cameraStream.has_value())
+				cameraInfo.streams_[stream] = std::move(cameraStream.value());
 		}
 
 		LOG(NxpNeoPipe, Debug)
 			<< "Camera stream-input1 configured "
-			<< cameraInfo.hasStreamInput1();
+			<< cameraInfo.hasStream(CameraInfo::STREAM_INPUT1);
 
 		LOG(NxpNeoPipe, Debug)
 			<< "Camera stream-embedded configured "
-			<< cameraInfo.hasStreamEmbedded();
+			<< cameraInfo.hasStream(CameraInfo::STREAM_EMBEDDED);
 
 		cameraMap_[entityName] = cameraInfo;
 	}
@@ -906,23 +906,17 @@ int PipelineConfig::parseCameras(const YamlObject &platform, MediaDevice *media)
 int PipelineConfig::parseReserveIsi()
 {
 	int ret = 0;
-	std::optional<unsigned int> index;
 
 	Size size(0, 0);
 	ISIDevice *isiDevice = isiDevice_.get();
-	for (auto const &[name, camInfo] : cameraMap_) {
-		index = camInfo.getStreamInput0()->pipe();
-		ASSERT(index.has_value());
-		ret |= isiDevice->reservePipeByIndex(size, index.value());
-		if (camInfo.hasStreamInput1()) {
-			index = camInfo.getStreamInput1()->pipe();
-			ASSERT(index.has_value());
-			ret |= isiDevice->reservePipeByIndex(size, index.value());
-		}
-		if (camInfo.hasStreamEmbedded()) {
-			index = camInfo.getStreamEmbedded()->pipe();
-			ASSERT(index.has_value());
-			ret |= isiDevice->reservePipeByIndex(size, index.value());
+
+	for (auto &[name, cameraInfo] : cameraMap_) {
+		for (auto id : CameraInfo::kCameraStreams) {
+			auto stream = cameraInfo.getStream(id);
+			if (stream.has_value()) {
+				unsigned int index = stream.value()->pipe();
+				ret |= isiDevice->reservePipeByIndex(size, index);
+			}
 		}
 	}
 
@@ -930,19 +924,13 @@ int PipelineConfig::parseReserveIsi()
 		return 0;
 
 	/* Some reservations have failed - release all pipes */
-	for (auto const &[name, camInfo] : cameraMap_) {
-		index = camInfo.getStreamInput0()->pipe();
-		ASSERT(index.has_value());
-		isiDevice->releasePipe(index.value());
-		if (camInfo.hasStreamInput1()) {
-			index = camInfo.getStreamInput1()->pipe();
-			ASSERT(index.has_value());
-			isiDevice->releasePipe(index.value());
-		}
-		if (camInfo.hasStreamEmbedded()) {
-			index = camInfo.getStreamEmbedded()->pipe();
-			ASSERT(index.has_value());
-			isiDevice->releasePipe(index.value());
+	for (auto &[name, cameraInfo] : cameraMap_) {
+		for (auto id : CameraInfo::kCameraStreams) {
+			auto stream = cameraInfo.getStream(id);
+			if (stream.has_value()) {
+				unsigned int index = stream.value()->pipe();
+				isiDevice->releasePipe(index);
+			}
 		}
 	}
 
