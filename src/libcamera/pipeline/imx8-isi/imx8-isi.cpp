@@ -41,7 +41,7 @@ class ISICameraData : public Camera::Private
 {
 public:
 	/* Maximum amount of streams (ie pipes) per camera */
-	static constexpr unsigned int kNumStreams = 2;
+	static constexpr unsigned int kNumStreams = 3;
 
 	ISICameraData(PipelineHandler *ph, unsigned int numStreams)
 		: Camera::Private(ph)
