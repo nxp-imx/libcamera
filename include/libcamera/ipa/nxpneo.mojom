@@ -32,7 +32,7 @@ struct SensorConfig {
 enum ISPBufferType {
 	TypeInput0,
 	TypeInput1,
-	TypeEmbedded,
+	TypeEData,
 	TypeParams,
 	TypeStats,
 };
