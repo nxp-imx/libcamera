@@ -33,10 +33,10 @@
 # A camera outputs one or muliple streams flowing from its entity source pad
 # down to the ISI pipe. Individual streams end up demultiplexed in separate
 # ISI channels and video devices.
-# Camera streams may be:
-# * input0: main exposure pixel data fed to ISP input0 pad (mandatory)
-# * input1: short exposure pixel data fed to ISP input1 pad (optional)
-# * embedded: embedded data when sent of side channel (optional)
+# Camera streams can be:
+# - input0: main exposure pixel data fed to ISP input0 pad (mandatory)
+# - input1: short exposure pixel data fed to ISP input1 pad (optional)
+# - edata: embedded data when output on a dedicated MIPI-CSI DT/VC (optional)
 #
 
 # Nodes definition:
@@ -58,10 +58,10 @@
 #                     [sink pad, sink stream, source pad, source stream, flags]
 #
 # cameras           = sequence of individual camera-entry definition
-# camera entry      = mapping of {entity, stream-input0, stream-input1, stream-embedded}
+# camera entry      = mapping of {entity, stream-input0, stream-input1, stream-edata}
 # stream-input0
 # stream-input1 (optional)
-# stream-embedded (optional)
+# stream-edata (optional)
 #                   = mapping of {links, isi-pipe}
 # links             = sequence of link-entry listing links from the graph of this camera
 # link-entry        = sequence of parameters to describe a link between entities

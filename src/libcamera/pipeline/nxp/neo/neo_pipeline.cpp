@@ -121,7 +121,7 @@ private:
 	void isiInputBufferReady(NxpNeoFrames::Info *info);
 	void isiInput0BufferReady(FrameBuffer *buffer);
 	void isiInput1BufferReady(FrameBuffer *buffer);
-	void isiEmbeddedBufferReady(FrameBuffer *buffer);
+	void isiEmbeddedDataBufferReady(FrameBuffer *buffer);
 
 	void neoInput0BufferReady(FrameBuffer *buffer);
 	void neoInput1BufferReady(FrameBuffer *buffer);
@@ -1152,8 +1152,8 @@ int NxpNeoCameraData::queuePendingRequests()
 				buffer = info->input0Buffer;
 			} else if (stream == CameraInfo::STREAM_INPUT1) {
 				buffer = info->input1Buffer;
-			} else if (stream == CameraInfo::STREAM_EMBEDDED) {
-				buffer = info->embeddedBuffer;
+			} else if (stream == CameraInfo::STREAM_EDATA) {
+				buffer = info->eDataBuffer;
 			} else {
 				LOG(NxpNeoPipe, Error) << "Invalid stream " << stream;
 				continue;
@@ -1234,7 +1234,7 @@ int NxpNeoCameraData::init()
 	const std::map<unsigned int, void (NxpNeoCameraData::*)(FrameBuffer *)> pipeReadyFuncs{
 		{ CameraInfo::STREAM_INPUT0, &NxpNeoCameraData::isiInput0BufferReady },
 		{ CameraInfo::STREAM_INPUT1, &NxpNeoCameraData::isiInput1BufferReady },
-		{ CameraInfo::STREAM_EMBEDDED, &NxpNeoCameraData::isiEmbeddedBufferReady },
+		{ CameraInfo::STREAM_EDATA, &NxpNeoCameraData::isiEmbeddedDataBufferReady },
 	};
 
 	ISIDevice *isi = pipe()->isiDevice();
@@ -1357,10 +1357,6 @@ unsigned int NxpNeoCameraData::getRawMediaBusFormat(PixelFormat *pixelFormat) co
  * \brief Configure the front end media controller device
  * \param[in] sensorFormat The sensor subdevice format
  * \param[in] transform The sensor transform
- * \param[out] vdFormatInput0 The input0 front end's capture video device format
- * \param[out] vdFormatInput1 The input1 front end's capture video device format
- * \param[out] vdFormatEd The embedded data front end's capture video device
- * format
  *
  * \return 0 in case of success or a negative error code
  */
@@ -1388,7 +1384,7 @@ int NxpNeoCameraData::configureFrontEndFormat(const V4L2SubdeviceFormat &sensorF
 	}
 
 	if (sensor->embeddedDataStream().has_value()) {
-		bool enable = pipes_.count(CameraInfo::STREAM_EMBEDDED);
+		bool enable = pipes_.count(CameraInfo::STREAM_EDATA);
 		ret = sensor->setEmbeddedDataEnabled(enable);
 		if (ret && enable) {
 			LOG(NxpNeoPipe, Warning)
@@ -1421,7 +1417,7 @@ int NxpNeoCameraData::configureFrontEndFormat(const V4L2SubdeviceFormat &sensorF
 			format = _sensorFormat;
 		} else if (stream == CameraInfo::STREAM_INPUT1) {
 			format = sensor->auxiliaryFormat();
-		} else if (stream == CameraInfo::STREAM_EMBEDDED) {
+		} else if (stream == CameraInfo::STREAM_EDATA) {
 			format = sensor->embeddedDataFormat();
 		} else {
 			LOG(NxpNeoPipe, Error) << "Invalid stream " << stream;
@@ -1649,12 +1645,12 @@ int NxpNeoCameraData::allocateBuffers()
 	const std::vector<std::unique_ptr<FrameBuffer>> &input1Buffers =
 		pipes_.count(stream) ? pipes_[stream]->buffers() : empty;
 
-	stream = CameraInfo::STREAM_EMBEDDED;
-	const std::vector<std::unique_ptr<FrameBuffer>> &embeddedBuffers =
+	stream = CameraInfo::STREAM_EDATA;
+	const std::vector<std::unique_ptr<FrameBuffer>> &eDataBuffers =
 		pipes_.count(stream) ? pipes_[stream]->buffers() : empty;
 
 	frameInfos_.init(input0Buffers, input1Buffers,
-			 embeddedBuffers,
+			 eDataBuffers,
 			 neo_->paramsBuffers_, neo_->statsBuffers_,
 			 alternatedRawStream_);
 
@@ -1874,7 +1870,7 @@ void NxpNeoCameraData::completeProcessingRequest(Request *request)
  */
 void NxpNeoCameraData::isiInputBufferReady(NxpNeoFrames::Info *info)
 {
-	if (info->input0Pending || info->input1Pending || info->embeddedPending)
+	if (info->input0Pending || info->input1Pending || info->eDataPending)
 		return;
 
 	if (!rawStreamOnly_) {
@@ -1888,9 +1884,9 @@ void NxpNeoCameraData::isiInputBufferReady(NxpNeoFrames::Info *info)
 				{ ipa::nxpneo::TypeInput1, info->input1Buffer->cookie() });
 		}
 
-		if (info->embeddedBuffer) {
+		if (info->eDataBuffer) {
 			bufferIds.insert(
-				{ ipa::nxpneo::TypeEmbedded, info->embeddedBuffer->cookie() });
+				{ ipa::nxpneo::TypeEData, info->eDataBuffer->cookie() });
 		}
 
 		ipa_->fillParamsBuffer(info->id, bufferIds);
@@ -1974,7 +1970,7 @@ void NxpNeoCameraData::isiInput1BufferReady(FrameBuffer *buffer)
  * Embedded data buffer is to be passed to IPA for 3A algorithms to use
  * along with sensor control info and ISP statistics.
  */
-void NxpNeoCameraData::isiEmbeddedBufferReady(FrameBuffer *buffer)
+void NxpNeoCameraData::isiEmbeddedDataBufferReady(FrameBuffer *buffer)
 {
 	NxpNeoFrames::Info *info = frameInfos_.find(buffer);
 	if (!info)
@@ -1983,7 +1979,7 @@ void NxpNeoCameraData::isiEmbeddedBufferReady(FrameBuffer *buffer)
 	if (completeCancelledBufferRequest(buffer, info))
 		return;
 
-	info->embeddedPending = false;
+	info->eDataPending = false;
 	isiInputBufferReady(info);
 }
 

@@ -288,8 +288,8 @@ int PipelineConfig::loadAutoDetect(MediaDevice *media)
 					continue;
 				}
 				sensorStream = sensor->auxiliaryStream().value();
-			} else if (stream == CameraInfo::STREAM_EMBEDDED) {
-				bool enable = cameraInfo.properties_.embeddedStream;
+			} else if (stream == CameraInfo::STREAM_EDATA) {
+				bool enable = cameraInfo.properties_.eDataStream;
 				if (!enable)
 					continue;
 				if (!sensor->embeddedDataStream().has_value()) {
@@ -923,7 +923,7 @@ int PipelineConfig::parseCameras(const YamlObject &platform, MediaDevice *media)
 		const std::map<unsigned int, std::string> kStreamMappingKeys{
 			{ CameraInfo::STREAM_INPUT0, "stream-input0" },
 			{ CameraInfo::STREAM_INPUT1, "stream-input1" },
-			{ CameraInfo::STREAM_EMBEDDED, "stream-embedded" },
+			{ CameraInfo::STREAM_EDATA, "stream-edata" },
 		};
 
 		for (auto &[stream, key] : kStreamMappingKeys) {
@@ -938,8 +938,8 @@ int PipelineConfig::parseCameras(const YamlObject &platform, MediaDevice *media)
 			<< cameraInfo.hasStream(CameraInfo::STREAM_INPUT1);
 
 		LOG(NxpNeoPipe, Debug)
-			<< "Camera stream-embedded configured "
-			<< cameraInfo.hasStream(CameraInfo::STREAM_EMBEDDED);
+			<< "Camera stream-edata configured "
+			<< cameraInfo.hasStream(CameraInfo::STREAM_EDATA);
 
 		cameraMap_[entityName] = cameraInfo;
 	}

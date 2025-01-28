@@ -27,7 +27,7 @@ NxpNeoFrames::NxpNeoFrames()
 
 void NxpNeoFrames::init(const std::vector<std::unique_ptr<FrameBuffer>> &input0Buffers,
 			const std::vector<std::unique_ptr<FrameBuffer>> &input1Buffers,
-			const std::vector<std::unique_ptr<FrameBuffer>> &embeddedBuffers,
+			const std::vector<std::unique_ptr<FrameBuffer>> &eDataBuffers,
 			const std::vector<std::unique_ptr<FrameBuffer>> &paramsBuffers,
 			const std::vector<std::unique_ptr<FrameBuffer>> &statsBuffers,
 			bool alternatedRawStreams)
@@ -41,10 +41,10 @@ void NxpNeoFrames::init(const std::vector<std::unique_ptr<FrameBuffer>> &input0B
 			availableInput1Buffers_.push(buffer.get());
 	}
 
-	hasEmbedded_ = !!embeddedBuffers.size();
-	if (hasEmbedded_) {
-		for (const std::unique_ptr<FrameBuffer> &buffer : embeddedBuffers)
-			availableEmbeddedBuffers_.push(buffer.get());
+	hasEmbeddedData_ = !!eDataBuffers.size();
+	if (hasEmbeddedData_) {
+		for (const std::unique_ptr<FrameBuffer> &buffer : eDataBuffers)
+			availableEmbeddedDataBuffers_.push(buffer.get());
 	}
 
 	for (const std::unique_ptr<FrameBuffer> &buffer : paramsBuffers)
@@ -62,7 +62,7 @@ void NxpNeoFrames::clear()
 {
 	availableInput0Buffers_ = {};
 	availableInput1Buffers_ = {};
-	availableEmbeddedBuffers_ = {};
+	availableEmbeddedDataBuffers_ = {};
 	availableParamsBuffers_ = {};
 	availableStatsBuffers_ = {};
 }
@@ -74,7 +74,7 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly,
 
 	FrameBuffer *input0Buffer = nullptr;
 	FrameBuffer *input1Buffer = nullptr;
-	FrameBuffer *embeddedBuffer = nullptr;
+	FrameBuffer *eDataBuffer = nullptr;
 	FrameBuffer *paramsBuffer = nullptr;
 	FrameBuffer *statsBuffer = nullptr;
 
@@ -88,7 +88,7 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly,
 		return nullptr;
 	}
 
-	if (hasEmbedded_ && availableEmbeddedBuffers_.empty()) {
+	if (hasEmbeddedData_ && availableEmbeddedDataBuffers_.empty()) {
 		LOG(NxpNeoPipe, Warning) << "Embedded buffer underrun";
 		return nullptr;
 	}
@@ -118,8 +118,8 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly,
 		input0Buffer = allocBuffer(&availableInput0Buffers_);
 	if (hasInput1_ && !input1Buffer)
 		input1Buffer = allocBuffer(&availableInput1Buffers_);
-	if (hasEmbedded_)
-		embeddedBuffer = allocBuffer(&availableEmbeddedBuffers_);
+	if (hasEmbeddedData_)
+		eDataBuffer = allocBuffer(&availableEmbeddedDataBuffers_);
 
 	/* ISP internal buffers allocation */
 	paramsBuffer = allocBuffer(&availableParamsBuffers_);
@@ -132,13 +132,13 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly,
 	info->request = request;
 	info->input0Buffer = input0Buffer;
 	info->input1Buffer = input1Buffer;
-	info->embeddedBuffer = embeddedBuffer;
+	info->eDataBuffer = eDataBuffer;
 	info->paramsBuffer = paramsBuffer;
 	info->statsBuffer = statsBuffer;
 
 	info->input0Pending = true;
-	info->input1Pending = (info->input1Buffer);
-	info->embeddedPending = (info->embeddedBuffer);
+	info->input1Pending = !!info->input1Buffer;
+	info->eDataPending = !!info->eDataBuffer;
 
 	info->isRawOnly = rawOnly;
 	info->rawStreamBuffer = rawStreamBuffer;
@@ -160,8 +160,8 @@ void NxpNeoFrames::remove(NxpNeoFrames::Info *info)
 		availableInput0Buffers_.push(info->input0Buffer);
 	if (info->input1Buffer && info->input1Buffer != info->rawStreamBuffer)
 		availableInput1Buffers_.push(info->input1Buffer);
-	if (info->embeddedBuffer)
-		availableEmbeddedBuffers_.push(info->embeddedBuffer);
+	if (info->eDataBuffer)
+		availableEmbeddedDataBuffers_.push(info->eDataBuffer);
 	availableParamsBuffers_.push(info->paramsBuffer);
 	availableStatsBuffers_.push(info->statsBuffer);
 
@@ -211,7 +211,7 @@ NxpNeoFrames::Info *NxpNeoFrames::find(FrameBuffer *buffer)
 				return info;
 
 		if (info->input0Buffer == buffer || info->input1Buffer == buffer ||
-		    info->embeddedBuffer == buffer ||
+		    info->eDataBuffer == buffer ||
 		    info->paramsBuffer == buffer || info->statsBuffer == buffer)
 			return info;
 	}

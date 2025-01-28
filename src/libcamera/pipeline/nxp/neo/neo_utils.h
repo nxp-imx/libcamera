@@ -52,9 +52,9 @@ private:
 
 struct CameraProperties {
 	CameraProperties()
-		: hdrStream(false), embeddedStream(false) {}
+		: hdrStream(false), eDataStream(false) {}
 	bool hdrStream;
-	bool embeddedStream;
+	bool eDataStream;
 };
 
 class CameraInfo
@@ -71,11 +71,11 @@ public:
 	enum {
 		STREAM_INPUT0 = 0,
 		STREAM_INPUT1,
-		STREAM_EMBEDDED,
+		STREAM_EDATA,
 		STREAM_MAX,
 	};
 	static constexpr std::array<unsigned int, STREAM_MAX> kCameraStreams = {
-		STREAM_INPUT0, STREAM_INPUT1, STREAM_EMBEDDED
+		STREAM_INPUT0, STREAM_INPUT1, STREAM_EDATA
 	};
 
 private:
