@@ -3,9 +3,32 @@
 # Neo pipeline platform config file example
 #
 # This config file format is experimental and subject to change.
-
-# The platform config file allows to define the topology of the entities
-# involved in the media devices graphs for every camera. It is needed when
+#
+# It consists in two sections whose definitions are optional:
+# - cameras: configure some attributes for particular cameras
+# - platforms: manually configure the media controller streams associated to a
+#   camera. This enables overriding the automatic topology detection.
+#
+# The cameras section consists in a list of camera definitions, that gives the
+# options to specify some attributes for a given camera. A camera is defined
+# either by its model or by its unique entity name to designate a specific
+# camera, as the model may be shared by multiple instances of the same camera.
+#
+# Cameras nodes definition:
+#
+# cameras           = sequence of camera-entry
+# camera-entry      = mapping of {name, model, entity, streams}
+#
+# name              = arbitrary name for the camera configuration
+#
+# model             = camera model (optional if entity is defined)
+# entity            = camera entity name (optional, if model is defined)
+#
+# streams           = sequence of streams to be enabled for that camera
+#                     stream values belong to [hdr, edata]
+#
+# The platforms section enables to manually define the topology of the entities
+# involved in the media devices graphs for every camera. It may be needed when
 # complex topologies are used that can not be discovered automatically at
 # run time by the pipeline implementation.
 # Multiple configurations ('platforms') can be specified in the same
@@ -38,13 +61,12 @@
 # - input1: short exposure pixel data fed to ISP input1 pad (optional)
 # - edata: embedded data when output on a dedicated MIPI-CSI DT/VC (optional)
 #
-
-# Nodes definition:
+# Platform nodes definition:
 #
 # platforms         = sequence of platform-entry
 # platform-entry    = mapping of {name, match sequence, routings, cameras}
 #
-# name              = arbitraty name for the platform configuration
+# name              = arbitrary name for the platform configuration
 #
 # maching           = mapping of {entities}
 # entities          = sequence of required entities names to match this platform

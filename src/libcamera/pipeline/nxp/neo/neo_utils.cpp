@@ -682,7 +682,8 @@ int PipelineConfig::loadAutoDetectAddRoute(MediaEntity *entity,
  * \param[in] media The frontend media controller device
  * \return 0 in case of match or a negative error code otherwise
  */
-int PipelineConfig::parseMatch(const YamlObject &platform, MediaDevice *media)
+int PipelineConfig::parsePlatformMatch(const YamlObject &platform,
+				       MediaDevice *media)
 {
 	const YamlObject &match = platform["match"];
 	if (!match.isDictionary()) {
@@ -714,7 +715,8 @@ int PipelineConfig::parseMatch(const YamlObject &platform, MediaDevice *media)
  * \param[in] media The frontend media controller device
  * \return 0 on success or a negative error code otherwise
  */
-int PipelineConfig::parseRoutings(const YamlObject &platform, MediaDevice *media)
+int PipelineConfig::parsePlatformRoutings(const YamlObject &platform,
+					  MediaDevice *media)
 {
 	/* Routes definition is optional */
 	const YamlObject &routings = platform["routings"];
@@ -777,8 +779,8 @@ int PipelineConfig::parseRoutings(const YamlObject &platform, MediaDevice *media
  * \return The optional CameraMediaStream if found, otherwise nullopt
  */
 std::optional<CameraMediaStream>
-PipelineConfig::parseMediaStream(const YamlObject &camera,
-				 std::string key, MediaDevice *media)
+PipelineConfig::parsePlatformMediaStream(const YamlObject &camera,
+					 std::string key, MediaDevice *media)
 {
 	/* Streams are optional, so a missing node is not an error */
 	const YamlObject &stream = camera[key];
@@ -896,7 +898,8 @@ PipelineConfig::parseMediaStream(const YamlObject &camera,
  * \param[in] media The frontend media controller device
  * \return 0 on success or a negative error code otherwise
  */
-int PipelineConfig::parseCameras(const YamlObject &platform, MediaDevice *media)
+int PipelineConfig::parsePlatformCameras(const YamlObject &platform,
+					 MediaDevice *media)
 {
 	int ret;
 	cameraMap_.clear();
@@ -928,7 +931,7 @@ int PipelineConfig::parseCameras(const YamlObject &platform, MediaDevice *media)
 
 		for (auto &[stream, key] : kStreamMappingKeys) {
 			std::optional<CameraMediaStream> cameraStream;
-			cameraStream = parseMediaStream(camera, key, media);
+			cameraStream = parsePlatformMediaStream(camera, key, media);
 			if (cameraStream.has_value())
 				cameraInfo.streams_[stream] = std::move(cameraStream.value());
 		}
@@ -944,7 +947,7 @@ int PipelineConfig::parseCameras(const YamlObject &platform, MediaDevice *media)
 		cameraMap_[entityName] = cameraInfo;
 	}
 
-	ret = parseReserveIsi();
+	ret = parsePlatformReserveIsi();
 	if (ret)
 		cameraMap_.clear();
 
@@ -962,7 +965,7 @@ int PipelineConfig::parseCameras(const YamlObject &platform, MediaDevice *media)
  *
  * \return 0 on success or a negative error code otherwise
  */
-int PipelineConfig::parseReserveIsi()
+int PipelineConfig::parsePlatformReserveIsi()
 {
 	int ret = 0;
 
@@ -997,48 +1000,118 @@ int PipelineConfig::parseReserveIsi()
 }
 
 /**
- * \brief Parse a platform entry in yaml configuration file
- * \param[in] platform The platform entry node in yaml file
- * \param[in] media The frontend media controller device
- * \return 0 on success or a negative error code otherwise
+ * \brief Parse the cameras section in the yaml configuration file
+ * \param[in] cameras The cameras node in yaml file
+ * \return 0 if no error was detected, a negative error code otherwise
  */
-int PipelineConfig::parsePlatform(const YamlObject &platform, MediaDevice *media)
+int PipelineConfig::parseCameras(const YamlObject &cameras)
+{
+	for (const auto &cameraObj : cameras.asList()) {
+		CameraProperties properties = {};
+
+		const YamlObject &nameObj = cameraObj["name"];
+		std::string name = nameObj.get<std::string>().value_or("");
+
+		const YamlObject &modelObj = cameraObj["model"];
+		std::string model = modelObj.get<std::string>().value_or("");
+
+		const YamlObject &entityObj = cameraObj["entity"];
+		std::string entity = entityObj.get<std::string>().value_or("");
+
+		const YamlObject &streamsObj = cameraObj["streams"];
+		for (const auto &streamObj : streamsObj.asList()) {
+			std::string stream =
+				streamObj.get<std::string>().value_or("");
+			if (stream == "hdr")
+				properties.hdrStream = true;
+			else if (stream == "edata")
+				properties.eDataStream = true;
+		}
+
+		LOG(NxpNeoPipe, Debug)
+			<< "Camera entry [" << name
+			<< "] model ["  << model << "] entity [" << entity
+			<< "] streams hdr " << properties.hdrStream
+			<< " edata " << properties.eDataStream;
+
+		if (!model.length() && !entity.length()) {
+			LOG(NxpNeoPipe, Warning)
+				<< "Camera needs model or entity definition";
+			continue;
+		}
+
+		if (model.length()) {
+			if (modelPropertiesMap_.count(model)) {
+				LOG(NxpNeoPipe, Warning) <<
+					"Duplicate camera model " << model;
+				continue;
+			}
+			modelPropertiesMap_[model] = properties;
+		}
+
+		if (entity.length()) {
+			if (namePropertiesMap_.count(entity)) {
+				LOG(NxpNeoPipe, Warning) <<
+					"Duplicate camera entity " << entity;
+				continue;
+			}
+			namePropertiesMap_[entity] = properties;
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * \brief Parse the platforms section in the yaml configuration file
+ * \param[in] platforms The platforms node in yaml file
+ * \param[in] media The frontend media controller device
+ * \return 0 if platform configuration was found, a negative error code otherwise
+ */
+int PipelineConfig::parsePlatforms(const YamlObject &platforms, MediaDevice *media)
 {
 	int ret;
 
-	std::string name =
-		platform["name"].get<std::string>().value_or("");
+	/*
+	 * Parse each platform configuration present.
+	 * Stop when a matching configuration has been parsed successfully.
+	 */
+	for (const auto &platform : platforms.asList()) {
+		std::string name =
+			platform["name"].get<std::string>().value_or("");
 
-	LOG(NxpNeoPipe, Debug) << "Parsing config name " << name;
+		LOG(NxpNeoPipe, Debug) << "Parsing config name " << name;
 
-	ret = parseMatch(platform, media);
-	if (ret)
-		return ret;
+		ret = parsePlatformMatch(platform, media);
+		if (ret)
+			continue;
 
-	ret = parseRoutings(platform, media);
-	if (ret)
-		return ret;
+		ret = parsePlatformRoutings(platform, media);
+		if (ret)
+			continue;
 
-	ret = parseCameras(platform, media);
-	if (ret)
-		return ret;
+		ret = parsePlatformCameras(platform, media);
+		if (ret)
+			continue;
 
-	return 0;
+		return 0;
+	}
+
+	return ret;
 }
 
 /**
  * \brief Load the pipeline configuration from a pipeline configuration file
  * \param[in] filename The path to configuration file
  * \param[in] media The frontend media controller device
- * \return 0 on success or a negative error code otherwise
+ * \return 0 if platform configuration was found, a negative error code otherwise
  */
 int PipelineConfig::loadFromFile(std::string filename, MediaDevice *media)
 {
 	File file(filename);
-	int ret;
 
 	if (!file.open(File::OpenModeFlag::ReadOnly)) {
-		LOG(NxpNeoPipe, Warning)
+		LOG(NxpNeoPipe, Info)
 			<< "Failed to open pipeline config file" << filename;
 		return -ENOENT;
 	}
@@ -1058,21 +1131,16 @@ int PipelineConfig::loadFromFile(std::string filename, MediaDevice *media)
 		return -EINVAL;
 	}
 
-	const YamlObject &platforms = (*root)["platforms"];
-	if (!platforms.isList()) {
-		LOG(NxpNeoPipe, Info)
-			<< "No platform listed in pipeline config file";
-	}
-
 	LOG(NxpNeoPipe, Debug) << "Parsing pipeline config file " << filename;
 
-	for (const auto &platform : platforms.asList()) {
-		ret = parsePlatform(platform, media);
-		if (!ret)
-			return 0;
-	}
+	const YamlObject &cameras = (*root)["cameras"];
+	int ret = parseCameras(cameras);
+	if (ret)
+		LOG(NxpNeoPipe, Warning)
+			<< "Invalid cameras section in config file";
 
-	return -EINVAL;
+	const YamlObject &platforms = (*root)["platforms"];
+	return parsePlatforms(platforms, media);
 }
 
 /**

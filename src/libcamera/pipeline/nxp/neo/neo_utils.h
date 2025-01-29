@@ -121,14 +121,15 @@ private:
 				   V4L2Subdevice::Stream *sourceStream,
 				   std::map<MediaEntity *, V4L2Subdevice::Routing> *routingMap);
 
-	int parseMatch(const YamlObject &match, MediaDevice *media);
-	int parseRoutings(const YamlObject &platform, MediaDevice *media);
+	int parsePlatformMatch(const YamlObject &match, MediaDevice *media);
+	int parsePlatformRoutings(const YamlObject &platform, MediaDevice *media);
 	std::optional<CameraMediaStream>
-	parseMediaStream(const YamlObject &camera, std::string key,
-			 MediaDevice *media);
-	int parseCameras(const YamlObject &platform, MediaDevice *media);
-	int parseReserveIsi();
-	int parsePlatform(const YamlObject &platform, MediaDevice *media);
+	parsePlatformMediaStream(const YamlObject &camera,
+				 std::string key, MediaDevice *media);
+	int parsePlatformCameras(const YamlObject &platform, MediaDevice *media);
+	int parsePlatformReserveIsi();
+	int parseCameras(const YamlObject &cameras);
+	int parsePlatforms(const YamlObject &platforms, MediaDevice *media);
 
 	int loadFromFile(std::string file, MediaDevice *media);
 	const CameraProperties *getCameraProperties(const std::string &name,
