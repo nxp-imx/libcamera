@@ -811,9 +811,9 @@ PipelineHandlerISI::generateConfiguration(Camera *camera,
 				break;
 
 			/*
-			* Fallback to use a Bayer format if that's what the
-			* sensor supports.
-			*/
+			 * Fallback to use a Bayer format if that's what the
+			 * sensor supports.
+			 */
 			[[fallthrough]];
 		}
 
@@ -883,16 +883,17 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 	if (ret)
 		return ret;
 
-	ret = crossbar_->setFormat(data->xbarSink_, &format);
-	if (ret)
-		return ret;
-
+	/* Apply format to the formatter if present */
 	if (data->formatter_) {
 		ret = data->formatter_->setFormat(0, &format);
 
 		if (ret)
 			return ret;
 	}
+
+	ret = crossbar_->setFormat(data->xbarSink_, &format);
+	if (ret)
+		return ret;
 
 	/* Now configure the ISI and video node instances, one per stream. */
 	data->enabledStreams_.clear();
