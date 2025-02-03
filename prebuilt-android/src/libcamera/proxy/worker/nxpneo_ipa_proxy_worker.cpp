@@ -317,12 +317,10 @@ ipa_->queueRequest(frame, reqControls);
 		case _NxpNeoCmd::FillParamsBuffer: {
 		                
                 	[[maybe_unused]] const size_t frameBufSize = readPOD<uint32_t>(_ipcMessage.data(), 0);
-                	[[maybe_unused]] const size_t paramsbufferIdBufSize = readPOD<uint32_t>(_ipcMessage.data(), 4);
-                	[[maybe_unused]] const size_t rawBufferIdBufSize = readPOD<uint32_t>(_ipcMessage.data(), 8);
+                	[[maybe_unused]] const size_t bufferIdsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 4);
 
-                	const size_t frameStart = 12;
-                	const size_t paramsbufferIdStart = frameStart + frameBufSize;
-                	const size_t rawBufferIdStart = paramsbufferIdStart + paramsbufferIdBufSize;
+                	const size_t frameStart = 8;
+                	const size_t bufferIdsStart = frameStart + frameBufSize;
 
 
                 	uint32_t frame =
@@ -330,17 +328,12 @@ ipa_->queueRequest(frame, reqControls);
                         	_ipcMessage.data().cbegin() + frameStart,
                         	_ipcMessage.data().cbegin() + frameStart + frameBufSize);
 
-                	uint32_t paramsbufferId =
-                        IPADataSerializer<uint32_t>::deserialize(
-                        	_ipcMessage.data().cbegin() + paramsbufferIdStart,
-                        	_ipcMessage.data().cbegin() + paramsbufferIdStart + paramsbufferIdBufSize);
-
-                	uint32_t rawBufferId =
-                        IPADataSerializer<uint32_t>::deserialize(
-                        	_ipcMessage.data().cbegin() + rawBufferIdStart,
+                	std::map<uint32_t, uint32_t> bufferIds =
+                        IPADataSerializer<std::map<uint32_t, uint32_t>>::deserialize(
+                        	_ipcMessage.data().cbegin() + bufferIdsStart,
                         	_ipcMessage.data().cend());
 
-ipa_->fillParamsBuffer(frame, paramsbufferId, rawBufferId);
+ipa_->fillParamsBuffer(frame, bufferIds);
 
 			break;
 		}
@@ -348,12 +341,12 @@ ipa_->fillParamsBuffer(frame, paramsbufferId, rawBufferId);
 		case _NxpNeoCmd::ProcessStatsBuffer: {
 		                
                 	[[maybe_unused]] const size_t frameBufSize = readPOD<uint32_t>(_ipcMessage.data(), 0);
-                	[[maybe_unused]] const size_t bufferIdBufSize = readPOD<uint32_t>(_ipcMessage.data(), 4);
+                	[[maybe_unused]] const size_t bufferIdsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 4);
                 	[[maybe_unused]] const size_t sensorControlsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 8);
 
                 	const size_t frameStart = 12;
-                	const size_t bufferIdStart = frameStart + frameBufSize;
-                	const size_t sensorControlsStart = bufferIdStart + bufferIdBufSize;
+                	const size_t bufferIdsStart = frameStart + frameBufSize;
+                	const size_t sensorControlsStart = bufferIdsStart + bufferIdsBufSize;
 
 
                 	uint32_t frame =
@@ -361,10 +354,10 @@ ipa_->fillParamsBuffer(frame, paramsbufferId, rawBufferId);
                         	_ipcMessage.data().cbegin() + frameStart,
                         	_ipcMessage.data().cbegin() + frameStart + frameBufSize);
 
-                	uint32_t bufferId =
-                        IPADataSerializer<uint32_t>::deserialize(
-                        	_ipcMessage.data().cbegin() + bufferIdStart,
-                        	_ipcMessage.data().cbegin() + bufferIdStart + bufferIdBufSize);
+                	std::map<uint32_t, uint32_t> bufferIds =
+                        IPADataSerializer<std::map<uint32_t, uint32_t>>::deserialize(
+                        	_ipcMessage.data().cbegin() + bufferIdsStart,
+                        	_ipcMessage.data().cbegin() + bufferIdsStart + bufferIdsBufSize);
 
                 	ControlList sensorControls =
                         IPADataSerializer<ControlList>::deserialize(
@@ -372,7 +365,7 @@ ipa_->fillParamsBuffer(frame, paramsbufferId, rawBufferId);
                         	_ipcMessage.data().cend(),
                         	&controlSerializer_);
 
-ipa_->processStatsBuffer(frame, bufferId, sensorControls);
+ipa_->processStatsBuffer(frame, bufferIds, sensorControls);
 
 			break;
 		}

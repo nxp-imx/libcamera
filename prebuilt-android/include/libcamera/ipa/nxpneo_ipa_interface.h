@@ -52,6 +52,14 @@ enum class _NxpNeoEventCmd {
 };
 
 
+enum ISPBufferType {
+	TypeInput0 = 0,
+	TypeInput1 = 1,
+	TypeEData = 2,
+	TypeParams = 3,
+	TypeStats = 4,
+};
+
 struct IPAConfigInfo
 {
 public:
@@ -146,12 +154,11 @@ public:
 
 	virtual void fillParamsBuffer(
 		const uint32_t frame,
-		const uint32_t paramsbufferId,
-		const uint32_t rawBufferId) = 0;
+		const std::map<uint32_t, uint32_t> &bufferIds) = 0;
 
 	virtual void processStatsBuffer(
 		const uint32_t frame,
-		const uint32_t bufferId,
+		const std::map<uint32_t, uint32_t> &bufferIds,
 		const ControlList &sensorControls) = 0;
 
 	Signal<uint32_t> paramsBufferReady;

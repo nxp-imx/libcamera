@@ -65,12 +65,11 @@ public:
 
         void fillParamsBuffer(
         	const uint32_t frame,
-        	const uint32_t paramsbufferId,
-        	const uint32_t rawBufferId) override;
+        	const std::map<uint32_t, uint32_t> &bufferIds) override;
 
         void processStatsBuffer(
         	const uint32_t frame,
-        	const uint32_t bufferId,
+        	const std::map<uint32_t, uint32_t> &bufferIds,
         	const ControlList &sensorControls) override;
 
 	Signal<uint32_t> paramsBufferReady;
@@ -135,20 +134,18 @@ private:
 
         void fillParamsBufferThread(
         	const uint32_t frame,
-        	const uint32_t paramsbufferId,
-        	const uint32_t rawBufferId);
+        	const std::map<uint32_t, uint32_t> &bufferIds);
         void fillParamsBufferIPC(
         	const uint32_t frame,
-        	const uint32_t paramsbufferId,
-        	const uint32_t rawBufferId);
+        	const std::map<uint32_t, uint32_t> &bufferIds);
 
         void processStatsBufferThread(
         	const uint32_t frame,
-        	const uint32_t bufferId,
+        	const std::map<uint32_t, uint32_t> &bufferIds,
         	const ControlList &sensorControls);
         void processStatsBufferIPC(
         	const uint32_t frame,
-        	const uint32_t bufferId,
+        	const std::map<uint32_t, uint32_t> &bufferIds,
         	const ControlList &sensorControls);
 
 
@@ -207,17 +204,16 @@ private:
 		}
 		void fillParamsBuffer(
                 	const uint32_t frame,
-                	const uint32_t paramsbufferId,
-                	const uint32_t rawBufferId)
+                	const std::map<uint32_t, uint32_t> &bufferIds)
 		{
-			ipa_->fillParamsBuffer(frame, paramsbufferId, rawBufferId);
+			ipa_->fillParamsBuffer(frame, bufferIds);
 		}
 		void processStatsBuffer(
                 	const uint32_t frame,
-                	const uint32_t bufferId,
+                	const std::map<uint32_t, uint32_t> &bufferIds,
                 	const ControlList &sensorControls)
 		{
-			ipa_->processStatsBuffer(frame, bufferId, sensorControls);
+			ipa_->processStatsBuffer(frame, bufferIds, sensorControls);
 		}
 
 	private:

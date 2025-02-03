@@ -522,28 +522,25 @@ void IPAProxyNxpNeo::queueRequestIPC(
 
 void IPAProxyNxpNeo::fillParamsBuffer(
 	const uint32_t frame,
-	const uint32_t paramsbufferId,
-	const uint32_t rawBufferId)
+	const std::map<uint32_t, uint32_t> &bufferIds)
 {
 	if (isolate_)
-		fillParamsBufferIPC(frame, paramsbufferId, rawBufferId);
+		fillParamsBufferIPC(frame, bufferIds);
 	else
-		fillParamsBufferThread(frame, paramsbufferId, rawBufferId);
+		fillParamsBufferThread(frame, bufferIds);
 }
 
 void IPAProxyNxpNeo::fillParamsBufferThread(
 	const uint32_t frame,
-	const uint32_t paramsbufferId,
-	const uint32_t rawBufferId)
+	const std::map<uint32_t, uint32_t> &bufferIds)
 {
 	ASSERT(state_ == ProxyRunning);
-	proxy_.invokeMethod(&ThreadProxy::fillParamsBuffer, ConnectionTypeQueued, frame, paramsbufferId, rawBufferId);
+	proxy_.invokeMethod(&ThreadProxy::fillParamsBuffer, ConnectionTypeQueued, frame, bufferIds);
 }
 
 void IPAProxyNxpNeo::fillParamsBufferIPC(
 	const uint32_t frame,
-	const uint32_t paramsbufferId,
-	const uint32_t rawBufferId)
+	const std::map<uint32_t, uint32_t> &bufferIds)
 {
 	IPCMessage::Header _header = { static_cast<uint32_t>(_NxpNeoCmd::FillParamsBuffer), seq_++ };
 	IPCMessage _ipcInputBuf(_header);
@@ -553,20 +550,14 @@ void IPAProxyNxpNeo::fillParamsBufferIPC(
 	std::tie(frameBuf, std::ignore) =
 		IPADataSerializer<uint32_t>::serialize(frame
 );
-	std::vector<uint8_t> paramsbufferIdBuf;
-	std::tie(paramsbufferIdBuf, std::ignore) =
-		IPADataSerializer<uint32_t>::serialize(paramsbufferId
-);
-	std::vector<uint8_t> rawBufferIdBuf;
-	std::tie(rawBufferIdBuf, std::ignore) =
-		IPADataSerializer<uint32_t>::serialize(rawBufferId
+	std::vector<uint8_t> bufferIdsBuf;
+	std::tie(bufferIdsBuf, std::ignore) =
+		IPADataSerializer<std::map<uint32_t, uint32_t>>::serialize(bufferIds
 );
 	appendPOD<uint32_t>(_ipcInputBuf.data(), frameBuf.size());
-	appendPOD<uint32_t>(_ipcInputBuf.data(), paramsbufferIdBuf.size());
-	appendPOD<uint32_t>(_ipcInputBuf.data(), rawBufferIdBuf.size());
+	appendPOD<uint32_t>(_ipcInputBuf.data(), bufferIdsBuf.size());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), frameBuf.begin(), frameBuf.end());
-	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), paramsbufferIdBuf.begin(), paramsbufferIdBuf.end());
-	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), rawBufferIdBuf.begin(), rawBufferIdBuf.end());
+	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), bufferIdsBuf.begin(), bufferIdsBuf.end());
 
 
 	int _ret = ipc_->sendAsync(_ipcInputBuf);
@@ -579,27 +570,27 @@ void IPAProxyNxpNeo::fillParamsBufferIPC(
 
 void IPAProxyNxpNeo::processStatsBuffer(
 	const uint32_t frame,
-	const uint32_t bufferId,
+	const std::map<uint32_t, uint32_t> &bufferIds,
 	const ControlList &sensorControls)
 {
 	if (isolate_)
-		processStatsBufferIPC(frame, bufferId, sensorControls);
+		processStatsBufferIPC(frame, bufferIds, sensorControls);
 	else
-		processStatsBufferThread(frame, bufferId, sensorControls);
+		processStatsBufferThread(frame, bufferIds, sensorControls);
 }
 
 void IPAProxyNxpNeo::processStatsBufferThread(
 	const uint32_t frame,
-	const uint32_t bufferId,
+	const std::map<uint32_t, uint32_t> &bufferIds,
 	const ControlList &sensorControls)
 {
 	ASSERT(state_ == ProxyRunning);
-	proxy_.invokeMethod(&ThreadProxy::processStatsBuffer, ConnectionTypeQueued, frame, bufferId, sensorControls);
+	proxy_.invokeMethod(&ThreadProxy::processStatsBuffer, ConnectionTypeQueued, frame, bufferIds, sensorControls);
 }
 
 void IPAProxyNxpNeo::processStatsBufferIPC(
 	const uint32_t frame,
-	const uint32_t bufferId,
+	const std::map<uint32_t, uint32_t> &bufferIds,
 	const ControlList &sensorControls)
 {
 	IPCMessage::Header _header = { static_cast<uint32_t>(_NxpNeoCmd::ProcessStatsBuffer), seq_++ };
@@ -610,19 +601,19 @@ void IPAProxyNxpNeo::processStatsBufferIPC(
 	std::tie(frameBuf, std::ignore) =
 		IPADataSerializer<uint32_t>::serialize(frame
 );
-	std::vector<uint8_t> bufferIdBuf;
-	std::tie(bufferIdBuf, std::ignore) =
-		IPADataSerializer<uint32_t>::serialize(bufferId
+	std::vector<uint8_t> bufferIdsBuf;
+	std::tie(bufferIdsBuf, std::ignore) =
+		IPADataSerializer<std::map<uint32_t, uint32_t>>::serialize(bufferIds
 );
 	std::vector<uint8_t> sensorControlsBuf;
 	std::tie(sensorControlsBuf, std::ignore) =
 		IPADataSerializer<ControlList>::serialize(sensorControls
 , &controlSerializer_);
 	appendPOD<uint32_t>(_ipcInputBuf.data(), frameBuf.size());
-	appendPOD<uint32_t>(_ipcInputBuf.data(), bufferIdBuf.size());
+	appendPOD<uint32_t>(_ipcInputBuf.data(), bufferIdsBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), sensorControlsBuf.size());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), frameBuf.begin(), frameBuf.end());
-	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), bufferIdBuf.begin(), bufferIdBuf.end());
+	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), bufferIdsBuf.begin(), bufferIdsBuf.end());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), sensorControlsBuf.begin(), sensorControlsBuf.end());
 
 
