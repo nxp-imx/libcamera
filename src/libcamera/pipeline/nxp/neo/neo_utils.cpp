@@ -1070,8 +1070,6 @@ int PipelineConfig::parseCameras(const YamlObject &cameras)
  */
 int PipelineConfig::parsePlatforms(const YamlObject &platforms, MediaDevice *media)
 {
-	int ret;
-
 	/*
 	 * Parse each platform configuration present.
 	 * Stop when a matching configuration has been parsed successfully.
@@ -1082,7 +1080,7 @@ int PipelineConfig::parsePlatforms(const YamlObject &platforms, MediaDevice *med
 
 		LOG(NxpNeoPipe, Debug) << "Parsing config name " << name;
 
-		ret = parsePlatformMatch(platform, media);
+		int ret = parsePlatformMatch(platform, media);
 		if (ret)
 			continue;
 
@@ -1097,7 +1095,7 @@ int PipelineConfig::parsePlatforms(const YamlObject &platforms, MediaDevice *med
 		return 0;
 	}
 
-	return ret;
+	return -EINVAL;
 }
 
 /**
