@@ -51,8 +51,6 @@ struct IPASessionConfiguration {
 		utils::Duration lineDuration;
 		Size size;
 		uint32_t bpp;
-
-		size_t metaDataSize;
 	} sensor;
 
 	struct {

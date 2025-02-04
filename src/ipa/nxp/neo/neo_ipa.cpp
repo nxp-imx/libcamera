@@ -277,16 +277,6 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 
 	context_.configuration.sensor.bpp = bpp;
 
-	/* Embedded metadata size computation */
-	size_t bytepp;
-	if (bpp <= 8)
-		bytepp = sizeof(uint8_t);
-	else
-		bytepp = sizeof(uint16_t);
-	uint32_t topLines = context_.camHelper->attributes()->mdParams.topLines;
-	context_.configuration.sensor.metaDataSize =
-		topLines * context_.configuration.sensor.size.width * bytepp;
-
 	/* Active streams */
 	std::vector<IPAStream> &streams = context_.configuration.streams;
 	for (auto it = streamConfig.begin(); it != streamConfig.end(); it++)
@@ -354,10 +344,11 @@ void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
 	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
 
 	/*
-	 * Metadata parsing is done when CameraHelper implementation for the
-	 * sensor reports that some top lines are used for embedded data.
-	 * A necessary condition for the top lines parsing to be possible is
-	 * that the raw buffer was mapped in the IPA with mapBuffer() call.
+	 * Metadata parsing is done either from image pixel data top lines, or
+	 * from a separate camera stream in a dedicated buffer.
+	 * A necessary condition for the pixel data top lines parsing to be
+	 * possible is that the raw buffer has been mapped in the IPA beforehand
+	 * with the mapBuffer() call.
 	 * However, when a raw stream is active concurrently with a decoded
 	 * stream, the raw buffers used by the pipeline are provided by
 	 * the application instead of being internally allocated. Thus, raw
@@ -366,22 +357,47 @@ void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
 	 * doable.
 	 */
 
-	const IPASessionConfiguration &sessionConfig = context_.configuration;
-
 	ControlList &controls = frameContext.sensor.mdControls;
 	controls = ControlList(md::controlIdMap);
-
 	frameContext.sensor.metaDataValid = false;
-	size_t metadataSize = sessionConfig.sensor.metaDataSize;
 
-	auto input0Iter = bufferIds.find(TypeInput0);
-	unsigned int rawBufferId =
-		input0Iter != bufferIds.end() ? input0Iter->second : 0;
-	if (metadataSize && mappedBuffers_.count(rawBufferId)) {
-		uint8_t *metadata = mappedBuffers_.at(rawBufferId).planes()[0].data();
-		Span<uint8_t> mdBuffer(metadata, metadataSize);
-		int ret = context_.camHelper->parseEmbedded(mdBuffer, &controls);
-		frameContext.sensor.metaDataValid = (ret == 0);
+	uint8_t *metaData = nullptr;
+	size_t metaSize = 0;
+
+	/*
+	 * Look for metadata availability, either from the camera embedded data
+	 * stream or from the pixel data top lines.
+	 */
+	auto eDataIt = bufferIds.find(TypeEData);
+	unsigned int eDataBufferId =
+		eDataIt != bufferIds.end() ? eDataIt->second : 0;
+	if (eDataBufferId && mappedBuffers_.count(eDataBufferId)) {
+		const MappedBuffer::Plane &plane =
+			mappedBuffers_.at(eDataBufferId).planes()[0];
+		metaData = plane.data();
+		metaSize = plane.size_bytes();
+	} else {
+		auto input0It = bufferIds.find(TypeInput0);
+		unsigned int rawBufferId =
+			input0It != bufferIds.end() ? input0It->second : 0;
+		if (rawBufferId && mappedBuffers_.count(rawBufferId)) {
+			const MappedBuffer::Plane &plane =
+				mappedBuffers_.at(rawBufferId).planes()[0];
+			metaData = plane.data();
+			uint32_t topLines =
+				context_.camHelper->attributes()->mdParams.topLines;
+			unsigned int bpp = context_.configuration.sensor.bpp;
+			size_t bytepp = bpp <= 8 ? sizeof(uint8_t) : sizeof(uint16_t);
+			unsigned int width =
+				context_.configuration.sensor.size.width;
+			metaSize = topLines * width * bytepp;
+		}
+	}
+
+	if (metaSize) {
+		Span<uint8_t> mdBuffer(metaData, metaSize);
+		if (!context_.camHelper->parseEmbedded(mdBuffer, &controls))
+			frameContext.sensor.metaDataValid = true;
 	}
 
 	/* Prepare parameters buffer. */
