@@ -270,6 +270,8 @@ const std::map<uint32_t, V4L2PixelFormat> &ISIPipe::mediaBusToPixelFormats()
 		{ MEDIA_BUS_FMT_Y10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_Y10) },
 		{ MEDIA_BUS_FMT_Y12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_Y12) },
 		{ MEDIA_BUS_FMT_Y16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_Y16) },
+		/* Metadata formats */
+		{ MEDIA_BUS_FMT_META_8, V4L2PixelFormat(V4L2_META_FMT_GENERIC_8) },
 	};
 
 	return formats;
