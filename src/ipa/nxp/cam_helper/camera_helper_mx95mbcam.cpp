@@ -3,7 +3,7 @@
  * camera_helper_mx95mbcam.c
  * Helper class that performs sensor-specific parameter computations
  * for MX95MBCAM module (OX03C10 camera and a Maxim MAX96717 GMSL2 serializer)
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  */
 
 #include <cmath>
@@ -15,7 +15,7 @@
 #include "camera_helper.h"
 #include "md_parser_ox.h"
 
-#define ENABLE_EMBEDDED_DATA 1
+#define ENABLE_EMBEDDED_DATA_TOP_LINES 1
 #define USE_CUSTOM_CONTROLS 0
 
 #define Q8_1 (0x100U)
@@ -331,13 +331,17 @@ CameraHelperMx95mbcam::CameraHelperMx95mbcam()
 
 	/*
 	 * Setup embedded data params
-	 * \todo setup actual min/max values
 	 */
-#if ENABLE_EMBEDDED_DATA
+#if ENABLE_EMBEDDED_DATA_TOP_LINES
 	attributes_.mdParams.topLines = 2;
 #endif
 
 	parser_ = std::make_unique<MdParserOmniOx>(registerList);
+
+	/* Embedded data are 16-bit words when transmitted as image top lines */
+	int bpp = attributes_.mdParams.topLines ? 16 : 8;
+	if (attributes_.mdParams.topLines)
+		parser_->setBitsPerPixel(bpp);
 
 	/* Note: gainType / gainConstants_ are unused */
 }

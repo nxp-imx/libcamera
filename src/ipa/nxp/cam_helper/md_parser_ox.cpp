@@ -3,7 +3,7 @@
  * md_parser_ox.cpp
  * MetaData parser class for Omnivision embedded data format found on some
  * sensors of the OX series, not compatible with SMIA parser from RPi.
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  */
 
 #include "md_parser_ox.h"
@@ -30,9 +30,6 @@ namespace nxp {
  * CRC corresponds to memory group hold CRC, second one to the embedded data
  * CRC. The 4 bytes of a CRC are transmitted MSB first, with a tag preceding
  * each byte.
- * Tag and data format are 8 bits, but the embedded data format width is the
- * same as the one used for pixel lines. Because pixel data width is more than
- * 8 bits, embedded data memory is laid out on 16 bits words MSB-aligned.
  */
 MdParserOmniOx::MdParserOmniOx(std::initializer_list<uint32_t> registerList)
 	: registerList_{ registerList }
@@ -52,19 +49,30 @@ MdParserOmniOx::fetchRegister(libcamera::Span<const uint8_t> buffer,
 			      uint32_t registerOffset, uint8_t *value)
 {
 	/*
-	 * Each register value is represented in memory at byte level on 4 bytes:
+	 * Each register value is represented in memory as a 8-bit
+	 * <tag, register value> pair. If the metadata was transmitted over a
+	 * MIPI-CSI2 channel whose Data Type format is wider than 8 bits, each
+	 * element of the pair is prepended by the necessary padding to match
+	 * the DT. Using a 16-bit Data Type, the byte-level memory layout is:
 	 * 0: Tag format padding (undefined)
 	 * 1: Tag
 	 * 2: Register value format padding (undefined)
 	 * 3: Register value
+	 * Conversely, no padding is present when using a 8-bit DT channel.
 	 */
-	size_t byteOffset = registerOffset * 4;
-	if (byteOffset >= buffer.size())
+	bool padding = !!(bitsPerPixel_ > 8);
+	size_t registerSpan = 2 * (padding ? sizeof(uint16_t) : sizeof(uint8_t));
+	size_t baseOffset = registerOffset * registerSpan;
+
+	if (baseOffset + registerSpan > buffer.size())
 		return Status::ERROR;
-	if (buffer[byteOffset + 1] != kTag)
+
+	size_t tagOffset = baseOffset + (padding ? 1 : 0);
+	if (buffer[tagOffset] != kTag)
 		return Status::NOTFOUND;
 
-	*value = buffer[byteOffset + 3];
+	size_t valueOffset = baseOffset + (padding ? 3 : 1);
+	*value = buffer[valueOffset];
 	return Status::OK;
 }
 
