@@ -62,11 +62,11 @@ public:
 		  const std::vector<std::unique_ptr<FrameBuffer>> &paramsBuffers,
 		  const std::vector<std::unique_ptr<FrameBuffer>> &statsBuffers,
 		  bool alternatedRawStreams);
+
+	int destroy(unsigned int id);
 	void clear();
 
 	Info *create(Request *request, bool rawOnly, FrameBuffer *rawStreamBuffer);
-	void remove(Info *info);
-	bool tryComplete(Info *info);
 
 	Info *find(unsigned int id);
 	Info *find(FrameBuffer *buffer);

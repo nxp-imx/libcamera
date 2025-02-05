@@ -58,6 +58,30 @@ void NxpNeoFrames::init(const std::vector<std::unique_ptr<FrameBuffer>> &input0B
 	alternatedRawStreams_ = hasInput1_ && alternatedRawStreams;
 }
 
+int NxpNeoFrames::destroy(unsigned int id)
+{
+	Info *info = find(id);
+	if (!info)
+		return -ENOENT;
+
+	/* Return internal buffers for reuse. */
+	if (info->input0Buffer != info->rawStreamBuffer)
+		availableInput0Buffers_.push(info->input0Buffer);
+	if (info->input1Buffer && info->input1Buffer != info->rawStreamBuffer)
+		availableInput1Buffers_.push(info->input1Buffer);
+	if (info->eDataBuffer)
+		availableEmbeddedDataBuffers_.push(info->eDataBuffer);
+	availableParamsBuffers_.push(info->paramsBuffer);
+	availableStatsBuffers_.push(info->statsBuffer);
+
+	/* Delete the extended frame information. */
+	frameInfo_.erase(info->id);
+
+	bufferAvailable.emit();
+
+	return 0;
+}
+
 void NxpNeoFrames::clear()
 {
 	availableInput0Buffers_ = {};
@@ -151,42 +175,6 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly,
 	frameInfo_[id] = std::move(info);
 
 	return frameInfo_[id].get();
-}
-
-void NxpNeoFrames::remove(NxpNeoFrames::Info *info)
-{
-	/* Return internal buffers for reuse. */
-	if (info->input0Buffer != info->rawStreamBuffer)
-		availableInput0Buffers_.push(info->input0Buffer);
-	if (info->input1Buffer && info->input1Buffer != info->rawStreamBuffer)
-		availableInput1Buffers_.push(info->input1Buffer);
-	if (info->eDataBuffer)
-		availableEmbeddedDataBuffers_.push(info->eDataBuffer);
-	availableParamsBuffers_.push(info->paramsBuffer);
-	availableStatsBuffers_.push(info->statsBuffer);
-
-	/* Delete the extended frame information. */
-	frameInfo_.erase(info->id);
-}
-
-bool NxpNeoFrames::tryComplete(NxpNeoFrames::Info *info)
-{
-	Request *request = info->request;
-
-	if (request->hasPendingBuffers())
-		return false;
-
-	if (!info->metadataProcessed)
-		return false;
-
-	if (!info->paramDequeued)
-		return false;
-
-	remove(info);
-
-	bufferAvailable.emit();
-
-	return true;
 }
 
 NxpNeoFrames::Info *NxpNeoFrames::find(unsigned int id)
