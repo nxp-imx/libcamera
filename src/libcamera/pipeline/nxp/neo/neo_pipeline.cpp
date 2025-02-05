@@ -1891,8 +1891,9 @@ void NxpNeoCameraData::isiInputBufferReady(NxpNeoFrames::Info *info)
 
 		ipa_->fillParamsBuffer(info->id, bufferIds);
 	} else {
+		Request *request = info->request;
 		if (frameInfos_.tryComplete(info))
-			completeProcessingRequest(info->request);
+			completeProcessingRequest(request);
 	}
 }
 
