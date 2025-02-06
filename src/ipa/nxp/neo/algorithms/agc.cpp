@@ -386,7 +386,11 @@ void Agc::process(IPAContext &context, [[maybe_unused]] const uint32_t frame,
 	Histogram hist = parseStatistics(stats);
 	auto &awb = context.activeState.awb;
 
-	gains_ = awb.autoEnabled ? awb.gains.automatic : awb.gains.manual;
+	/* If the AWB algorithm is disabled, use 1.0 for the gains. */
+	if (frameContext.awb.colorGainsSet)
+		gains_ = awb.autoEnabled ? awb.gains.automatic : awb.gains.manual;
+	else
+		gains_ = RGB<double>{ 1.0 };
 
 	/*
 	 * The Agc algorithm needs to know the effective exposure value that was
