@@ -399,10 +399,6 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 					 }) == formats.end())
 				cfg->pixelFormat = formats[0].toPixelFormat();
 			cfg->size = pixelSize;
-			const PixelFormatInfo &info =
-				PixelFormatInfo::info(cfg->pixelFormat);
-			cfg->stride = info.stride(cfg->size.width, 0, 1);
-			cfg->frameSize = info.frameSize(cfg->size, 1);
 
 			V4L2DeviceFormat format = {};
 			format.size = cfg->size;
@@ -422,6 +418,14 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 			if (isFrame) {
 				data_->neoDevice()->frame_->tryFormat(&format);
 				cfg->colorSpace = format.colorSpace;
+				cfg->stride = format.planes[0].bpl;
+				cfg->frameSize = format.planes[0].size;
+			} else if (isIr) {
+				data_->neoDevice()->ir_->tryFormat(&format);
+				/* IR node is fixed to RAW colorspace */
+				cfg->colorSpace = ColorSpace::Raw;
+				cfg->stride = format.planes[0].bpl;
+				cfg->frameSize = format.planes[0].size;
 			}
 
 			LOG(NxpNeoPipe, Debug) << "Assigned " << cfg->toString()
@@ -431,10 +435,11 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 		} else if (isRaw) {
 			cfg->pixelFormat = rawPixelFormat;
 			cfg->size = sensorSize;
+			cfg->colorSpace = ColorSpace::Raw;
 			const PixelFormatInfo &info =
 				PixelFormatInfo::info(cfg->pixelFormat);
-			cfg->stride = info.stride(cfg->size.width, 0, 64);
-			cfg->frameSize = info.frameSize(cfg->size, 64);
+			cfg->stride = info.stride(cfg->size.width, 0);
+			cfg->frameSize = info.frameSize(cfg->size, 1);
 
 			LOG(NxpNeoPipe, Debug) << "Assigned " << cfg->toString()
 					       << " to the raw stream";
