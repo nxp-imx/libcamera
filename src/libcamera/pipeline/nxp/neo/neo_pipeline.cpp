@@ -159,10 +159,6 @@ private:
 class NxpNeoCameraConfiguration : public CameraConfiguration
 {
 public:
-	/* \todo get number of buffers from configuration file */
-	static constexpr unsigned int kBufferCount = 8;
-	static constexpr unsigned int kMaxStreams = 3;
-
 	NxpNeoCameraConfiguration(Camera *camera, NxpNeoCameraData *data);
 
 	Status validate() override;
@@ -207,6 +203,7 @@ public:
 	bool multiCamera() const { return numCameras_ > 1; }
 	ISIDevice *isiDevice() const { return isi_.get(); }
 	MediaDevice *isiMedia() const { return isiMedia_; }
+	const PipelineConfig *pipelineConfig() { return &pipelineConfig_; }
 
 private:
 	NxpNeoCameraData *cameraData(Camera *camera)
@@ -446,7 +443,9 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 			return Invalid;
 		}
 
-		cfg->bufferCount = NxpNeoCameraConfiguration::kBufferCount;
+		const GlobalInfo *globalInfo =
+			data_->pipe()->pipelineConfig()->getGlobalInfo();
+		cfg->bufferCount = globalInfo->bufferCount;
 
 		if (cfg->pixelFormat != originalCfg.pixelFormat ||
 		    cfg->size != originalCfg.size) {
@@ -583,7 +582,9 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 		cfg.size = cfgSize;
 		cfg.pixelFormat = pixelFormat;
 		cfg.colorSpace = colorSpace;
-		cfg.bufferCount = NxpNeoCameraConfiguration::kBufferCount;
+		const GlobalInfo *globalInfo =
+			data->pipe()->pipelineConfig()->getGlobalInfo();
+		cfg.bufferCount = globalInfo->bufferCount;
 
 		config->addConfiguration(cfg);
 		LOG(NxpNeoPipe, Debug)

@@ -88,6 +88,14 @@ private:
 using RoutingMap = std::map<MediaEntity *, V4L2Subdevice::Routing>;
 using CameraMap = std::map<std::string, CameraInfo>;
 
+struct GlobalInfo {
+	static constexpr unsigned int kBufferCount = 4;
+	GlobalInfo()
+		: bufferCount(kBufferCount) {}
+
+	unsigned int bufferCount;
+};
+
 class PipelineConfig
 {
 public:
@@ -97,6 +105,7 @@ public:
 		 std::shared_ptr<ISIDevice> isiDevice);
 	const CameraInfo *getCameraInfo(std::string name) const;
 	const RoutingMap &getRoutingMap() const;
+	const GlobalInfo *getGlobalInfo() const;
 
 private:
 	static constexpr unsigned int kPadAny =
@@ -129,6 +138,7 @@ private:
 	int parsePlatformCameras(const YamlObject &platform, MediaDevice *media);
 	int parsePlatformReserveIsi();
 	int parseCameras(const YamlObject &cameras);
+	int parseGlobal(const YamlObject &global);
 	int parsePlatforms(const YamlObject &platforms, MediaDevice *media);
 
 	int loadFromFile(std::string file, MediaDevice *media);
@@ -151,6 +161,8 @@ private:
 		ROUTE_FLAGS,
 		ROUTE_MAX,
 	};
+
+	GlobalInfo globalInfo_;
 };
 
 } // namespace nxpneo

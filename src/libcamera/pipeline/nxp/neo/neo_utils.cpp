@@ -167,6 +167,19 @@ const RoutingMap &PipelineConfig::getRoutingMap() const
 }
 
 /**
+ * \brief Report the global pipeline handler configuration
+ *
+ * This function reports the global pipeline handler configuration that is not
+ * specific to a given camera.
+ *
+ * \return A pointer to the global configuration
+ */
+const GlobalInfo *PipelineConfig::getGlobalInfo() const
+{
+	return &globalInfo_;
+}
+
+/**
  * \brief Discover the valid camera graphs to the capture video device
  * \param[in] media The frontend media controller device
  *
@@ -1063,6 +1076,20 @@ int PipelineConfig::parseCameras(const YamlObject &cameras)
 }
 
 /**
+ * \brief Parse the global section in the yaml configuration file
+ * \param[in] global The global node in yaml file
+ * \return 0 if no error was detected, a negative error code otherwise
+ */
+int PipelineConfig::parseGlobal(const YamlObject &global)
+{
+	const YamlObject &bufferCountObj = global["buffer-count"];
+	globalInfo_.bufferCount =
+		bufferCountObj.get<unsigned int>().value_or(GlobalInfo::kBufferCount);
+
+	return 0;
+}
+
+/**
  * \brief Parse the platforms section in the yaml configuration file
  * \param[in] platforms The platforms node in yaml file
  * \param[in] media The frontend media controller device
@@ -1131,8 +1158,14 @@ int PipelineConfig::loadFromFile(std::string filename, MediaDevice *media)
 
 	LOG(NxpNeoPipe, Debug) << "Parsing pipeline config file " << filename;
 
+	const YamlObject &global = (*root)["global"];
+	int ret = parseGlobal(global);
+	if (ret)
+		LOG(NxpNeoPipe, Warning)
+			<< "Invalid global section in config file";
+
 	const YamlObject &cameras = (*root)["cameras"];
-	int ret = parseCameras(cameras);
+	ret = parseCameras(cameras);
 	if (ret)
 		LOG(NxpNeoPipe, Warning)
 			<< "Invalid cameras section in config file";

@@ -4,10 +4,17 @@
 #
 # This config file format is experimental and subject to change.
 #
-# It consists in two sections whose definitions are optional:
+# It consists in multiple sections whose definitions are optional:
+# - global: configure the parameters common to all cameras
 # - cameras: configure some attributes for particular cameras
 # - platforms: manually configure the media controller streams associated to a
 #   camera. This enables overriding the automatic topology detection.
+#
+# The global section defines the parameters that are common to all cameras. It
+# consists in a mapping of properties with their values. The supported global
+# properties are:
+#
+# buffer-count      = number of buffers to allocate for a stream
 #
 # The cameras section consists in a list of camera definitions, that gives the
 # options to specify some attributes for a given camera. A camera is defined
@@ -95,6 +102,8 @@
 %YAML 1.1
 ---
 version: 1.0
+global:
+  buffer-count: 6
 platforms:
   - name: i.MX95 EVK + 4x MX95MBCAM modules + MX95MBDESER01
     match:
