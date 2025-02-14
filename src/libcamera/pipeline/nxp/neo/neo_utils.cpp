@@ -109,25 +109,22 @@ PipelineConfig::~PipelineConfig()
  * \param[in] media The frontend media controller device
  * \param[in] isiDevice The ISI Device associated to the media controller device
  *
- * Build the pipeline configuration from either the config file
- * if it exists and lists a setup corresponding to the frontend media controller
- * device. In case no such predefined configuration is available, default to
- * automatic detection mode, available for pipelines that can be automatically
- * discovered.
+ * Build the pipeline configuration that consists in the parameters that may be
+ * defined in the pipeline handler configuration file and the camera streams
+ * graphs that are dynamically discovered in the media device.
  *
  * \return 0 on success or a negative error code otherwise
  */
 int PipelineConfig::load(std::string filename, MediaDevice *media,
 			 std::shared_ptr<ISIDevice> isiDevice)
 {
-	int ret;
-
 	isiDevice_ = isiDevice;
 
-	ret = loadFromFile(filename, media);
+	int ret = loadFileConfig(filename);
 	if (ret)
-		ret = loadAutoDetect(media);
+		LOG(NxpNeoPipe, Info) << "Could not parse config file " << filename;
 
+	ret = loadAutoDetect(media);
 	return ret;
 }
 
@@ -690,329 +687,6 @@ int PipelineConfig::loadAutoDetectAddRoute(MediaEntity *entity,
  */
 
 /**
- * \brief Parse match entries in a platform node
- * \param[in] platform The platform entry node in yaml file
- * \param[in] media The frontend media controller device
- * \return 0 in case of match or a negative error code otherwise
- */
-int PipelineConfig::parsePlatformMatch(const YamlObject &platform,
-				       MediaDevice *media)
-{
-	const YamlObject &match = platform["match"];
-	if (!match.isDictionary()) {
-		LOG(NxpNeoPipe, Warning)
-			<< "No match dictionary node for platform config";
-		return -EINVAL;
-	}
-
-	const YamlObject &entities = match["entities"];
-	if (!entities.isList()) {
-		LOG(NxpNeoPipe, Warning) << "No entities for match";
-		return -EINVAL;
-	}
-
-	for (const auto &entity : entities.asList()) {
-		std::string name = entity.get<std::string>().value_or("");
-		bool found = media->getEntityByName(name);
-		LOG(NxpNeoPipe, Debug) << "Entity " << name << " found " << found;
-		if (!found)
-			return -EINVAL;
-	}
-
-	return 0;
-}
-
-/**
- * \brief Parse route entries in a platform node
- * \param[in] platform The platform entry node in yaml file
- * \param[in] media The frontend media controller device
- * \return 0 on success or a negative error code otherwise
- */
-int PipelineConfig::parsePlatformRoutings(const YamlObject &platform,
-					  MediaDevice *media)
-{
-	/* Routes definition is optional */
-	const YamlObject &routings = platform["routings"];
-	if (!routings.isList()) {
-		LOG(NxpNeoPipe, Debug) << "No routings list";
-		return -EINVAL;
-	}
-
-	routingMap_.clear();
-
-	for (const auto &subdev : routings.asList()) {
-		const auto &entityNameValue = subdev["entity"].get<std::string>();
-		if (!entityNameValue.has_value()) {
-			LOG(NxpNeoPipe, Warning) << "Missing routing entity name";
-			return -EINVAL;
-		}
-		std::string entityName = entityNameValue.value();
-		MediaEntity *entity = media->getEntityByName(entityName);
-		if (!entity) {
-			LOG(NxpNeoPipe, Warning) << "Entity not found " << entityName;
-			return -EINVAL;
-		}
-
-		const auto &routes = subdev["routes"];
-		if (!routes.isList() || routes.size() == 0) {
-			LOG(NxpNeoPipe, Debug)
-				<< "No routes for entity " << entityName;
-			continue;
-		}
-
-		V4L2Subdevice::Routing routing = {};
-		for (const auto &route : routes.asList()) {
-			std::vector<unsigned int> v =
-				route.getList<unsigned int>().value_or(std::vector<unsigned int>{});
-			if (v.size() != ROUTE_MAX) {
-				LOG(NxpNeoPipe, Warning)
-					<< "Unexpected route size " << v.size();
-				return -EINVAL;
-			}
-
-			routing.emplace_back(
-				V4L2Subdevice::Stream{ v[ROUTE_SINK_PAD], v[ROUTE_SINK_STREAM] },
-				V4L2Subdevice::Stream{ v[ROUTE_SOURCE_PAD], v[ROUTE_SOURCE_STREAM] },
-				v[ROUTE_FLAGS]);
-		}
-
-		routingMap_[entity] = routing;
-		LOG(NxpNeoPipe, Debug) << "Entity name " << entityName
-				       << " routing " << routing;
-	}
-
-	return 0;
-}
-
-/**
- * \brief Parse a stream within a camera node
- * \param[in] camera The camera stream node in yaml file
- * \param[in] key The key of the actual stream for the camera
- * \param[in] media The frontend media controller device
- * \return The optional CameraMediaStream if found, otherwise nullopt
- */
-std::optional<CameraMediaStream>
-PipelineConfig::parsePlatformMediaStream(const YamlObject &camera,
-					 std::string key, MediaDevice *media)
-{
-	/* Streams are optional, so a missing node is not an error */
-	const YamlObject &stream = camera[key];
-	if (!stream.isDictionary())
-		return std::nullopt;
-
-	LOG(NxpNeoPipe, Debug) << "Parsing stream " << key;
-
-	/* yaml configuration file link sequence elements */
-	enum {
-		LINK_SOURCE_NAME = 0,
-		LINK_SOURCE_PAD = 1,
-		LINK_SOURCE_STREAM = 2,
-		LINK_SINK_NAME = 3,
-		LINK_SINK_PAD = 4,
-		LINK_SINK_STREAM = 5,
-		LINK_SINK_MAX = 6,
-	};
-
-	const YamlObject &links = stream["links"];
-	if (!links.isList() || links.size() != LINK_SINK_MAX) {
-		LOG(NxpNeoPipe, Error) << "Invalid camera links list";
-		return std::nullopt;
-	}
-
-	std::vector<CameraMediaStream::StreamLink> streamLinks;
-	unsigned int maxUint = std::numeric_limits<unsigned int>::max();
-	for (const auto &link : links.asList()) {
-		std::string sourceEntityName =
-			link[LINK_SOURCE_NAME].get<std::string>().value_or("");
-		MediaEntity *sourceEntity =
-			media->getEntityByName(sourceEntityName);
-		if (!sourceEntity) {
-			LOG(NxpNeoPipe, Error)
-				<< "Source entity not found "
-				<< sourceEntityName;
-			return std::nullopt;
-		}
-
-		unsigned int sourcePad =
-			link[LINK_SOURCE_PAD].get<unsigned int>().value_or(maxUint);
-		unsigned int sourceStream =
-			link[LINK_SOURCE_STREAM].get<unsigned int>().value_or(maxUint);
-
-		std::string sinkEntityName =
-			link[LINK_SINK_NAME].get<std::string>().value_or("");
-		MediaEntity *sinkEntity =
-			media->getEntityByName(sinkEntityName);
-		if (!sinkEntity) {
-			LOG(NxpNeoPipe, Error)
-				<< "Sink entity not found " << sinkEntityName;
-			return std::nullopt;
-		}
-
-		unsigned int sinkPad =
-			link[LINK_SINK_PAD].get<unsigned int>().value_or(maxUint);
-		unsigned int sinkStream =
-			link[LINK_SINK_STREAM].get<unsigned int>().value_or(maxUint);
-
-		/*
-		 * Lookup for matching media link in the graph corresponding to
-		 * the link definition from the config file
-		 */
-		const MediaPad *sourceMediaPad =
-			sourceEntity->getPadByIndex(sourcePad);
-		if (!sourceMediaPad) {
-			LOG(NxpNeoPipe, Error)
-				<< "Entity " << sinkEntityName
-				<< " source pad " << sourcePad << " not found";
-			return std::nullopt;
-		}
-
-		MediaLink *mediaLink = nullptr;
-		for (MediaLink *_mediaLink : sourceMediaPad->links()) {
-			MediaEntity *_sinkEntity = _mediaLink->sink()->entity();
-			unsigned int _sinkPad = _mediaLink->sink()->index();
-			if ((sinkEntity->name() == _sinkEntity->name()) &&
-			    (sinkPad == _sinkPad)) {
-				mediaLink = _mediaLink;
-			}
-		}
-
-		if (!mediaLink) {
-			LOG(NxpNeoPipe, Error)
-				<< "Link not found"
-				<< " source " << sourceEntityName
-				<< "/" << sourcePad
-				<< " sink " << sinkEntityName
-				<< "/" << sinkPad;
-			return std::nullopt;
-		}
-
-		streamLinks.emplace_back(mediaLink, sourceStream, sinkStream);
-	}
-
-	const YamlObject &pipe = stream["isi-pipe"];
-	unsigned int isiPipe = pipe.get<unsigned int>().value_or(maxUint);
-	if (isiPipe == maxUint) {
-		LOG(NxpNeoPipe, Warning) << "ISI pipe is not defined";
-		return std::nullopt;
-	}
-
-	CameraMediaStream mediaStream{ streamLinks, isiPipe };
-
-	LOG(NxpNeoPipe, Debug)
-		<< "Camera media stream parsed " << std::endl
-		<< mediaStream.toString();
-
-	return std::make_optional(std::move(mediaStream));
-}
-
-/**
- * \brief Parse camera entries in a platform node
- * \param[in] platform The platform entry node in yaml file
- * \param[in] media The frontend media controller device
- * \return 0 on success or a negative error code otherwise
- */
-int PipelineConfig::parsePlatformCameras(const YamlObject &platform,
-					 MediaDevice *media)
-{
-	int ret;
-	cameraMap_.clear();
-
-	const YamlObject &cameras = platform["cameras"];
-	if (!cameras.isList()) {
-		LOG(NxpNeoPipe, Error) << "No camera listed";
-		return -EINVAL;
-	}
-
-	for (const auto &camera : cameras.asList()) {
-		const auto &entity = camera["entity"].get<std::string>();
-		if (!entity.has_value()) {
-			LOG(NxpNeoPipe, Error) << "Missing camera entity name";
-			return -EINVAL;
-		}
-		std::string entityName = entity.value();
-
-		LOG(NxpNeoPipe, Debug)
-			<< "Parsing camera " << entityName;
-
-		CameraInfo cameraInfo = {};
-
-		const std::map<unsigned int, std::string> kStreamMappingKeys{
-			{ CameraInfo::STREAM_INPUT0, "stream-input0" },
-			{ CameraInfo::STREAM_INPUT1, "stream-input1" },
-			{ CameraInfo::STREAM_EDATA, "stream-edata" },
-		};
-
-		for (auto &[stream, key] : kStreamMappingKeys) {
-			std::optional<CameraMediaStream> cameraStream;
-			cameraStream = parsePlatformMediaStream(camera, key, media);
-			if (cameraStream.has_value())
-				cameraInfo.streams_[stream] = std::move(cameraStream.value());
-		}
-
-		LOG(NxpNeoPipe, Debug)
-			<< "Camera stream-input1 configured "
-			<< cameraInfo.hasStream(CameraInfo::STREAM_INPUT1);
-
-		LOG(NxpNeoPipe, Debug)
-			<< "Camera stream-edata configured "
-			<< cameraInfo.hasStream(CameraInfo::STREAM_EDATA);
-
-		cameraMap_[entityName] = cameraInfo;
-	}
-
-	ret = parsePlatformReserveIsi();
-	if (ret)
-		cameraMap_.clear();
-
-	LOG(NxpNeoPipe, Debug) << "Camera configurations " << cameraMap_.size();
-	return cameraMap_.size() > 0 ? 0 : -EINVAL;
-}
-
-/**
- * \brief Reserve ISI pipes extracted from config file
- *
- * Reserve ISI pipes explicitly defined in the config file. In case of failure,
- * the platform configuration is considered invalid and the associated camera
- * definitions are discarded. Size used for the reservation is not relevant for
- * now: manual allocation should take care of pipe channel chaining if any.
- *
- * \return 0 on success or a negative error code otherwise
- */
-int PipelineConfig::parsePlatformReserveIsi()
-{
-	int ret = 0;
-
-	Size size(0, 0);
-	ISIDevice *isiDevice = isiDevice_.get();
-
-	for (auto &[name, cameraInfo] : cameraMap_) {
-		for (auto id : CameraInfo::kCameraStreams) {
-			auto stream = cameraInfo.getStream(id);
-			if (stream.has_value()) {
-				unsigned int index = stream.value()->pipe();
-				ret |= isiDevice->reservePipeByIndex(size, index);
-			}
-		}
-	}
-
-	if (!ret)
-		return 0;
-
-	/* Some reservations have failed - release all pipes */
-	for (auto &[name, cameraInfo] : cameraMap_) {
-		for (auto id : CameraInfo::kCameraStreams) {
-			auto stream = cameraInfo.getStream(id);
-			if (stream.has_value()) {
-				unsigned int index = stream.value()->pipe();
-				isiDevice->releasePipe(index);
-			}
-		}
-	}
-
-	return -EINVAL;
-}
-
-/**
  * \brief Parse the cameras section in the yaml configuration file
  * \param[in] cameras The cameras node in yaml file
  * \return 0 if no error was detected, a negative error code otherwise
@@ -1090,48 +764,11 @@ int PipelineConfig::parseGlobal(const YamlObject &global)
 }
 
 /**
- * \brief Parse the platforms section in the yaml configuration file
- * \param[in] platforms The platforms node in yaml file
- * \param[in] media The frontend media controller device
- * \return 0 if platform configuration was found, a negative error code otherwise
- */
-int PipelineConfig::parsePlatforms(const YamlObject &platforms, MediaDevice *media)
-{
-	/*
-	 * Parse each platform configuration present.
-	 * Stop when a matching configuration has been parsed successfully.
-	 */
-	for (const auto &platform : platforms.asList()) {
-		std::string name =
-			platform["name"].get<std::string>().value_or("");
-
-		LOG(NxpNeoPipe, Debug) << "Parsing config name " << name;
-
-		int ret = parsePlatformMatch(platform, media);
-		if (ret)
-			continue;
-
-		ret = parsePlatformRoutings(platform, media);
-		if (ret)
-			continue;
-
-		ret = parsePlatformCameras(platform, media);
-		if (ret)
-			continue;
-
-		return 0;
-	}
-
-	return -EINVAL;
-}
-
-/**
  * \brief Load the pipeline configuration from a pipeline configuration file
  * \param[in] filename The path to configuration file
- * \param[in] media The frontend media controller device
- * \return 0 if platform configuration was found, a negative error code otherwise
+ * \return 0 if config file was parsed correctly, a negative error code otherwise
  */
-int PipelineConfig::loadFromFile(std::string filename, MediaDevice *media)
+int PipelineConfig::loadFileConfig(std::string filename)
 {
 	File file(filename);
 
@@ -1170,8 +807,7 @@ int PipelineConfig::loadFromFile(std::string filename, MediaDevice *media)
 		LOG(NxpNeoPipe, Warning)
 			<< "Invalid cameras section in config file";
 
-	const YamlObject &platforms = (*root)["platforms"];
-	return parsePlatforms(platforms, media);
+	return ret;
 }
 
 /**
