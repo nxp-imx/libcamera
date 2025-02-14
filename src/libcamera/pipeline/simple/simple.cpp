@@ -433,6 +433,8 @@ private:
 	const MediaPad *acquirePipeline(SimpleCameraData *data);
 	void releasePipeline(SimpleCameraData *data);
 
+	bool matchMedia(DeviceEnumerator *enumerator, const SimplePipelineInfo *info, MediaDevice *media);
+
 	std::map<const MediaEntity *, EntityData> entities_;
 
 	MediaDevice *converter_;
@@ -1660,23 +1662,9 @@ int SimplePipelineHandler::resetRoutingTable(V4L2Subdevice *subdev)
 	return 0;
 }
 
-bool SimplePipelineHandler::match(DeviceEnumerator *enumerator)
+bool SimplePipelineHandler::matchMedia(DeviceEnumerator *enumerator, const SimplePipelineInfo *info, MediaDevice *media)
 {
-	const SimplePipelineInfo *info = nullptr;
 	unsigned int numStreams = 1;
-	MediaDevice *media;
-
-	for (const SimplePipelineInfo &inf : supportedDevices) {
-		DeviceMatch dm(inf.driver);
-		media = acquireMediaDevice(enumerator, dm);
-		if (media) {
-			info = &inf;
-			break;
-		}
-	}
-
-	if (!media)
-		return false;
 
 	for (const auto &[name, streams] : info->converters) {
 		DeviceMatch converterMatch(name);
@@ -1804,6 +1792,38 @@ bool SimplePipelineHandler::match(DeviceEnumerator *enumerator)
 	}
 
 	return registered;
+}
+
+bool SimplePipelineHandler::match(DeviceEnumerator *enumerator)
+{
+	MediaDevice *media;
+	std::map<MediaDevice *, const SimplePipelineInfo *> mediaDevices;
+
+	for (const SimplePipelineInfo &inf : supportedDevices) {
+		LOG(SimplePipeline, Debug) << "check simple pipeline " << inf.driver;
+		DeviceMatch dm(inf.driver);
+
+		do {
+			media = acquireMediaDevice(enumerator, dm);
+			if (media) {
+				mediaDevices[media] = &inf;
+				LOG(SimplePipeline, Debug) << "found media " << media->deviceNode();
+			}
+		} while (media);
+	}
+
+	bool matched = false;
+
+	for (auto it = mediaDevices.begin(); it != mediaDevices.end(); it++) {
+		media = it->first;
+		const SimplePipelineInfo *info = it->second;
+		LOG(SimplePipeline, Debug)
+			<< "call matchMedia for pipeline "
+			<< info->driver << ", media " << media->deviceNode();
+		matched |= matchMedia(enumerator, info, media);
+	}
+
+	return matched;
 }
 
 V4L2VideoDevice *SimplePipelineHandler::video(const MediaEntity *entity)
