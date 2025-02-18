@@ -129,10 +129,10 @@ private:
 };
 
 template<typename _Helper>
-class CamerarHelperFactory final : public CameraHelperFactoryBase
+class CameraHelperFactory final : public CameraHelperFactoryBase
 {
 public:
-	CamerarHelperFactory(const char *name)
+	CameraHelperFactory(const char *name)
 		: CameraHelperFactoryBase(name)
 	{
 	}
@@ -145,7 +145,7 @@ private:
 };
 
 #define REGISTER_CAMERA_HELPER(name, helper) \
-	static CamerarHelperFactory<helper> global_##helper##Factory(name);
+	static CameraHelperFactory<helper> global_##helper##Factory(name);
 
 } /* namespace nxp */
 
