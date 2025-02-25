@@ -40,7 +40,7 @@ enum ISPBufferType {
 interface IPANxpNeoInterface {
 	init(libcamera.IPASettings settings,
 	     uint32 hwRevision,
-	     string sensorId,
+	     string sensorEntity,
 	     libcamera.IPACameraSensorInfo sensorInfo,
 	     libcamera.ControlInfoMap sensorControls)
 		=> (int32 ret,

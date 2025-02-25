@@ -1537,9 +1537,10 @@ int NxpNeoCameraData::loadIPA()
 
 	uint32_t hwRevision = 0;
 	ipa::nxpneo::SensorConfig sensorConfig;
+	const MediaEntity *entity = sensor->entity();
 	ret = ipa_->init(IPASettings{ ipaTuningFile, sensor->model() },
 			 hwRevision,
-			 sensor->id(),
+			 entity->name(),
 			 sensorInfo, sensor->controls(),
 			 &ipaControls_,
 			 &sensorConfig);
