@@ -56,7 +56,7 @@ public:
 	IPANxpNeo();
 
 	int init(const IPASettings &settings, unsigned int hwRevision,
-		 const std::string &sensorId,
+		 const std::string &sensorEntity,
 		 const IPACameraSensorInfo &sensorInfo,
 		 const ControlInfoMap &sensorControls,
 		 ControlInfoMap *ipaControls,
@@ -124,14 +124,14 @@ std::string IPANxpNeo::logPrefix() const
 }
 
 int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
-		    const std::string &sensorId,
+		    const std::string &sensorEntity,
 		    const IPACameraSensorInfo &sensorInfo,
 		    const ControlInfoMap &sensorControls,
 		    ControlInfoMap *ipaControls,
 		    SensorConfig *sensorConfig)
 {
 	LOG(NxpNeoIPA, Debug) << "Hardware revision is " << hwRevision;
-	LOG(NxpNeoIPA, Debug) << "Sensor id: " << sensorId;
+	LOG(NxpNeoIPA, Debug) << "Sensor entity: " << sensorEntity;
 
 	context_.camHelper = CameraHelperFactoryBase::create(settings.sensorModel);
 	if (!context_.camHelper) {
