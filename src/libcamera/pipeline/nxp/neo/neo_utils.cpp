@@ -27,6 +27,20 @@ LOG_DECLARE_CATEGORY(NxpNeoPipe)
 
 namespace nxpneo {
 
+/**
+ * \struct CameraProperties
+ * \brief Camera properties defined by topology discovery or configuration file
+ *
+ * \var CameraProperties::hdrStream
+ * \brief Camera has a dedicated stream enabled for HDR short capture
+ *
+ * \var CameraProperties::eDataStream
+ * \brief Camera has a dedicated stream enabled for embedded data
+ *
+ * This structure reports to the pipeline handler a set of properties defined
+ * in the configuration file, or detected during the discovery procedure.
+ */
+
 /* -----------------------------------------------------------------------------
  * CameraMediaStream class
  */
@@ -139,7 +153,7 @@ int PipelineConfig::load(std::string filename, MediaDevice *media,
  *
  * \return The pointer to CameraInfo structure if it exists, nullptr otherwise
  */
-const CameraInfo *PipelineConfig::getCameraInfo(std::string name) const
+const CameraInfo *PipelineConfig::getCameraInfo(const std::string &name) const
 {
 	auto iter = cameraMap_.find(name);
 
@@ -273,8 +287,18 @@ int PipelineConfig::loadAutoDetect(MediaDevice *media)
 			continue;
 		}
 
-		cameraInfo.properties_ =
-			*getCameraProperties(sensor->entity()->name(), sensor->model());
+		/*
+		 * Store the reference to the properties associated to that
+		 * camera. Give precedence to the name-based over model-based
+		 * properties because they are more specialized.
+		 */
+		const std::string &name = sensor->entity()->name();
+		const std::string &model = sensor->model();
+		if (namePropertiesMap_.count(name))
+			cameraInfo.properties_ = &namePropertiesMap_[name];
+		else
+			cameraInfo.properties_ = &modelPropertiesMap_[model];
+
 		Size size = sensor->resolution();
 
 		/* Map for each stream the pipe index and per-entity routing */
@@ -289,7 +313,7 @@ int PipelineConfig::loadAutoDetect(MediaDevice *media)
 			if (stream == CameraInfo::STREAM_INPUT0) {
 				sensorStream = sensor->imageStream();
 			} else if (stream == CameraInfo::STREAM_INPUT1) {
-				bool enable = cameraInfo.properties_.hdrStream;
+				bool enable = cameraInfo.properties_->hdrStream;
 				if (!enable)
 					continue;
 				if (!sensor->auxiliaryStream().has_value()) {
@@ -299,7 +323,7 @@ int PipelineConfig::loadAutoDetect(MediaDevice *media)
 				}
 				sensorStream = sensor->auxiliaryStream().value();
 			} else if (stream == CameraInfo::STREAM_EDATA) {
-				bool enable = cameraInfo.properties_.eDataStream;
+				bool enable = cameraInfo.properties_->eDataStream;
 				if (!enable)
 					continue;
 				if (!sensor->embeddedDataStream().has_value()) {
@@ -808,23 +832,6 @@ int PipelineConfig::loadFileConfig(std::string filename)
 			<< "Invalid cameras section in config file";
 
 	return ret;
-}
-
-/**
- * \brief Return the properties for a given camera
- * \param[in] name The camera entity name
- * \param[in] model the camera model string as reported by Sensor::model()
- * \return The CameraProperties instance associated to a camera
- */
-const CameraProperties *
-PipelineConfig::getCameraProperties(const std::string &name,
-				    const std::string &model)
-{
-	/* Give precedence to the name-based instance if it exists */
-	if (namePropertiesMap_.count(name))
-		return &namePropertiesMap_[name];
-	else
-		return &modelPropertiesMap_[model];
 }
 
 } // namespace nxpneo

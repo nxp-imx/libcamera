@@ -51,8 +51,6 @@ private:
 };
 
 struct CameraProperties {
-	CameraProperties()
-		: hdrStream(false), eDataStream(false) {}
 	bool hdrStream;
 	bool eDataStream;
 };
@@ -66,7 +64,7 @@ public:
 	std::optional<const CameraMediaStream *> getStream(unsigned int id) const;
 	bool hasStream(unsigned int id) const { return getStream(id).has_value(); }
 
-	const CameraProperties *getCameraProperties() const { return &properties_; }
+	const CameraProperties *getCameraProperties() const { return properties_; }
 
 	enum {
 		STREAM_INPUT0 = 0,
@@ -80,7 +78,7 @@ public:
 
 private:
 	std::map<unsigned int, CameraMediaStream> streams_;
-	CameraProperties properties_;
+	CameraProperties *properties_ = nullptr;
 
 	friend PipelineConfig;
 };
@@ -103,7 +101,7 @@ public:
 	virtual ~PipelineConfig();
 	int load(std::string file, MediaDevice *media,
 		 std::shared_ptr<ISIDevice> isiDevice);
-	const CameraInfo *getCameraInfo(std::string name) const;
+	const CameraInfo *getCameraInfo(const std::string &name) const;
 	const RoutingMap &getRoutingMap() const;
 	const GlobalInfo *getGlobalInfo() const;
 
@@ -134,9 +132,6 @@ private:
 	int parseGlobal(const YamlObject &global);
 
 	int loadFileConfig(std::string file);
-
-	const CameraProperties *getCameraProperties(const std::string &name,
-						    const std::string &model);
 
 	RoutingMap routingMap_;
 	CameraMap cameraMap_;
