@@ -37,6 +37,9 @@ namespace nxpneo {
  * \var CameraProperties::eDataStream
  * \brief Camera has a dedicated stream enabled for embedded data
  *
+ * \var CameraProperties::multiCamera
+ * \brief Camera is sharing the same MIPI CSI-2 port with other cameras
+ *
  * This structure reports to the pipeline handler a set of properties defined
  * in the configuration file, or detected during the discovery procedure.
  */
@@ -379,6 +382,9 @@ int PipelineConfig::loadAutoDetect(MediaDevice *media)
 			isiDevice->releasePipe(index);
 	}
 
+	/* Finally, detect multi-camera conditions */
+	loadAutoDetectMultiCamera(media);
+
 	return cameraMap_.size() ? 0 : -EINVAL;
 }
 
@@ -702,6 +708,73 @@ int PipelineConfig::loadAutoDetectAddRoute(MediaEntity *entity,
 		<< sinkStream->pad << "/" << sinkStream->stream << "->"
 		<< sourceStream->pad << "/" << sourceStream->stream
 		<< " [" << flags << "]";
+
+	return 0;
+}
+
+/**
+ * \brief Detect cases where a MIPI CSI-2 port is shared by multiple cameras
+ *
+ * When the same MIPI CSI-2 port is shared by multiple cameras typically through
+ * the usage of a SerDes, some restrictions apply regarding the allowed
+ * configurations and transitions supported by the front-end media device.
+ * The multi camera use case is detected by counting the number of camera whose
+ * main image stream is connected to the same ISI crossbar sink.
+ * The CameraProperties structures of those cameras is updated to reflect that
+ * condition so that the pipeline handler knows about it.
+ *
+ * \return 0 on success or a negative error code otherwise
+ */
+int PipelineConfig::loadAutoDetectMultiCamera(MediaDevice *media)
+{
+	/* Record ISI crossbar sink for every camera */
+	ISIDevice *isiDevice = isiDevice_.get();
+	MediaEntity *crossbarEntity =
+		media->getEntityByName(isiDevice->kSDevCrossBarEntityName());
+	std::map<std::string, unsigned int> cameraXbarSink;
+	for (auto &[name, cameraInfo] : cameraMap_) {
+		if (!cameraInfo.hasStream(CameraInfo::STREAM_INPUT0)) {
+			LOG(NxpNeoPipe, Error)
+				<< "No input0 stream for camera " << name;
+			return -EINVAL;
+		}
+		const CameraMediaStream *cameraStream =
+			cameraInfo.getStream(CameraInfo::STREAM_INPUT0).value();
+		const std::vector<CameraMediaStream::StreamLink> &streamLinks =
+			cameraStream->streamLinks();
+
+		MediaLink *link = nullptr;
+		for (const CameraMediaStream::StreamLink &streamLink : streamLinks) {
+			link = streamLink.mediaLink_;
+			if (link->sink()->entity() == crossbarEntity)
+				break;
+		}
+
+		if (!link) {
+			LOG(NxpNeoPipe, Error)
+				<< "No crossbar connection for camera " << name;
+			return -EINVAL;
+		}
+
+		cameraXbarSink[name] = link->sink()->index();
+	}
+
+	/* Count the cameras linked to each sink pad of the ISI crossbar */
+	std::map<unsigned int, unsigned int> xbarSinkCount;
+	for (auto &[name, sink] : cameraXbarSink)
+		xbarSinkCount[sink] += 1;
+
+	/* Record the multi-camera status into the relevant camera properties */
+	for (auto &[name, cameraInfo] : cameraMap_) {
+		unsigned int sink = cameraXbarSink[name];
+		unsigned cameraCount = xbarSinkCount[sink];
+		bool multiCamera = cameraCount > 1 ? true : false;
+		LOG(NxpNeoPipe, Debug)
+			<< "Camera " << name << " sink " << sink
+			<< " multi-camera " << multiCamera << " count " << cameraCount;
+
+		cameraInfo.properties_->multiCamera = multiCamera;
+	}
 
 	return 0;
 }

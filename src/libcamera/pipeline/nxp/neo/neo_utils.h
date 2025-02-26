@@ -53,6 +53,7 @@ private:
 struct CameraProperties {
 	bool hdrStream;
 	bool eDataStream;
+	bool multiCamera;
 };
 
 class CameraInfo
@@ -127,6 +128,7 @@ private:
 				   V4L2Subdevice::Stream *sinkStream,
 				   V4L2Subdevice::Stream *sourceStream,
 				   std::map<MediaEntity *, V4L2Subdevice::Routing> *routingMap);
+	int loadAutoDetectMultiCamera(MediaDevice *media);
 
 	int parseCameras(const YamlObject &cameras);
 	int parseGlobal(const YamlObject &global);

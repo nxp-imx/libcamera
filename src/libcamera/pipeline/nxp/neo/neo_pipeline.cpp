@@ -91,6 +91,7 @@ public:
 	CameraSensor *sensor() const { return sensor_.get(); }
 	NeoDevice *neoDevice() const { return neo_.get(); }
 	std::string cameraName() const { return sensor_->entity()->name(); }
+	bool multiCamera() const { return cameraInfo_->getCameraProperties()->multiCamera; }
 
 	bool rawStreamOnly_ = false;
 
@@ -200,7 +201,6 @@ public:
 	bool match(DeviceEnumerator *enumerator) override;
 
 	unsigned int numCameras() const { return numCameras_; }
-	bool multiCamera() const { return numCameras_ > 1; }
 	ISIDevice *isiDevice() const { return isi_.get(); }
 	MediaDevice *isiMedia() const { return isiMedia_; }
 	const PipelineConfig *pipelineConfig() { return &pipelineConfig_; }
@@ -249,7 +249,7 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 	 * type of transform may change the sensor format.
 	 */
 	Orientation requestedOrientation = orientation;
-	if (!data_->pipe()->multiCamera()) {
+	if (!data_->multiCamera()) {
 		combinedTransform_ = sensor->computeTransform(&orientation);
 	} else {
 		/*
@@ -360,7 +360,7 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 
 	Size sensorSize = sensorSizes.back();
 	Size pixelSize = pixelSizes.back();
-	bool multiCamera = data_->pipe()->multiCamera();
+	bool multiCamera = data_->multiCamera();
 	if (!multiCamera) {
 		for (const StreamConfiguration &cfg : config_) {
 			auto iter = std::find(pixelSizes.begin(),
@@ -500,7 +500,7 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 	/* Size configuration is possible only with a single camera */
 	std::vector<SizeRange> sensorRanges;
 	std::vector<SizeRange> pixelRanges;
-	if (!multiCamera()) {
+	if (!data->multiCamera()) {
 		for (Size &size : sensorSizes)
 			sensorRanges.emplace_back(size);
 		for (Size &size : pixelSizes)
@@ -826,7 +826,7 @@ int PipelineHandlerNxpNeo::setupRouting() const
  * stream active.
  * In multicamera case, it prevents from configuring the graph at configure()
  * time, because an other camera may already be streaming at that time. Thus,
- * for multicamera, frontend graph is staticallly configured at pipeline
+ * for multicamera, frontend graph is statically configured at pipeline
  * creation time.
  * Configuration of the ISP device will still be done at configure() time as
  * there is one device instance per camera, so there is no issue of sharing
@@ -837,9 +837,6 @@ int PipelineHandlerNxpNeo::setupRouting() const
 int PipelineHandlerNxpNeo::setupCameraGraphs()
 {
 	int ret = 0;
-
-	if (!multiCamera())
-		return 0;
 
 	for (auto const &camera : manager_->cameras()) {
 		/* Make sure this camera is controlled by our pipeline */
@@ -852,6 +849,9 @@ int PipelineHandlerNxpNeo::setupCameraGraphs()
 		NxpNeoCameraData *data = cameraData(camera.get());
 		LOG(NxpNeoPipe, Debug)
 			<< "Setup graph for camera " << data->cameraName();
+
+		if (!data->multiCamera())
+			continue;
 
 		/* Apply default format and transform to each media pad streams */
 		unsigned int rawCode = data->getRawMediaBusFormat();
@@ -908,7 +908,7 @@ int NxpNeoCameraData::configure(CameraConfiguration *c)
 	 * single camera case. For multicamera case, they have been statically
 	 * configured at pipeline creation time.
 	 */
-	if (!pipe()->multiCamera()) {
+	if (!multiCamera()) {
 		ret = configureFrontEndFormat(config->sensorFormat(),
 					      config->combinedTransform());
 		if (ret)
