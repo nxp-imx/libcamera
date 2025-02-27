@@ -200,6 +200,9 @@ public:
 
 	bool match(DeviceEnumerator *enumerator) override;
 
+	bool acquireDevice(Camera *camera) override;
+	void releaseDevice(Camera *camera) override;
+
 	unsigned int numCameras() const { return numCameras_; }
 	ISIDevice *isiDevice() const { return isi_.get(); }
 	MediaDevice *isiMedia() const { return isiMedia_; }
@@ -220,6 +223,7 @@ private:
 	PipelineConfig pipelineConfig_;
 
 	unsigned int numCameras_ = 0;
+	unsigned int acquireCount_ = 0;
 	std::shared_ptr<ISIDevice> isi_;
 	MediaDevice *isiMedia_ = nullptr;
 };
@@ -700,17 +704,44 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 	if (numCameras_ < 1)
 		return false;
 
-	/* Apply global routing and setup cameras frontend graphs */
-	ret = setupRouting();
-	if (ret)
-		return ret;
-	ret = setupCameraGraphs();
-	if (ret)
-		return ret;
-
 	LOG(NxpNeoPipe, Info) << "Probed " << numCameras_ << " cameras";
 
 	return true;
+}
+
+bool PipelineHandlerNxpNeo::acquireDevice(Camera *camera)
+{
+	NxpNeoCameraData *data = cameraData(camera);
+
+	acquireCount_++;
+	LOG(NxpNeoPipe, Debug) << "acquireDevice " << data->cameraName()
+			       << " count " << acquireCount_;
+	if (acquireCount_ > 1)
+		return true;
+
+	/*
+	 * Frontend media controller device has been locked by the process.
+	 * Global routing for all cameras is to be configured now as it will no
+	 * longer be possible to update it after any streaming has started.
+	 * Also, camera graphs in multi-cameras condition should be statically
+	 * preconfigured as they are dependent on each other.
+	 */
+	int ret = setupRouting();
+	if (ret)
+		return false;
+
+	ret = setupCameraGraphs();
+	return (!ret);
+}
+
+void PipelineHandlerNxpNeo::releaseDevice(Camera *camera)
+{
+	NxpNeoCameraData *data = cameraData(camera);
+
+	ASSERT(acquireCount_);
+	acquireCount_--;
+	LOG(NxpNeoPipe, Debug) << "releaseDevice " << data->cameraName()
+			       << " count " << acquireCount_;
 }
 
 /**
@@ -815,22 +846,27 @@ int PipelineHandlerNxpNeo::setupRouting() const
 }
 
 /**
- * \brief Initialize the camera graphs from the media controller device
+ * \brief Initialize the multicamera graphs from the media controller device
  *
- * Cameras managed by the pipeline operate on different streams of the media
- * controller device. Those streams share subdevice pads common to multiple
- * cameras.
- * A given stream to be started requires a valid format to be configured
- * for every other stream sharing a media entity pad.
- * Also, a stream can not be reconfigured for a subdevice that has an other
- * stream active.
- * In multicamera case, it prevents from configuring the graph at configure()
- * time, because an other camera may already be streaming at that time. Thus,
- * for multicamera, frontend graph is statically configured at pipeline
- * creation time.
+ * Cameras managed by the pipeline operate on different streams of the frontend
+ * media controller device. Those streams share subdevice pads that may be
+ * common to multiple cameras.
+ * When multiple cameras are multiplexed over the same MIPI-CSI2 port, typically
+ * through the usage of a GMSL SerDes, some limitations coming from the frontend
+ * media device apply to that set of cameras:
+ * - A given camera graph to be started requires a valid format to be configured
+ *   for every other camera graphs of the set
+ * - A camera graph can not be reconfigured when an other camera from the set is
+ *   active
+ * With such multicamera case, these limitations prevent from configuring the
+ * camera graph at configure() time, because an other camera may already be
+ * streaming. Also a defaut graph configuration is necessary for each camera of
+ * the set before streaming is started on another camera.
+ * Therefore, for multicamera case the frontend graph of each camera  is
+ * statically configured when the frontend media device is locked.
  * Configuration of the ISP device will still be done at configure() time as
- * there is one device instance per camera, so there is no issue of sharing
- * streams on common entity pad.
+ * there is one device instance per camera so ISP devices can be reconfigured
+ * independently from each other.
  *
  * \return 0 on success or a negative error code otherwise
  */
