@@ -105,7 +105,6 @@ public:
 	std::queue<Request *> processingRequests_;
 
 private:
-	int initControls();
 	int updateControls();
 	int loadIPA();
 
@@ -1244,11 +1243,10 @@ int NxpNeoCameraData::init()
 	if (ret)
 		return ret;
 
+	updateControls();
+
 	/* Initialize the camera properties. */
 	properties_ = sensor_->properties();
-	ret = initControls();
-	if (ret)
-		return ret;
 
 	neo_->isp_->frameStart.connect(this, &NxpNeoCameraData::frameStart);
 
@@ -1486,37 +1484,6 @@ int NxpNeoCameraData::configureFrontEndFormat(const V4L2SubdeviceFormat &sensorF
 	}
 
 	return ret;
-}
-
-/**
- * \brief Initialize the camera controls
- *
- * Initialize the camera controls by calculating controls which the pipeline
- * is reponsible for and merge them with the controls computed by the IPA.
- *
- * This function needs data->ipaControls_ to be initialized by the IPA init()
- * function at camera creation time. Always call this function after IPA init().
- *
- * \return 0 on success or a negative error code otherwise
- */
-int NxpNeoCameraData::initControls()
-{
-	/*
-	 * \todo The controls initialized here depend on sensor configuration
-	 * and their limits should be updated once the configuration gets
-	 * changed.
-	 *
-	 * Initialize the sensor using its resolution and compute the control
-	 * limits.
-	 */
-	CameraSensor *sensor = this->sensor();
-	V4L2SubdeviceFormat sensorFormat = {};
-	sensorFormat.size = sensor->resolution();
-	int ret = sensor->setFormat(&sensorFormat);
-	if (ret)
-		return ret;
-
-	return updateControls();
 }
 
 /**
