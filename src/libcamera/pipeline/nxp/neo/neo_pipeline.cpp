@@ -1500,7 +1500,7 @@ int NxpNeoCameraData::configureFrontEndFormat(V4L2SubdeviceFormat &sensorFormat,
 		return ret;
 
 	/* Configure the stream formats for each stream */
-	std::map<unsigned int, V4L2SubdeviceFormat> pipesSdFormat;
+	pipesDevFormats_.clear();
 	for (auto [stream, pipe] : pipes_) {
 		std::optional<const CameraMediaStream *> cameraInfoStream =
 			cameraInfo_->getStream(stream);
@@ -1523,18 +1523,11 @@ int NxpNeoCameraData::configureFrontEndFormat(V4L2SubdeviceFormat &sensorFormat,
 		ret = configureFrontEndStream(streamLinks, format);
 		if (ret)
 			return ret;
-		pipesSdFormat[stream] = format;
-	}
 
-	/* Configure ISI pipes */
-	pipesDevFormats_.clear();
-	for (auto [stream, pipe] : pipes_) {
-		auto itFormat = pipesSdFormat.find(stream);
-		ASSERT(itFormat != pipesSdFormat.end());
-
-		V4L2SubdeviceFormat &format = itFormat->second;
 		V4L2DeviceFormat devFormat;
-		ret |= pipe->configure(format, &devFormat);
+		ret = pipe->configure(format, &devFormat);
+		if (ret)
+			return ret;
 		pipesDevFormats_[stream] = std::move(devFormat);
 	}
 
