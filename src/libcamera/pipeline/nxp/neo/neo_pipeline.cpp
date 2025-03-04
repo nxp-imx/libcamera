@@ -92,6 +92,7 @@ public:
 	NeoDevice *neoDevice() const { return neo_.get(); }
 	std::string cameraName() const { return sensor_->entity()->name(); }
 	bool multiCamera() const { return cameraInfo_->getCameraProperties()->multiCamera; }
+	const Orientation *mountingOrientation() const { return &mountingOrientation_; }
 
 	bool rawStreamOnly_ = false;
 
@@ -138,6 +139,7 @@ private:
 	std::unique_ptr<CameraSensor> sensor_;
 	std::unique_ptr<NeoDevice> neo_;
 	const CameraInfo *cameraInfo_;
+	Orientation mountingOrientation_;
 
 	/* Front end pipes and video formats - maps per stream */
 	std::map<unsigned int, ISIPipe *> pipes_;
@@ -244,47 +246,6 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 		return Invalid;
 
 	/*
-	 * Validate the requested transform against the sensor capabilities and
-	 * rotation and store the final combined transform that configure() will
-	 * need to apply to the sensor to save us working it out again.
-	 * In multicamera mode, the graphs format is statically configured, so
-	 * the only acceptable transform is the identity because applying other
-	 * type of transform may change the sensor format.
-	 */
-	Orientation requestedOrientation = orientation;
-	if (!data_->multiCamera()) {
-		combinedTransform_ = sensor->computeTransform(&orientation);
-	} else {
-		/*
-		 * Find which orientation corresponds to Identity transform
-		 * to update CameraConfiguration accordingly.
-		 * \todo May be replaced by a CameraSensor helper to get the
-		 * sensor mounting orientation directly.
-		 */
-		static const std::vector<Orientation> orientations = {
-			Orientation::Rotate0,
-			Orientation::Rotate0Mirror,
-			Orientation::Rotate180,
-			Orientation::Rotate180Mirror,
-			Orientation::Rotate90Mirror,
-			Orientation::Rotate270,
-			Orientation::Rotate270Mirror,
-			Orientation::Rotate90,
-		};
-		auto iter = std::find_if(orientations.begin(),
-					 orientations.end(),
-					 [&](const Orientation &o) {
-						 orientation = o;
-						 combinedTransform_ =
-							 sensor->computeTransform(&orientation);
-						 return combinedTransform_ == Transform::Identity;
-					 });
-		ASSERT(iter != orientations.end());
-	}
-	if (orientation != requestedOrientation)
-		status = Adjusted;
-
-	/*
 	 * Validate the requested stream configuration verifying that there is
 	 * a single raw stream, or a rgb/yuv stream with an optional IR stream
 	 * when supported by the sensor.
@@ -341,6 +302,16 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 		LOG(NxpNeoPipe, Debug) << "Multiple Ir streams not supported";
 		return Invalid;
 	}
+
+	Orientation requestedOrientation = orientation;
+	if (!data_->multiCamera()) {
+		combinedTransform_ = sensor->computeTransform(&orientation);
+	} else {
+		combinedTransform_ = Transform::Identity;
+		orientation = *data_->mountingOrientation();
+	}
+	if (orientation != requestedOrientation)
+		status = Adjusted;
 
 	/*
 	 * All streams shall use the same size and that size has to be
@@ -1248,14 +1219,10 @@ int NxpNeoCameraData::init()
 	/* Initialize the camera properties. */
 	properties_ = sensor_->properties();
 
-	neo_->isp_->frameStart.connect(this, &NxpNeoCameraData::frameStart);
-
-	/* Convert the sensor rotation to a transformation */
 	const auto &rotation = properties_.get(properties::Rotation);
-	if (!rotation)
-		LOG(NxpNeoPipe, Warning) << "Rotation control not exposed by "
-					 << cameraName()
-					 << ". Assume rotation 0";
+	mountingOrientation_ = orientationFromRotation(rotation.value_or(0));
+
+	neo_->isp_->frameStart.connect(this, &NxpNeoCameraData::frameStart);
 
 	/*
 	 * Connect video devices' 'bufferReady' signals to their
