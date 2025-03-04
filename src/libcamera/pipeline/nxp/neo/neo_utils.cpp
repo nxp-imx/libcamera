@@ -123,7 +123,6 @@ PipelineConfig::~PipelineConfig()
 /**
  * \brief Load the pipeline configuration
  * \param[in] file The path to the pipeline configuration file
- * \param[in] media The frontend media controller device
  * \param[in] isiDevice The ISI Device associated to the media controller device
  *
  * Build the pipeline configuration that consists in the parameters that may be
@@ -132,8 +131,7 @@ PipelineConfig::~PipelineConfig()
  *
  * \return 0 on success or a negative error code otherwise
  */
-int PipelineConfig::load(std::string filename, MediaDevice *media,
-			 std::shared_ptr<ISIDevice> isiDevice)
+int PipelineConfig::load(std::string filename, std::shared_ptr<ISIDevice> isiDevice)
 {
 	isiDevice_ = isiDevice;
 
@@ -141,7 +139,7 @@ int PipelineConfig::load(std::string filename, MediaDevice *media,
 	if (ret)
 		LOG(NxpNeoPipe, Info) << "Could not parse config file " << filename;
 
-	ret = loadAutoDetect(media);
+	ret = loadAutoDetect();
 	return ret;
 }
 
@@ -195,7 +193,6 @@ const GlobalInfo *PipelineConfig::getGlobalInfo() const
 
 /**
  * \brief Discover the valid camera graphs to the capture video device
- * \param[in] media The frontend media controller device
  *
  * For every camera sensor in the media device, look for valid media links paths
  * to the capture video device. Also, build the aggregated global routing table
@@ -203,10 +200,11 @@ const GlobalInfo *PipelineConfig::getGlobalInfo() const
  *
  * \return 0 on success or a negative error code otherwise
  */
-int PipelineConfig::loadAutoDetect(MediaDevice *media)
+int PipelineConfig::loadAutoDetect()
 {
 	int ret;
 
+	MediaDevice *media = isiDevice_->media();
 	if (!media)
 		return -EINVAL;
 
@@ -352,7 +350,7 @@ int PipelineConfig::loadAutoDetect(MediaDevice *media)
 			RoutingMap routingMap;
 
 			ret = loadAutoDetectCameraStream(
-				media, index, entity,
+				index, entity,
 				sensorStream.pad, sensorStream.stream,
 				&streamMap, &routingMap, &cameraMediaStream);
 			if (ret)
@@ -383,14 +381,13 @@ int PipelineConfig::loadAutoDetect(MediaDevice *media)
 	}
 
 	/* Finally, detect multi-camera conditions */
-	loadAutoDetectMultiCamera(media);
+	loadAutoDetectMultiCamera();
 
 	return cameraMap_.size() ? 0 : -EINVAL;
 }
 
 /**
  * \brief Discover a valid stream path from the sensor to the video capture device
- * \param[in] media The frontend media controller device
  * \param[in] pipe The ISI pipe associated to that stream
  * \param[in] sensorEntity The targeted sensor media entity
  * \param[in] sensorPad The targeted sensor source pad
@@ -411,8 +408,7 @@ int PipelineConfig::loadAutoDetect(MediaDevice *media)
  *
  * \return 0 on success or a negative error code otherwise
  */
-int PipelineConfig::loadAutoDetectCameraStream(MediaDevice *media,
-					       unsigned int pipe,
+int PipelineConfig::loadAutoDetectCameraStream(unsigned int pipe,
 					       MediaEntity *sensorEntity,
 					       unsigned int sensorPad,
 					       unsigned int sensorStream,
@@ -422,9 +418,9 @@ int PipelineConfig::loadAutoDetectCameraStream(MediaDevice *media,
 {
 	int ret;
 
-	ISIDevice *isiDevice = isiDevice_.get();
+	MediaDevice *media = isiDevice_->media();
 	MediaEntity *crossbarEntity =
-		media->getEntityByName(isiDevice->kSDevCrossBarEntityName());
+		media->getEntityByName(isiDevice_->kSDevCrossBarEntityName());
 	if (!crossbarEntity) {
 		LOG(NxpNeoPipe, Error) << "Crossbar not found";
 		return -EINVAL;
@@ -433,7 +429,7 @@ int PipelineConfig::loadAutoDetectCameraStream(MediaDevice *media,
 	/* Discover path from sensor source to crossbar sink */
 	std::vector<std::vector<MediaLink *>> xbarPaths;
 
-	ret = loadAutoDetectFindPaths(media, sensorEntity, sensorPad,
+	ret = loadAutoDetectFindPaths(sensorEntity, sensorPad,
 				      crossbarEntity, kPadAny, &xbarPaths);
 	if (ret) {
 		LOG(NxpNeoPipe, Warning)
@@ -447,13 +443,13 @@ int PipelineConfig::loadAutoDetectCameraStream(MediaDevice *media,
 	/* Discover path from crossbar to pipe video node */
 	std::vector<std::vector<MediaLink *>> pipePaths;
 	MediaEntity *pipeEntity =
-		media->getEntityByName(isiDevice->kVDevPipeEntityName(pipe));
+		media->getEntityByName(isiDevice_->kVDevPipeEntityName(pipe));
 	if (!pipeEntity)
 		return -EINVAL;
 	unsigned int crossbarSource =
-		isiDevice->crossbarFirstSourcePad() + pipe;
+		isiDevice_->crossbarFirstSourcePad() + pipe;
 
-	ret = loadAutoDetectFindPaths(media, crossbarEntity, crossbarSource,
+	ret = loadAutoDetectFindPaths(crossbarEntity, crossbarSource,
 				      pipeEntity, kPadAny, &pipePaths);
 	if (ret) {
 		LOG(NxpNeoPipe, Error)
@@ -519,7 +515,6 @@ int PipelineConfig::loadAutoDetectCameraStream(MediaDevice *media,
 
 /**
  * \brief Discover a valid media link path from an entity to an other
- * \param[in] media The frontend media controller device
  * \param[in] fromEntity The start entity
  * \param[in] fromPad The start entity source pad
  * \param[in] toEntity The destination entity
@@ -537,8 +532,7 @@ int PipelineConfig::loadAutoDetectCameraStream(MediaDevice *media,
  *
  * \return 0 on success or a negative error code otherwise
  */
-int PipelineConfig::loadAutoDetectFindPaths(MediaDevice *media,
-					    MediaEntity *fromEntity, unsigned int fromPad,
+int PipelineConfig::loadAutoDetectFindPaths(MediaEntity *fromEntity, unsigned int fromPad,
 					    MediaEntity *toEntity, unsigned int toPad,
 					    std::vector<std::vector<MediaLink *>> *linkPaths)
 {
@@ -587,8 +581,7 @@ int PipelineConfig::loadAutoDetectFindPaths(MediaDevice *media,
 				continue;
 
 			std::vector<std::vector<MediaLink *>> remotePaths;
-			int ret = loadAutoDetectFindPaths(media,
-							  remoteEntity, pad->index(),
+			int ret = loadAutoDetectFindPaths(remoteEntity, pad->index(),
 							  toEntity, toPad,
 							  &remotePaths);
 			if (ret)
@@ -725,12 +718,12 @@ int PipelineConfig::loadAutoDetectAddRoute(MediaEntity *entity,
  *
  * \return 0 on success or a negative error code otherwise
  */
-int PipelineConfig::loadAutoDetectMultiCamera(MediaDevice *media)
+int PipelineConfig::loadAutoDetectMultiCamera()
 {
 	/* Record ISI crossbar sink for every camera */
-	ISIDevice *isiDevice = isiDevice_.get();
+	MediaDevice *media = isiDevice_->media();
 	MediaEntity *crossbarEntity =
-		media->getEntityByName(isiDevice->kSDevCrossBarEntityName());
+		media->getEntityByName(isiDevice_->kSDevCrossBarEntityName());
 	std::map<std::string, unsigned int> cameraXbarSink;
 	for (auto &[name, cameraInfo] : cameraMap_) {
 		if (!cameraInfo.hasStream(CameraInfo::STREAM_INPUT0)) {

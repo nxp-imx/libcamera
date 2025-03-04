@@ -4,7 +4,7 @@
  *     src/libcamera/pipeline/ipu3/cio2.h
  * Copyright (C) 2019, Google Inc.
  *
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  * isi_device.h - NXP ISI
  */
 
@@ -94,7 +94,7 @@ public:
 	static constexpr unsigned int kUnchainedWidthMax = 2048;
 	static constexpr unsigned int kChainedWidthMax = 4096;
 
-	int init(const MediaDevice *media);
+	int init(MediaDevice *media);
 
 	int reservePipeBySize(Size &sizeMax, unsigned int *index);
 	int reservePipeByIndex(Size &sizeMax, unsigned int index);
@@ -122,7 +122,7 @@ public:
 	V4L2Subdevice *crossbar() const { return crossbar_.get(); }
 	unsigned int crossbarFirstSourcePad() const { return xbarSinkPads_; }
 	unsigned int crossbarSourcePads() const { return pipeEntries_.size(); }
-	const MediaDevice *media() const { return media_; }
+	MediaDevice *media() const { return media_; }
 
 private:
 	struct PipeWrapper {
@@ -136,7 +136,7 @@ private:
 	std::vector<PipeWrapper> pipeEntries_;
 	std::unique_ptr<V4L2Subdevice> crossbar_;
 	unsigned int xbarSinkPads_ = 0;
-	const MediaDevice *media_ = nullptr;
+	MediaDevice *media_ = nullptr;
 };
 
 } /* namespace libcamera */

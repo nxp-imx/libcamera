@@ -100,8 +100,7 @@ class PipelineConfig
 public:
 	PipelineConfig(){};
 	virtual ~PipelineConfig();
-	int load(std::string file, MediaDevice *media,
-		 std::shared_ptr<ISIDevice> isiDevice);
+	int load(std::string file, std::shared_ptr<ISIDevice> isiDevice);
 	const CameraInfo *getCameraInfo(const std::string &name) const;
 	const RoutingMap &getRoutingMap() const;
 	const GlobalInfo *getGlobalInfo() const;
@@ -110,16 +109,15 @@ private:
 	static constexpr unsigned int kPadAny =
 		std::numeric_limits<unsigned int>::max();
 
-	int loadAutoDetect(MediaDevice *media);
-	int loadAutoDetectCameraStream(MediaDevice *media, unsigned int pipe,
+	int loadAutoDetect();
+	int loadAutoDetectCameraStream(unsigned int pipe,
 				       MediaEntity *sensorEntity,
 				       unsigned int sensorPad,
 				       unsigned int sensorStream,
 				       std::map<MediaPad *, unsigned int> *streamMap,
 				       RoutingMap *routingMap,
 				       CameraMediaStream *cameraMediaStream);
-	int loadAutoDetectFindPaths(MediaDevice *media,
-				    MediaEntity *fromEntity, unsigned int fromPad,
+	int loadAutoDetectFindPaths(MediaEntity *fromEntity, unsigned int fromPad,
 				    MediaEntity *toEntity, unsigned int toPad,
 				    std::vector<std::vector<MediaLink *>> *linkPaths);
 	unsigned int loadAutoDetectPadToStream(std::map<MediaPad *, unsigned int> *streamMap,
@@ -128,7 +126,7 @@ private:
 				   V4L2Subdevice::Stream *sinkStream,
 				   V4L2Subdevice::Stream *sourceStream,
 				   std::map<MediaEntity *, V4L2Subdevice::Routing> *routingMap);
-	int loadAutoDetectMultiCamera(MediaDevice *media);
+	int loadAutoDetectMultiCamera();
 
 	int parseCameras(const YamlObject &cameras);
 	int parseGlobal(const YamlObject &global);

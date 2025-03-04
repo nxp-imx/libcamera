@@ -290,7 +290,7 @@ const std::map<uint32_t, V4L2PixelFormat> &ISIPipe::mediaBusToPixelFormats()
  *
  * \return 0 in case of success, or a negative error value
  */
-int ISIDevice::init(const MediaDevice *media)
+int ISIDevice::init(MediaDevice *media)
 {
 	int ret;
 

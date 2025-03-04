@@ -214,7 +214,6 @@ public:
 
 	unsigned int numCameras() const { return numCameras_; }
 	ISIDevice *isiDevice() const { return isi_.get(); }
-	MediaDevice *isiMedia() const { return isiMedia_; }
 	const PipelineConfig *pipelineConfig() { return &pipelineConfig_; }
 
 private:
@@ -234,7 +233,6 @@ private:
 	unsigned int numCameras_ = 0;
 	unsigned int acquireCount_ = 0;
 	std::shared_ptr<ISIDevice> isi_;
-	MediaDevice *isiMedia_ = nullptr;
 };
 
 NxpNeoCameraConfiguration::NxpNeoCameraConfiguration(Camera *camera,
@@ -678,12 +676,12 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 	isi.add(ISIDevice::kSDevPipeEntityName(0));
 	isi.add(ISIDevice::kVDevPipeEntityName(0));
 
-	isiMedia_ = acquireMediaDevice(enumerator, isi);
-	if (!isiMedia_)
+	MediaDevice *isiMedia = acquireMediaDevice(enumerator, isi);
+	if (!isiMedia)
 		return false;
 
 	isi_ = std::make_shared<ISIDevice>();
-	ret = isi_->init(isiMedia_);
+	ret = isi_->init(isiMedia);
 	if (ret) {
 		LOG(NxpNeoPipe, Debug) << "ISI media device init failed";
 		return false;
@@ -708,7 +706,7 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 	isp.add(NeoDevice::kVDevEntityIrName());
 	isp.add(NeoDevice::kVDevEntityStatsName());
 
-	for (MediaEntity *entity : isiMedia_->entities()) {
+	for (MediaEntity *entity : isiMedia->entities()) {
 		if (entity->function() != MEDIA_ENT_F_CAM_SENSOR)
 			continue;
 
@@ -843,7 +841,7 @@ int PipelineHandlerNxpNeo::setupRouting() const
 			<< " routing " << routing;
 
 		std::unique_ptr<V4L2Subdevice> sdev =
-			V4L2Subdevice::fromEntityName(isiMedia_, name);
+			V4L2Subdevice::fromEntityName(isiDevice()->media(), name);
 		if (!sdev.get()) {
 			LOG(NxpNeoPipe, Error) << "Subdevice does not exist " << name;
 			return -EINVAL;
@@ -946,7 +944,7 @@ int PipelineHandlerNxpNeo::loadPipelineConfig()
 		file = std::string(NXP_NEO_PIPELINE_DATA_DIR) +
 		       std::string("/config.yaml");
 
-	ret = pipelineConfig_.load(file, isiMedia_, isi_);
+	ret = pipelineConfig_.load(file, isi_);
 
 	return ret;
 }
@@ -1756,7 +1754,7 @@ int NxpNeoCameraData::configureFrontEndStream(
 	const std::vector<CameraMediaStream::StreamLink> &streamLinks,
 	V4L2SubdeviceFormat &sdFormat)
 {
-	const MediaDevice *media = pipe()->isiMedia();
+	const MediaDevice *media = pipe()->isiDevice()->media();
 	std::unique_ptr<V4L2Subdevice> subDev;
 	int ret = 0;
 
