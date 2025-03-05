@@ -180,11 +180,11 @@ public:
 
 	virtual void controlInfoMapGetExposureRange(
 		const ControlInfoMap *ctrls, std::vector<double> *minExposure,
-		std::vector<double> *maxExposure, std::vector<double> *defExposure) const;
+		std::vector<double> *maxExposure, std::vector<double> *defExposure) const override;
 
 	virtual void controlInfoMapGetAnalogGainRange(
 		const ControlInfoMap *ctrls, std::vector<double> *minGain,
-		std::vector<double> *maxGain, std::vector<double> *defGain) const;
+		std::vector<double> *maxGain, std::vector<double> *defGain) const override;
 
 #if USE_CUSTOM_CONTROLS
 	void controlListSetAWB(
