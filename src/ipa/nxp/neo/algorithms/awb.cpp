@@ -303,10 +303,12 @@ void Awb::awbGreyWorld(IPAActiveState &activeState, IPAFrameContext &frameContex
 
 	/*
 	 * Clamp the gain values to the hardware, which expresses gains as Q8.8
-	 * unsigned integer values.
+	 * unsigned integer values. Set the minimum just above zero to avoid
+	 * divisions by zero when computing the raw means in subsequent
+	 * iterations.
 	 */
-	redGain = std::clamp(redGain, 0.0, 65535.0 / 256);
-	blueGain = std::clamp(blueGain, 0.0, 65535.0 / 256);
+	redGain = std::clamp(redGain, 1.0 / 256, 65535.0 / 256);
+	blueGain = std::clamp(blueGain, 1.0 / 256, 65535.0 / 256);
 
 	activeState.awb.gains.automatic.red = redGain;
 	activeState.awb.gains.automatic.blue = blueGain;
