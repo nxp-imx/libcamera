@@ -38,7 +38,7 @@ namespace nxpneo {
  * \brief Camera has a dedicated stream enabled for embedded data
  *
  * \var CameraProperties::multiCamera
- * \brief Camera is sharing the same MIPI CSI-2 port with other cameras
+ * \brief Camera is sharing its MIPI CSI-2 port with other cameras
  *
  * This structure reports to the pipeline handler a set of properties defined
  * in the configuration file, or detected during the discovery procedure.
@@ -293,7 +293,7 @@ int PipelineConfig::loadAutoDetect(MediaDevice *media)
 		/*
 		 * Store the reference to the properties associated to that
 		 * camera. Give precedence to the name-based over model-based
-		 * properties because they are more specialized.
+		 * properties because it is more specialized.
 		 */
 		const std::string &name = sensor->entity()->name();
 		const std::string &model = sensor->model();
@@ -718,9 +718,9 @@ int PipelineConfig::loadAutoDetectAddRoute(MediaEntity *entity,
  * When the same MIPI CSI-2 port is shared by multiple cameras typically through
  * the usage of a SerDes, some restrictions apply regarding the allowed
  * configurations and transitions supported by the front-end media device.
- * The multi camera use case is detected by counting the number of camera whose
+ * The multi-camera use case is detected by counting the number of camera whose
  * main image stream is connected to the same ISI crossbar sink.
- * The CameraProperties structures of those cameras is updated to reflect that
+ * The CameraProperties structures of those cameras are updated to reflect that
  * condition so that the pipeline handler knows about it.
  *
  * \return 0 on success or a negative error code otherwise
