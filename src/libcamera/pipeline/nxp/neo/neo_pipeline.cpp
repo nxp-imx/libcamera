@@ -93,7 +93,7 @@ public:
 	CameraSensor *sensor() const { return sensor_.get(); }
 	NeoDevice *neoDevice() const { return neo_.get(); }
 	std::string cameraName() const { return sensor_->entity()->name(); }
-	bool multiCamera() const { return cameraInfo_->cameraProperties()->multiCamera; }
+	bool multiCamera() const { return cameraInfo_->cameraProperties().multiCamera; }
 	const std::map<Size, std::vector<unsigned int>> &
 	rawFormatsSizeToCodes() const { return rawFormatsSizeToCodes_; }
 	const std::map<unsigned int, std::vector<Size>> &
@@ -467,9 +467,9 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 			return Invalid;
 		}
 
-		const GlobalInfo *globalInfo =
+		const GlobalInfo &globalInfo =
 			data_->pipe()->pipelineConfig()->globalInfo();
-		cfg->bufferCount = globalInfo->bufferCount;
+		cfg->bufferCount = globalInfo.bufferCount;
 
 		if (cfg->pixelFormat != originalCfg.pixelFormat ||
 		    cfg->size != originalCfg.size) {
@@ -612,9 +612,9 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 		cfg.size = cfgSize;
 		cfg.pixelFormat = pixelFormat;
 		cfg.colorSpace = colorSpace;
-		const GlobalInfo *globalInfo =
+		const GlobalInfo &globalInfo =
 			data->pipe()->pipelineConfig()->globalInfo();
-		cfg.bufferCount = globalInfo->bufferCount;
+		cfg.bufferCount = globalInfo.bufferCount;
 
 		config->addConfiguration(cfg);
 		LOG(NxpNeoPipe, Debug)
@@ -1282,7 +1282,7 @@ int NxpNeoCameraData::init()
 	 * returned through the NEO main and IR outputs.
 	 */
 
-	if (!cameraInfo_->stream(CameraInfo::STREAM_INPUT0).has_value()) {
+	if (!cameraInfo_->stream(CameraInfo::STREAM_INPUT0)) {
 		LOG(NxpNeoPipe, Error)
 			<< "Mandatory stream input 0 is missing for " << cameraName();
 		return -ENODEV;
@@ -1296,11 +1296,10 @@ int NxpNeoCameraData::init()
 
 	ISIDevice *isi = pipe()->isiDevice();
 	for (auto stream : CameraInfo::kCameraStreams) {
-		std::optional<const CameraMediaStream *> cameraMediaStream;
-		cameraMediaStream = cameraInfo_->stream(stream);
-		if (!cameraMediaStream.has_value())
+		const CameraMediaStream *cameraMediaStream = cameraInfo_->stream(stream);
+		if (!cameraMediaStream)
 			continue;
-		unsigned int pipeIndex = cameraMediaStream.value()->pipe();
+		unsigned int pipeIndex = cameraMediaStream->pipe();
 		pipes_[stream] = isi->getPipeByIndex(pipeIndex);
 
 		auto it = pipeReadyFuncs.find(stream);
@@ -1500,11 +1499,10 @@ int NxpNeoCameraData::configureFrontEndFormat(V4L2SubdeviceFormat &sensorFormat,
 	/* Configure the stream formats for each stream */
 	pipesDevFormats_.clear();
 	for (auto [stream, pipe] : pipes_) {
-		std::optional<const CameraMediaStream *> cameraInfoStream =
-			cameraInfo_->stream(stream);
-		ASSERT(cameraInfoStream.has_value());
+		const CameraMediaStream *cameraInfoStream = cameraInfo_->stream(stream);
+		ASSERT(cameraInfoStream);
 		const std::vector<CameraMediaStream::StreamLink> &streamLinks =
-			cameraInfoStream.value()->streamLinks();
+			cameraInfoStream->streamLinks();
 
 		V4L2SubdeviceFormat format;
 		if (stream == CameraInfo::STREAM_INPUT0) {
@@ -1823,12 +1821,12 @@ int NxpNeoCameraData::configureFrontEndStream(
 int NxpNeoCameraData::configureFrontEndLinks() const
 {
 	for (auto stream : CameraInfo::kCameraStreams) {
-		auto cameraStream = cameraInfo_->stream(stream);
-		if (!cameraStream.has_value())
+		const CameraMediaStream *cameraStream = cameraInfo_->stream(stream);
+		if (!cameraStream)
 			continue;
 
 		std::vector<CameraMediaStream::StreamLink> links =
-			cameraStream.value()->streamLinks();
+			cameraStream->streamLinks();
 		for (auto &streamLink : links) {
 			MediaLink *link = streamLink.mediaLink_;
 			MediaPad *sourceMPad = link->source();

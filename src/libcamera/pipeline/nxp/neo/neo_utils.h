@@ -62,10 +62,10 @@ public:
 	CameraInfo() {}
 	virtual ~CameraInfo() {}
 
-	std::optional<const CameraMediaStream *> stream(unsigned int id) const;
-	bool hasStream(unsigned int id) const { return stream(id).has_value(); }
+	const CameraMediaStream *stream(unsigned int id) const;
+	bool hasStream(unsigned int id) const { return stream(id); }
 
-	const CameraProperties *cameraProperties() const { return properties_; }
+	const CameraProperties &cameraProperties() const { return *properties_; }
 
 	enum {
 		STREAM_INPUT0 = 0,
@@ -103,7 +103,7 @@ public:
 	int load(std::string file, std::shared_ptr<ISIDevice> isiDevice);
 	const CameraInfo *cameraInfo(const std::string &name) const;
 	const RoutingMap &routingMap() const;
-	const GlobalInfo *globalInfo() const;
+	const GlobalInfo &globalInfo() const;
 
 private:
 	static constexpr unsigned int kPadAny =

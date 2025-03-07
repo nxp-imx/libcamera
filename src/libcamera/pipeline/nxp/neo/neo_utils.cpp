@@ -85,20 +85,20 @@ std::string CameraMediaStream::toString() const
 /**
  * \brief Return an optional CameraMediaStream for the camera
  * \param[in] streamId The CameraInfo stream identifier STREAM_<XYZ>
- * \return The optional CameraMediaStream
+ * \return The CameraMediaStream if it exists, nullptr otherwise
  */
-std::optional<const CameraMediaStream *> CameraInfo::stream(unsigned int id) const
+const CameraMediaStream *CameraInfo::stream(unsigned int id) const
 {
 	if (id >= STREAM_MAX) {
 		LOG(NxpNeoPipe, Error) << "Invalid stream " << id;
-		return std::nullopt;
+		return nullptr;
 	}
 
 	auto it = streams_.find(id);
 	if (it != streams_.end())
-		return std::optional<const CameraMediaStream *>(&it->second);
+		return &it->second;
 	else
-		return std::nullopt;
+		return nullptr;
 }
 
 /* -----------------------------------------------------------------------------
@@ -184,11 +184,11 @@ const RoutingMap &PipelineConfig::routingMap() const
  * This function reports the global pipeline handler configuration that is not
  * specific to a given camera.
  *
- * \return A pointer to the global configuration
+ * \return A reference to the global configuration
  */
-const GlobalInfo *PipelineConfig::globalInfo() const
+const GlobalInfo &PipelineConfig::globalInfo() const
 {
-	return &globalInfo_;
+	return globalInfo_;
 }
 
 /**
@@ -726,13 +726,14 @@ int PipelineConfig::loadAutoDetectMultiCamera()
 		media->getEntityByName(isiDevice_->kSDevCrossBarEntityName());
 	std::map<std::string, unsigned int> cameraXbarSink;
 	for (auto &[name, cameraInfo] : cameraMap_) {
-		if (!cameraInfo.hasStream(CameraInfo::STREAM_INPUT0)) {
+		const CameraMediaStream *cameraStream =
+			cameraInfo.stream(CameraInfo::STREAM_INPUT0);
+		if (!cameraStream) {
 			LOG(NxpNeoPipe, Error)
 				<< "No input0 stream for camera " << name;
 			return -EINVAL;
 		}
-		const CameraMediaStream *cameraStream =
-			cameraInfo.stream(CameraInfo::STREAM_INPUT0).value();
+
 		const std::vector<CameraMediaStream::StreamLink> &streamLinks =
 			cameraStream->streamLinks();
 
