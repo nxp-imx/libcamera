@@ -87,7 +87,7 @@ std::string CameraMediaStream::toString() const
  * \param[in] streamId The CameraInfo stream identifier STREAM_<XYZ>
  * \return The optional CameraMediaStream
  */
-std::optional<const CameraMediaStream *> CameraInfo::getStream(unsigned int id) const
+std::optional<const CameraMediaStream *> CameraInfo::stream(unsigned int id) const
 {
 	if (id >= STREAM_MAX) {
 		LOG(NxpNeoPipe, Error) << "Invalid stream " << id;
@@ -154,7 +154,7 @@ int PipelineConfig::load(std::string filename, std::shared_ptr<ISIDevice> isiDev
  *
  * \return The pointer to CameraInfo structure if it exists, nullptr otherwise
  */
-const CameraInfo *PipelineConfig::getCameraInfo(const std::string &name) const
+const CameraInfo *PipelineConfig::cameraInfo(const std::string &name) const
 {
 	auto iter = cameraMap_.find(name);
 
@@ -173,7 +173,7 @@ const CameraInfo *PipelineConfig::getCameraInfo(const std::string &name) const
  *
  * \return A reference to the RoutingMap
  */
-const RoutingMap &PipelineConfig::getRoutingMap() const
+const RoutingMap &PipelineConfig::routingMap() const
 {
 	return routingMap_;
 }
@@ -186,7 +186,7 @@ const RoutingMap &PipelineConfig::getRoutingMap() const
  *
  * \return A pointer to the global configuration
  */
-const GlobalInfo *PipelineConfig::getGlobalInfo() const
+const GlobalInfo *PipelineConfig::globalInfo() const
 {
 	return &globalInfo_;
 }
@@ -732,7 +732,7 @@ int PipelineConfig::loadAutoDetectMultiCamera()
 			return -EINVAL;
 		}
 		const CameraMediaStream *cameraStream =
-			cameraInfo.getStream(CameraInfo::STREAM_INPUT0).value();
+			cameraInfo.stream(CameraInfo::STREAM_INPUT0).value();
 		const std::vector<CameraMediaStream::StreamLink> &streamLinks =
 			cameraStream->streamLinks();
 

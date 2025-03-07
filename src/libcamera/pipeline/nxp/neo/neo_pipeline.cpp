@@ -93,7 +93,7 @@ public:
 	CameraSensor *sensor() const { return sensor_.get(); }
 	NeoDevice *neoDevice() const { return neo_.get(); }
 	std::string cameraName() const { return sensor_->entity()->name(); }
-	bool multiCamera() const { return cameraInfo_->getCameraProperties()->multiCamera; }
+	bool multiCamera() const { return cameraInfo_->cameraProperties()->multiCamera; }
 	const std::map<Size, std::vector<unsigned int>> &
 	rawFormatsSizeToCodes() const { return rawFormatsSizeToCodes_; }
 	const std::map<unsigned int, std::vector<Size>> &
@@ -468,7 +468,7 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 		}
 
 		const GlobalInfo *globalInfo =
-			data_->pipe()->pipelineConfig()->getGlobalInfo();
+			data_->pipe()->pipelineConfig()->globalInfo();
 		cfg->bufferCount = globalInfo->bufferCount;
 
 		if (cfg->pixelFormat != originalCfg.pixelFormat ||
@@ -613,7 +613,7 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 		cfg.pixelFormat = pixelFormat;
 		cfg.colorSpace = colorSpace;
 		const GlobalInfo *globalInfo =
-			data->pipe()->pipelineConfig()->getGlobalInfo();
+			data->pipe()->pipelineConfig()->globalInfo();
 		cfg.bufferCount = globalInfo->bufferCount;
 
 		config->addConfiguration(cfg);
@@ -781,7 +781,7 @@ int PipelineHandlerNxpNeo::createCamera(MediaEntity *sensorEntity,
 		return -ENODEV;
 
 	std::string name = sensorEntity->name();
-	const CameraInfo *cameraInfo = pipelineConfig_.getCameraInfo(name);
+	const CameraInfo *cameraInfo = pipelineConfig_.cameraInfo(name);
 	if (!cameraInfo) {
 		LOG(NxpNeoPipe, Warning) << "No CameraInfo for " << name;
 		return -EINVAL;
@@ -832,7 +832,7 @@ int PipelineHandlerNxpNeo::setupRouting() const
 {
 	int ret;
 
-	const RoutingMap &routingMap = pipelineConfig_.getRoutingMap();
+	const RoutingMap &routingMap = pipelineConfig_.routingMap();
 
 	for (const auto &[entity, routing] : routingMap) {
 		const std::string &name = entity->name();
@@ -1282,7 +1282,7 @@ int NxpNeoCameraData::init()
 	 * returned through the NEO main and IR outputs.
 	 */
 
-	if (!cameraInfo_->getStream(CameraInfo::STREAM_INPUT0).has_value()) {
+	if (!cameraInfo_->stream(CameraInfo::STREAM_INPUT0).has_value()) {
 		LOG(NxpNeoPipe, Error)
 			<< "Mandatory stream input 0 is missing for " << cameraName();
 		return -ENODEV;
@@ -1297,7 +1297,7 @@ int NxpNeoCameraData::init()
 	ISIDevice *isi = pipe()->isiDevice();
 	for (auto stream : CameraInfo::kCameraStreams) {
 		std::optional<const CameraMediaStream *> cameraMediaStream;
-		cameraMediaStream = cameraInfo_->getStream(stream);
+		cameraMediaStream = cameraInfo_->stream(stream);
 		if (!cameraMediaStream.has_value())
 			continue;
 		unsigned int pipeIndex = cameraMediaStream.value()->pipe();
@@ -1501,7 +1501,7 @@ int NxpNeoCameraData::configureFrontEndFormat(V4L2SubdeviceFormat &sensorFormat,
 	pipesDevFormats_.clear();
 	for (auto [stream, pipe] : pipes_) {
 		std::optional<const CameraMediaStream *> cameraInfoStream =
-			cameraInfo_->getStream(stream);
+			cameraInfo_->stream(stream);
 		ASSERT(cameraInfoStream.has_value());
 		const std::vector<CameraMediaStream::StreamLink> &streamLinks =
 			cameraInfoStream.value()->streamLinks();
@@ -1823,7 +1823,7 @@ int NxpNeoCameraData::configureFrontEndStream(
 int NxpNeoCameraData::configureFrontEndLinks() const
 {
 	for (auto stream : CameraInfo::kCameraStreams) {
-		auto cameraStream = cameraInfo_->getStream(stream);
+		auto cameraStream = cameraInfo_->stream(stream);
 		if (!cameraStream.has_value())
 			continue;
 

@@ -62,10 +62,10 @@ public:
 	CameraInfo() {}
 	virtual ~CameraInfo() {}
 
-	std::optional<const CameraMediaStream *> getStream(unsigned int id) const;
-	bool hasStream(unsigned int id) const { return getStream(id).has_value(); }
+	std::optional<const CameraMediaStream *> stream(unsigned int id) const;
+	bool hasStream(unsigned int id) const { return stream(id).has_value(); }
 
-	const CameraProperties *getCameraProperties() const { return properties_; }
+	const CameraProperties *cameraProperties() const { return properties_; }
 
 	enum {
 		STREAM_INPUT0 = 0,
@@ -101,9 +101,9 @@ public:
 	PipelineConfig(){};
 	virtual ~PipelineConfig();
 	int load(std::string file, std::shared_ptr<ISIDevice> isiDevice);
-	const CameraInfo *getCameraInfo(const std::string &name) const;
-	const RoutingMap &getRoutingMap() const;
-	const GlobalInfo *getGlobalInfo() const;
+	const CameraInfo *cameraInfo(const std::string &name) const;
+	const RoutingMap &routingMap() const;
+	const GlobalInfo *globalInfo() const;
 
 private:
 	static constexpr unsigned int kPadAny =
