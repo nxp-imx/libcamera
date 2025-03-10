@@ -131,7 +131,7 @@ PipelineConfig::~PipelineConfig()
  *
  * \return 0 on success or a negative error code otherwise
  */
-int PipelineConfig::load(std::string filename, std::shared_ptr<ISIDevice> isiDevice)
+int PipelineConfig::load(const std::string &filename, std::shared_ptr<ISIDevice> isiDevice)
 {
 	isiDevice_ = isiDevice;
 
@@ -859,7 +859,7 @@ int PipelineConfig::parseGlobal(const YamlObject &global)
  * \param[in] filename The path to configuration file
  * \return 0 if config file was parsed correctly, a negative error code otherwise
  */
-int PipelineConfig::loadFileConfig(std::string filename)
+int PipelineConfig::loadFileConfig(const std::string &filename)
 {
 	File file(filename);
 

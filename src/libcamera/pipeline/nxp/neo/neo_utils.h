@@ -100,7 +100,7 @@ class PipelineConfig
 public:
 	PipelineConfig(){};
 	virtual ~PipelineConfig();
-	int load(std::string file, std::shared_ptr<ISIDevice> isiDevice);
+	int load(const std::string &file, std::shared_ptr<ISIDevice> isiDevice);
 	const CameraInfo *cameraInfo(const std::string &name) const;
 	const RoutingMap &routingMap() const;
 	const GlobalInfo &globalInfo() const;
@@ -131,7 +131,7 @@ private:
 	int parseCameras(const YamlObject &cameras);
 	int parseGlobal(const YamlObject &global);
 
-	int loadFileConfig(std::string file);
+	int loadFileConfig(const std::string &file);
 
 	RoutingMap routingMap_;
 	CameraMap cameraMap_;
