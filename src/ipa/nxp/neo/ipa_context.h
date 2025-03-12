@@ -22,10 +22,11 @@
 #include <libipa/fc_queue.h>
 #include <libipa/matrix.h>
 
+#include "nxp/cam_helper/camera_helper.h"
+
 namespace libcamera {
 
 namespace ipa::nxpneo {
-
 
 struct IPASessionConfiguration {
 	struct {
@@ -114,7 +115,12 @@ struct IPAFrameContext : public FrameContext {
 
 		unsigned int temperatureK;
 		bool autoEnabled;
+		bool colorGainsSet;
 	} awb;
+
+	struct {
+		bool colorOffsetsSet;
+	} blc;
 
 	struct {
 		uint32_t exposure;
@@ -135,6 +141,9 @@ struct IPAContext {
 	FCQueue<IPAFrameContext> frameContexts;
 
 	ControlInfoMap::Map ctrlMap;
+
+	/* Interface to the Camera Helper */
+	std::unique_ptr<nxp::CameraHelper> camHelper;
 };
 
 } /* namespace ipa::nxpneo */

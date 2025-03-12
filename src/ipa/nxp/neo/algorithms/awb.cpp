@@ -158,6 +158,18 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 		gainDouble2Param(frameContext.awb.gains.green);
 	params->regs.obwb[NEO_OBWB_MERGE_PATH].b_ctrl_gain =
 		gainDouble2Param(frameContext.awb.gains.blue);
+	frameContext.awb.colorGainsSet = true;
+
+	/*
+	 * When OBWB offsets are not configured by BLC, set some default offsets.
+	 * Zero offset values are configured as default (no BLC).
+	 */
+	if (!frameContext.blc.colorOffsetsSet) {
+		params->regs.obwb[NEO_OBWB_MERGE_PATH].r_ctrl_offset = 0;
+		params->regs.obwb[NEO_OBWB_MERGE_PATH].gr_ctrl_offset = 0;
+		params->regs.obwb[NEO_OBWB_MERGE_PATH].gb_ctrl_offset = 0;
+		params->regs.obwb[NEO_OBWB_MERGE_PATH].b_ctrl_offset = 0;
+	}
 
 	/* If we have already set the CTEMP measurement parameters, return. */
 	if (frame > 0)
@@ -291,10 +303,12 @@ void Awb::awbGreyWorld(IPAActiveState &activeState, IPAFrameContext &frameContex
 
 	/*
 	 * Clamp the gain values to the hardware, which expresses gains as Q8.8
-	 * unsigned integer values.
+	 * unsigned integer values. Set the minimum just above zero to avoid
+	 * divisions by zero when computing the raw means in subsequent
+	 * iterations.
 	 */
-	redGain = std::clamp(redGain, 0.0, 65535.0 / 256);
-	blueGain = std::clamp(blueGain, 0.0, 65535.0 / 256);
+	redGain = std::clamp(redGain, 1.0 / 256, 65535.0 / 256);
+	blueGain = std::clamp(blueGain, 1.0 / 256, 65535.0 / 256);
 
 	activeState.awb.gains.automatic.red = redGain;
 	activeState.awb.gains.automatic.blue = blueGain;
