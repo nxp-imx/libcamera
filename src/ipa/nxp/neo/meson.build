@@ -12,6 +12,15 @@ neo_ipa_sources = files([
 
 neo_ipa_sources += neo_ipa_algorithms
 
+gen_version = meson.project_source_root() / 'utils' / 'gen-version.sh'
+
+# Use vcs_tag() and not configure_file() or run_command(), to ensure that the
+# version gets updated with every ninja build and not just at meson setup time.
+ipa_version_h = vcs_tag(command : [gen_version, meson.project_build_root(), meson.project_source_root()],
+                        input : 'neo_ipa_version.h.in',
+                        output : 'neo_ipa_version.h',
+                        fallback : meson.project_version())
+
 neo_ipa_deps = [
     libcamera_private,
     libipa_dep,

@@ -36,6 +36,7 @@
 #include "algorithms/algorithm.h"
 
 #include "ipa_context.h"
+#include "neo_ipa_version.h"
 
 namespace libcamera {
 
@@ -130,6 +131,8 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 		    ControlInfoMap *ipaControls,
 		    SensorConfig *sensorConfig)
 {
+	LOG(NxpNeoIPA, Info) << "IPANxpNeo NXPNEO_IPA_" << IpaVersion::version();
+
 	LOG(NxpNeoIPA, Debug) << "Hardware revision is " << hwRevision;
 	LOG(NxpNeoIPA, Debug) << "Sensor entity: " << sensorEntity;
 
