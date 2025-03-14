@@ -37,6 +37,6 @@
 ---
 version: 1.0
 global:
-  buffer-count: 6
+  buffer-count: 8
 
 ...
