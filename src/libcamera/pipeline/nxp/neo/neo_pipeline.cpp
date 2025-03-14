@@ -725,8 +725,6 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 	if (numCameras_ < 1)
 		return false;
 
-	LOG(NxpNeoPipe, Info) << "Probed " << numCameras_ << " cameras";
-
 	return true;
 }
 
