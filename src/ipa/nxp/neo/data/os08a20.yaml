@@ -8,6 +8,7 @@ algorithms:
       # Configured in sensor at 64
       # Listed value is offset for a 12-bit camera pixel format, using libcamera
       # representation for BLC offset that 16-bit signed: 64 * 2^(16 - 12)
+      reference-bitdepth: 12
       R: 1024
       Gr: 1024
       Gb: 1024
