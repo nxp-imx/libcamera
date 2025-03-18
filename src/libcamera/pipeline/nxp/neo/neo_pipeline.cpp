@@ -1372,6 +1372,12 @@ int NxpNeoCameraData::enumerateRawFormats()
 	const std::vector<V4L2PixelFormat> &neoPixelFormats =
 		NeoDevice::input0Formats();
 
+	/*  Camera formats filtering may be defined in the config file */
+	std::optional<unsigned int> bppFilter =
+		cameraInfo_->cameraProperties().formatBpp;
+	std::optional<Size> sizeFilter =
+		cameraInfo_->cameraProperties().formatSize;
+
 	for (unsigned int code : mbusCodes) {
 		const BayerFormat &bayerFormat = BayerFormat::fromMbusCode(code);
 		if (!bayerFormat.isValid())
@@ -1384,9 +1390,15 @@ int NxpNeoCameraData::enumerateRawFormats()
 			      isiFormats.at(code)) == neoPixelFormats.end())
 			continue;
 
+		if (bppFilter && bayerFormat.bitDepth != bppFilter.value())
+			continue;
+
 		std::vector<Size> sizes = sensor_->sizes(code);
 		for (const Size &size : sizes) {
 			if (size.width > NeoDevice::kRawWidthMax)
+				continue;
+
+			if (sizeFilter && size != sizeFilter.value())
 				continue;
 
 			sizeToCodes[size].push_back(code);
@@ -1421,7 +1433,6 @@ int NxpNeoCameraData::enumerateRawFormats()
 	/*
 	 * For multi-camera, default configuration is set arbitrarily to the
 	 * highest size/bitdepth.
-	 * \todo Make the default mode selection configurable
 	 */
 	if (multiCamera()) {
 		ASSERT(sizeToCodes.size());

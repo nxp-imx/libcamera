@@ -13,6 +13,7 @@
 # properties are:
 #
 # buffer-count      = number of buffers to allocate for a stream
+#                     optional, default value is 4
 #
 # The cameras section consists in a list of camera definitions, that gives the
 # options to specify some attributes for a given camera. A camera is defined
@@ -22,13 +23,33 @@
 # Cameras nodes definition:
 #
 # cameras           = sequence of camera-entry
-# camera-entry      = mapping of {name, model, entity, streams}
 #
-# model             = camera model (optional if entity is defined)
-# entity            = camera entity name (optional, if model is defined)
-#
-# streams           = sequence of streams to be enabled for that camera
+# camera-entry      = mapping of {model, entity, streams, format}
+#   model           = camera model
+#                     optional if entity is defined
+#   entity          = camera entity name
+#                     optional, if model is defined
+#   streams         = sequence of streams to be enabled for that camera
 #                     stream values belong to [hdr, edata]
+#                     optional - no extra streams by default
+#   format          = mapping of {bpp, size}
+#                     filter applied to the formats exposed by the camera driver
+#                     optional - no format filtering by default
+#     bpp           = restricts the camera formats to the ones whose mbus-code
+#                     bit-per-pixel matches this value
+#                     optional
+#     size          = sequence of two values (<width>, <height>)
+#                     restricts the camera formats exposed to the user to the
+#                     ones whose size matches this value
+#                     optional
+#
+#
+# 'cameras' section definition example:
+#
+# cameras:
+#   - model: os08a20
+#     streams: [hdr]
+#     format: {bpp: 10, size: [1920, 1080]}
 #
 
 %YAML 1.1

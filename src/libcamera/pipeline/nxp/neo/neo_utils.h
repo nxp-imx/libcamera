@@ -54,6 +54,8 @@ struct CameraProperties {
 	bool hdrStream;
 	bool eDataStream;
 	bool multiCamera;
+	std::optional<unsigned int> formatBpp;
+	std::optional<Size> formatSize;
 };
 
 class CameraInfo

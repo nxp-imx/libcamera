@@ -37,6 +37,18 @@ namespace nxpneo {
  * \var CameraProperties::eDataStream
  * \brief Camera has a dedicated stream enabled for embedded data
  *
+ * \var CameraProperties::formatBpp
+ * \brief Format bit-per-pixel filter value (optional)
+ *
+ * This parameter restricts the camera formats exposed to the user to the subset
+ * of formats whose mbus-code bit-per-pixel matches this value.
+ *
+ * \var CameraProperties::formatSize
+ * \brief Camera format size filter value (optional)
+ *
+ * This parameter restricts the camera formats exposed to the user to the subset
+ * of formats whose size matches this value.
+ *
  * \var CameraProperties::multiCamera
  * \brief Camera is sharing its MIPI CSI-2 port with other cameras
  *
@@ -802,6 +814,10 @@ int PipelineConfig::parseCameras(const YamlObject &cameras)
 			else if (stream == "edata")
 				properties.eDataStream = true;
 		}
+
+		const YamlObject &fmtObj = cameraObj["format"];
+		properties.formatBpp = fmtObj["bpp"].get<uint32_t>();
+		properties.formatSize = fmtObj["size"].get<Size>();
 
 		LOG(NxpNeoPipe, Debug)
 			<< "Camera entry model [" << model
