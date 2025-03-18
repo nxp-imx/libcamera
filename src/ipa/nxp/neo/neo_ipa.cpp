@@ -56,10 +56,7 @@ class IPANxpNeo : public IPANxpNeoInterface, public Module
 public:
 	IPANxpNeo();
 
-	int init(const IPASettings &settings, unsigned int hwRevision,
-		 const std::string &sensorEntity,
-		 const IPACameraSensorInfo &sensorInfo,
-		 const ControlInfoMap &sensorControls,
+	int init(const IPASettings &settings, const InitParams &params,
 		 ControlInfoMap *ipaControls,
 		 SensorConfig *sensorConfig) override;
 	int start() override;
@@ -124,17 +121,14 @@ std::string IPANxpNeo::logPrefix() const
 	return "nxpneo";
 }
 
-int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
-		    const std::string &sensorEntity,
-		    const IPACameraSensorInfo &sensorInfo,
-		    const ControlInfoMap &sensorControls,
+int IPANxpNeo::init(const IPASettings &settings, const InitParams &params,
 		    ControlInfoMap *ipaControls,
 		    SensorConfig *sensorConfig)
 {
 	LOG(NxpNeoIPA, Info) << "IPANxpNeo NXPNEO_IPA_" << IpaVersion::version();
 
-	LOG(NxpNeoIPA, Debug) << "Hardware revision is " << hwRevision;
-	LOG(NxpNeoIPA, Debug) << "Sensor entity: " << sensorEntity;
+	LOG(NxpNeoIPA, Debug) << "Hardware revision is " << params.hwRevision;
+	LOG(NxpNeoIPA, Debug) << "Sensor entity: " << params.sensorEntity;
 
 	context_.camHelper = CameraHelperFactoryBase::create(settings.sensorModel);
 	if (!context_.camHelper) {
@@ -144,8 +138,8 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 		return -ENODEV;
 	}
 
-	context_.configuration.sensor.lineDuration = sensorInfo.minLineLength
-						   * 1.0s / sensorInfo.pixelRate;
+	context_.configuration.sensor.lineDuration = params.sensorInfo.minLineLength
+						* 1.0s / params.sensorInfo.pixelRate;
 
 	/* Load the tuning data file. */
 	File file(settings.configurationFile);
@@ -183,7 +177,7 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 	}
 
 	/* Initialize controls. */
-	updateControls(sensorInfo, sensorControls, ipaControls);
+	updateControls(params.sensorInfo, params.sensorControls, ipaControls);
 
 	/* Initialize SensorConfig parameters */
 	const CameraHelper::Attributes *attributes = context_.camHelper->attributes();
