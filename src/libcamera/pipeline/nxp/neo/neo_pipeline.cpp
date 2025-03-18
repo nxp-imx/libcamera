@@ -1594,12 +1594,10 @@ int NxpNeoCameraData::loadIPA()
 	uint32_t hwRevision = 0;
 	ipa::nxpneo::SensorConfig sensorConfig;
 	const MediaEntity *entity = sensor->entity();
+	ipa::nxpneo::InitParams initParams = { hwRevision, entity->name(),
+					       sensorInfo, sensor->controls() };
 	ret = ipa_->init(IPASettings{ ipaTuningFile, sensor->model() },
-			 hwRevision,
-			 entity->name(),
-			 sensorInfo, sensor->controls(),
-			 &ipaControls_,
-			 &sensorConfig);
+			 initParams, &ipaControls_, &sensorConfig);
 
 	if (ret) {
 		LOG(NxpNeoPipe, Error) << "Failed to initialise the NxpNeo IPA";
