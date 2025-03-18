@@ -21,6 +21,8 @@ ipa_version_h = vcs_tag(command : [gen_version, meson.project_build_root(), meso
                         output : 'neo_ipa_version.h',
                         fallback : meson.project_version())
 
+neo_ipa_sources += ipa_version_h
+
 neo_ipa_deps = [
     libcamera_private,
     libipa_dep,
