@@ -24,8 +24,6 @@
 # cameras           = sequence of camera-entry
 # camera-entry      = mapping of {name, model, entity, streams}
 #
-# name              = arbitrary name for the camera configuration
-#
 # model             = camera model (optional if entity is defined)
 # entity            = camera entity name (optional, if model is defined)
 #

@@ -787,9 +787,6 @@ int PipelineConfig::parseCameras(const YamlObject &cameras)
 	for (const auto &cameraObj : cameras.asList()) {
 		CameraProperties properties = {};
 
-		const YamlObject &nameObj = cameraObj["name"];
-		std::string name = nameObj.get<std::string>().value_or("");
-
 		const YamlObject &modelObj = cameraObj["model"];
 		std::string model = modelObj.get<std::string>().value_or("");
 
@@ -807,8 +804,8 @@ int PipelineConfig::parseCameras(const YamlObject &cameras)
 		}
 
 		LOG(NxpNeoPipe, Debug)
-			<< "Camera entry [" << name
-			<< "] model ["  << model << "] entity [" << entity
+			<< "Camera entry model [" << model
+			<< "] entity [" << entity
 			<< "] streams hdr " << properties.hdrStream
 			<< " edata " << properties.eDataStream;
 
