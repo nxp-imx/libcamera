@@ -194,6 +194,22 @@ void CameraHelper::setCameraMode(const CameraMode &mode)
 }
 
 /**
+ * \brief Configure the camera helper with sensor control values
+ *
+ * This function passes the sensor control list populated with the actual
+ * control values read from the sensor.
+ * The usage from CameraHelper can be for instance to access the sensor
+ * calibrated values in OTP.
+ *
+ * \param[in] sensorCtrls The sensor control list
+ */
+void CameraHelper::setControls(const ControlList *sensorCtrls)
+{
+	/* Nothing to do */
+	(void)sensorCtrls;
+}
+
+/**
  * \brief Update sensor control list with AGC configuration
  * \param[inout] ctrls The control list to be updated
  * \param[in] exposure The AGC exposure duration in seconds
