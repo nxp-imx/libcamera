@@ -174,6 +174,7 @@ public:
 	double gain(uint32_t gainCode) const override;
 
 #if USE_CUSTOM_CONTROLS
+	void setControls(const ControlList *sensorCtrls) override;
 	void controlListSetAGC(
 		ControlList *ctrls, double exposure, double gain) const override;
 #endif
@@ -300,9 +301,6 @@ private:
 	static constexpr uint32_t kRowTimeNs = (2 * 2186 * 1000 / 90);
 #endif
 
-	/* gain conversion ratio of HCG/LCG \todo should get from OTP sensor data */
-	static constexpr uint32_t kConvGainQ16 = 7.32f * Q16_1;
-
 #ifdef USE_OFFSET_M
 	static constexpr float kOffsetM = 0.232621227534758f;
 #else
@@ -314,6 +312,8 @@ private:
 	static constexpr uint32_t kRatioL2VsQ16 = 1024U * Q16_1;
 
 	std::unique_ptr<MdParser> parser_;
+	/* gain conversion ratio of HCG/LCG  */
+	uint32_t convGainQ16_ = 7.32f * Q16_1;
 };
 
 CameraHelperMx95mbcam::CameraHelperMx95mbcam()
@@ -458,6 +458,37 @@ uint32_t CameraHelperMx95mbcam::distributeDigitalGain(
 }
 
 #if USE_CUSTOM_CONTROLS
+void CameraHelperMx95mbcam::setControls(const ControlList *sensorCtrls)
+{
+	if (!controlListHasId(sensorCtrls, V4L2_CID_OX03C10_OTP_CORRECTION)) {
+		LOG(NxpCameraHelper, Error)
+			<< "V4L2_CID_OX03C10_OTP_CORRECTION not part of control list";
+		return;
+	}
+
+	const ControlValue &val = sensorCtrls->get(V4L2_CID_OX03C10_OTP_CORRECTION);
+	if (val.type() == ControlTypeNone) {
+		LOG(NxpCameraHelper, Error) << "Invalid OX03C10 OTP control";
+		return;
+	}
+
+	Span<const uint8_t> data = val.data();
+	ASSERT(data.size() == sizeof(ox03c10_otp_correction));
+
+	const struct ox03c10_otp_correction *payload;
+	payload = reinterpret_cast<const struct ox03c10_otp_correction *>(data.data());
+	if (!payload->val1 || !payload->val2) {
+		LOG(NxpCameraHelper, Error) << "Invalid Gain conversion ratio: ["
+					    << payload->val1 << ", "
+					    << payload->val2 << "]";
+		return;
+	}
+	double convGainOTP = payload->val1 / static_cast<double>(payload->val2);
+	convGainQ16_ = convGainOTP * Q16_1;
+	LOG(NxpCameraHelper, Debug) << "Gain conversion ratio HCG/LCG: "
+				    << convGainOTP;
+}
+
 void CameraHelperMx95mbcam::controlListSetAGC(
 	ControlList *ctrls, double exposure, double gain) const
 {
@@ -477,7 +508,7 @@ void CameraHelperMx95mbcam::controlListSetAGC(
 		return;
 	}
 
-	const uint32_t sensorConversionRatio = calcConvRatio(kConvGainQ16);
+	const uint32_t sensorConversionRatio = calcConvRatio(convGainQ16_);
 
 	uint64_t lAgainL, lAgainS, lAgainVS;
 	uint32_t lDgainL, lDgainS, lDgainVS;
@@ -692,7 +723,7 @@ void CameraHelperMx95mbcam::controlInfoMapGetAnalogGainRange(
 	(void)ctrls;
 
 	/* Fixup HCG gain with conversion ratio */
-	const uint32_t sensorConversionRatioQ16 = calcConvRatio(kConvGainQ16);
+	const uint32_t sensorConversionRatioQ16 = calcConvRatio(convGainQ16_);
 	double convGain = static_cast<double>(sensorConversionRatioQ16) / Q16_1;
 
 	/* \todo Append short and very short analog gain values */
@@ -736,7 +767,7 @@ int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 	analogGains(Span<uint32_t>(aGainCodes), Span<float>(aGainsArray));
 
 	/* Fixup HCG gain with conversion ratio */
-	const uint32_t sensorConversionRatioQ16 = calcConvRatio(kConvGainQ16);
+	const uint32_t sensorConversionRatioQ16 = calcConvRatio(convGainQ16_);
 	aGainsArray[0] *= (static_cast<float>(sensorConversionRatioQ16) / Q16_1);
 
 	Span<float> aGains = Span<float>(aGainsArray);
@@ -874,7 +905,7 @@ int CameraHelperMx95mbcam::sensorControlsToMetaData(const ControlList *sensorCtr
 		analogGains(Span<uint32_t>(aGainCodes), Span<float>(aGainsArray));
 
 		/* Fixup HCG gain with conversion ratio */
-		const uint32_t sensorConversionRatioQ16 = calcConvRatio(kConvGainQ16);
+		const uint32_t sensorConversionRatioQ16 = calcConvRatio(convGainQ16_);
 		aGainsArray[0] *= (static_cast<float>(sensorConversionRatioQ16) / Q16_1);
 	} else {
 		LOG(NxpCameraHelper, Warning) << "Invalid analog gain control";
