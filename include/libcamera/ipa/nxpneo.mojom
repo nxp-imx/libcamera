@@ -12,6 +12,13 @@ module ipa.nxpneo;
 
 import "include/libcamera/ipa/core.mojom";
 
+struct InitParams {
+	uint32 hwRevision;
+	string sensorEntity;
+	libcamera.IPACameraSensorInfo sensorInfo;
+	libcamera.ControlInfoMap sensorControls;
+};
+
 struct IPAConfigInfo {
 	libcamera.IPACameraSensorInfo sensorInfo;
 	libcamera.ControlInfoMap sensorControls;
@@ -38,11 +45,7 @@ enum ISPBufferType {
 };
 
 interface IPANxpNeoInterface {
-	init(libcamera.IPASettings settings,
-	     uint32 hwRevision,
-	     string sensorEntity,
-	     libcamera.IPACameraSensorInfo sensorInfo,
-	     libcamera.ControlInfoMap sensorControls)
+	init(libcamera.IPASettings settings, InitParams params)
 		=> (int32 ret,
 		    libcamera.ControlInfoMap ipaControls,
 		    SensorConfig sensorConfig);
