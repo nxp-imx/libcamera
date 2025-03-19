@@ -319,8 +319,8 @@ cc_library_shared {
 genrule {
     name: "ipa_nxp_neo_sign",
     tool_files: ["src/ipa/ipa-sign.sh"],
-    srcs: [
-        ":libcamera_gen_ipa_priv_key",
+    srcs: [":libcamera_gen_ipa_priv_key",],
+    device_first_srcs: [
         ":ipa_nxp_neo",
     ],
     out: ["ipa_nxp_neo.so.sign"],
