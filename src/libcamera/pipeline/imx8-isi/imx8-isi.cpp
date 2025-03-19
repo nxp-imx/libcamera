@@ -281,6 +281,8 @@ unsigned int ISICameraData::getYuvMediaBusFormat(const PixelFormat &pixelFormat)
 	 * the ISI driver.
 	 */
 	std::vector<unsigned int> yuvCodes = {
+		MEDIA_BUS_FMT_UYVY8_2X8,
+		MEDIA_BUS_FMT_YUYV8_2X8,
 		MEDIA_BUS_FMT_UYVY8_1X16,
 		MEDIA_BUS_FMT_YUV8_1X24,
 		MEDIA_BUS_FMT_RGB565_1X16,
@@ -305,7 +307,9 @@ unsigned int ISICameraData::getYuvMediaBusFormat(const PixelFormat &pixelFormat)
 	const PixelFormatInfo &info = PixelFormatInfo::info(pixelFormat);
 	for (unsigned int code : supportedCodes) {
 		if (info.colourEncoding == PixelFormatInfo::ColourEncodingYUV &&
-		    (code == MEDIA_BUS_FMT_UYVY8_1X16 ||
+		    (code == MEDIA_BUS_FMT_UYVY8_2X8 ||
+		     code == MEDIA_BUS_FMT_YUYV8_2X8 ||
+		     code == MEDIA_BUS_FMT_UYVY8_1X16 ||
 		     code == MEDIA_BUS_FMT_YUV8_1X24))
 			return code;
 
