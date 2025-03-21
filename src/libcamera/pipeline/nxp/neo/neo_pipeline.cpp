@@ -28,6 +28,7 @@
 #include <libcamera/camera_manager.h>
 #include <libcamera/control_ids.h>
 #include <libcamera/formats.h>
+#include <libcamera/orientation.h>
 #include <libcamera/property_ids.h>
 #include <libcamera/request.h>
 #include <libcamera/stream.h>
@@ -98,7 +99,7 @@ public:
 	rawFormatsSizeToCodes() const { return rawFormatsSizeToCodes_; }
 	const std::map<unsigned int, std::vector<Size>> &
 	rawFormatsCodeToSizes() const { return rawFormatsCodeToSizes_; }
-	const Orientation *mountingOrientation() const { return &mountingOrientation_; }
+	const std::optional<Orientation> &defaultOrientation() const { return defaultOrientation_; }
 
 	bool rawStreamOnly_ = false;
 
@@ -145,7 +146,7 @@ private:
 	std::unique_ptr<CameraSensor> sensor_;
 	std::unique_ptr<NeoDevice> neo_;
 	const CameraInfo *cameraInfo_;
-	Orientation mountingOrientation_;
+	std::optional<Orientation> defaultOrientation_;
 	std::map<Size, std::vector<unsigned int>> rawFormatsSizeToCodes_;
 	std::map<unsigned int, std::vector<Size>> rawFormatsCodeToSizes_;
 
@@ -310,12 +311,9 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validate()
 	}
 
 	Orientation requestedOrientation = orientation;
-	if (!data_->multiCamera()) {
-		combinedTransform_ = sensor->computeTransform(&orientation);
-	} else {
-		combinedTransform_ = Transform::Identity;
-		orientation = *data_->mountingOrientation();
-	}
+	if (data_->defaultOrientation().has_value())
+		orientation = data_->defaultOrientation().value();
+	combinedTransform_ = sensor->computeTransform(&orientation);
 	if (orientation != requestedOrientation)
 		status = Adjusted;
 
@@ -622,6 +620,9 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 			<< " for role " << role;
 	}
 
+	if (data->defaultOrientation().has_value())
+		config->orientation = data->defaultOrientation().value();
+
 	if (config->validate() == CameraConfiguration::Invalid)
 		return {};
 
@@ -917,8 +918,11 @@ int PipelineHandlerNxpNeo::setupCameraGraphs()
 		ASSERT(codes.size() == 1);
 		sensorFormat.code = codes.back();
 
-		ret = data->configureFrontEndFormat(sensorFormat,
-						    Transform::Identity);
+		ASSERT(data->defaultOrientation().has_value());
+		Orientation orientation = data->defaultOrientation().value();
+		Transform transform = data->sensor()->computeTransform(&orientation);
+		ret = data->configureFrontEndFormat(sensorFormat, transform);
+
 		if (ret)
 			return ret;
 	}
@@ -1266,8 +1270,31 @@ int NxpNeoCameraData::init()
 	/* Initialize the camera properties. */
 	properties_ = sensor_->properties();
 
-	const auto &rotation = properties_.get(properties::Rotation);
-	mountingOrientation_ = orientationFromRotation(rotation.value_or(0));
+	/*
+	 * A default orientation may be defined for a camera in the pipeline
+	 * config file. For multi-camera case, when not defined in the config
+	 * file, the camera mounting orientation is selected as default
+	 * orientation to be used for the camera preconfiguration.
+	 */
+	std::optional<Orientation> configOrientation =
+		cameraInfo_->cameraProperties().orientation;
+	if (configOrientation.has_value()) {
+		Orientation tryOrientation = configOrientation.value();
+		sensor_->computeTransform(&tryOrientation);
+		if (tryOrientation != configOrientation.value()) {
+			LOG(NxpNeoPipe, Warning)
+				<< "Configured orientation " << configOrientation.value()
+				<< " not supported by sensor";
+			return -EINVAL;
+		}
+		defaultOrientation_ = tryOrientation;
+	}
+	if (multiCamera() && !defaultOrientation_.has_value()) {
+		const auto &rotation = properties_.get(properties::Rotation);
+		Orientation mountingOrientation =
+			orientationFromRotation(rotation.value_or(0));
+		defaultOrientation_ = mountingOrientation;
+	}
 
 	neo_->isp_->frameStart.connect(this, &NxpNeoCameraData::frameStart);
 

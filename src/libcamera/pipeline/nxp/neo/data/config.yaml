@@ -42,7 +42,14 @@
 #                     restricts the camera formats exposed to the user to the
 #                     ones whose size matches this value
 #                     optional
-#
+#     orientation   = camera orientation
+#                     requires both hflip and vflip support from camera driver
+#                     values in [1..4]:
+#                       1: rotate 0
+#                       2: rotate 0 + mirror
+#                       3: rotate 180
+#                       4: rotate 180 + mirror
+#                     optional - default is the camera mounting orientation
 #
 # 'cameras' section definition example:
 #

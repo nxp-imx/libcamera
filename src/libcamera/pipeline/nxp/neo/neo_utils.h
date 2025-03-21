@@ -10,6 +10,8 @@
 
 #include <linux/v4l2-subdev.h>
 
+#include <libcamera/orientation.h>
+
 #include "libcamera/internal/camera_sensor.h"
 #include "libcamera/internal/media_device.h"
 #include "libcamera/internal/v4l2_subdevice.h"
@@ -56,6 +58,7 @@ struct CameraProperties {
 	bool multiCamera;
 	std::optional<unsigned int> formatBpp;
 	std::optional<Size> formatSize;
+	std::optional<Orientation> orientation;
 };
 
 class CameraInfo

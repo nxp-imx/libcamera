@@ -49,6 +49,15 @@ namespace nxpneo {
  * This parameter restricts the camera formats exposed to the user to the subset
  * of formats whose size matches this value.
  *
+ * \var CameraProperties::orientation
+ * \brief Camera orientation (optional)
+ *
+ * This parameter defines the preferred orientation to be used for the camera
+ * streams. Range of values is the subset of orientations defined by the
+ * Orientation enum class, relevant to the ones achievable with a combination of
+ * horizontal and vertical flips:
+ * Rotate0 (1), Rotate0Mirror (2), Rotate180 (3), Rotate180Mirror (4)
+ *
  * \var CameraProperties::multiCamera
  * \brief Camera is sharing its MIPI CSI-2 port with other cameras
  *
@@ -818,6 +827,15 @@ int PipelineConfig::parseCameras(const YamlObject &cameras)
 		const YamlObject &fmtObj = cameraObj["format"];
 		properties.formatBpp = fmtObj["bpp"].get<uint32_t>();
 		properties.formatSize = fmtObj["size"].get<Size>();
+
+		const YamlObject &orientationObj = cameraObj["orientation"];
+		uint32_t orientation = orientationObj.get<uint32_t>().value_or(0);
+		if (orientation >= static_cast<uint32_t>(Orientation::Rotate0) &&
+		    orientation <= static_cast<uint32_t>(Orientation::Rotate180Mirror))
+			properties.orientation = static_cast<Orientation>(orientation);
+		else
+			LOG(NxpNeoPipe, Warning)
+				<< "Invalid orientation value " << orientation;
 
 		LOG(NxpNeoPipe, Debug)
 			<< "Camera entry model [" << model
