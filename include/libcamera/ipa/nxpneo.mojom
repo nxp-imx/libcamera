@@ -17,6 +17,7 @@ struct InitParams {
 	string sensorEntity;
 	libcamera.IPACameraSensorInfo sensorInfo;
 	libcamera.ControlInfoMap sensorControls;
+	libcamera.ControlList sensorControlList;
 };
 
 struct IPAConfigInfo {
