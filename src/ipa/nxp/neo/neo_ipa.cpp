@@ -197,6 +197,9 @@ int IPANxpNeo::init(const IPASettings &settings, const InitParams &params,
 	sensorConfig->embeddedTopLines = attributes->mdParams.topLines;
 	sensorConfig->rgbIr = attributes->rgbIr;
 
+	/* Set the camera helper with sensor control values. */
+	context_.camHelper->setControls(&params.sensorControlList);
+
 	return 0;
 }
 
