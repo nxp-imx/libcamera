@@ -2035,9 +2035,6 @@ void NxpNeoCameraData::isiInput0BufferReady(FrameBuffer *buffer)
 	request->metadata().set(controls::SensorTimestamp,
 				buffer->metadata().timestamp);
 
-	info->effectiveSensorControls =
-		delayedCtrls_->get(buffer->metadata().sequence);
-
 	if (request->findBuffer(&streamRaw_) == buffer)
 		pipe()->completeBuffer(request, buffer);
 
@@ -2172,7 +2169,7 @@ void NxpNeoCameraData::neoStatsBufferReady(FrameBuffer *buffer)
 	};
 
 	ipa_->processStatsBuffer(info->id, bufferIds,
-				 info->effectiveSensorControls);
+				 delayedCtrls_->get(buffer->metadata().sequence));
 
 	tryCompleteRequest(info);
 }

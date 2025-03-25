@@ -43,8 +43,6 @@ public:
 
 		FrameBuffer *rawStreamBuffer;
 
-		ControlList effectiveSensorControls;
-
 		bool input0Pending;
 		bool input1Pending;
 		bool eDataPending;
