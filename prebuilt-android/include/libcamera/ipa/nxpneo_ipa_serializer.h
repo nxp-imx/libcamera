@@ -23,6 +23,199 @@ namespace libcamera {
 LOG_DECLARE_CATEGORY(IPADataSerializer)
 
 template<>
+class IPADataSerializer<ipa::nxpneo::InitParams>
+{
+public:
+	static std::tuple<std::vector<uint8_t>, std::vector<SharedFD>>
+	serialize(const ipa::nxpneo::InitParams &data,
+		  ControlSerializer *cs)
+	{
+		std::vector<uint8_t> retData;
+
+		std::vector<uint8_t> hwRevision;
+		std::tie(hwRevision, std::ignore) =
+			IPADataSerializer<uint32_t>::serialize(data.hwRevision);
+		retData.insert(retData.end(), hwRevision.begin(), hwRevision.end());
+
+		std::vector<uint8_t> sensorEntity;
+		std::tie(sensorEntity, std::ignore) =
+			IPADataSerializer<std::string>::serialize(data.sensorEntity);
+		appendPOD<uint32_t>(retData, sensorEntity.size());
+		retData.insert(retData.end(), sensorEntity.begin(), sensorEntity.end());
+
+		std::vector<uint8_t> sensorInfo;
+		std::tie(sensorInfo, std::ignore) =
+			IPADataSerializer<libcamera::IPACameraSensorInfo>::serialize(data.sensorInfo, cs);
+		appendPOD<uint32_t>(retData, sensorInfo.size());
+		retData.insert(retData.end(), sensorInfo.begin(), sensorInfo.end());
+
+		if (data.sensorControls.size() > 0) {
+			std::vector<uint8_t> sensorControls;
+			std::tie(sensorControls, std::ignore) =
+				IPADataSerializer<ControlInfoMap>::serialize(data.sensorControls, cs);
+			appendPOD<uint32_t>(retData, sensorControls.size());
+			retData.insert(retData.end(), sensorControls.begin(), sensorControls.end());
+		} else {
+			appendPOD<uint32_t>(retData, 0);
+		}
+
+		if (data.sensorControlList.size() > 0) {
+			std::vector<uint8_t> sensorControlList;
+			std::tie(sensorControlList, std::ignore) =
+				IPADataSerializer<ControlList>::serialize(data.sensorControlList, cs);
+			appendPOD<uint32_t>(retData, sensorControlList.size());
+			retData.insert(retData.end(), sensorControlList.begin(), sensorControlList.end());
+		} else {
+			appendPOD<uint32_t>(retData, 0);
+		}
+
+		return {retData, {}};
+	}
+
+	static ipa::nxpneo::InitParams
+	deserialize(std::vector<uint8_t> &data,
+		    ControlSerializer *cs)
+	{
+		return IPADataSerializer<ipa::nxpneo::InitParams>::deserialize(data.cbegin(), data.cend(), cs);
+	}
+
+
+	static ipa::nxpneo::InitParams
+	deserialize(std::vector<uint8_t>::const_iterator dataBegin,
+		    std::vector<uint8_t>::const_iterator dataEnd,
+		    ControlSerializer *cs)
+	{
+		ipa::nxpneo::InitParams ret;
+		std::vector<uint8_t>::const_iterator m = dataBegin;
+
+		size_t dataSize = std::distance(dataBegin, dataEnd);
+
+		if (dataSize < 4) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "hwRevision"
+				<< ": not enough data, expected "
+				<< (4) << ", got " << (dataSize);
+			return ret;
+		}
+		ret.hwRevision = IPADataSerializer<uint32_t>::deserialize(m, m + 4);
+		m += 4;
+		dataSize -= 4;
+
+
+		if (dataSize < 4) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "sensorEntitySize"
+				<< ": not enough data, expected "
+				<< (4) << ", got " << (dataSize);
+			return ret;
+		}
+		const size_t sensorEntitySize = readPOD<uint32_t>(m, 0, dataEnd);
+		m += 4;
+		dataSize -= 4;
+		if (dataSize < sensorEntitySize) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "sensorEntity"
+				<< ": not enough data, expected "
+				<< (sensorEntitySize) << ", got " << (dataSize);
+			return ret;
+		}
+		ret.sensorEntity =
+			IPADataSerializer<std::string>::deserialize(m, m + sensorEntitySize);
+		m += sensorEntitySize;
+		dataSize -= sensorEntitySize;
+
+
+		if (dataSize < 4) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "sensorInfoSize"
+				<< ": not enough data, expected "
+				<< (4) << ", got " << (dataSize);
+			return ret;
+		}
+		const size_t sensorInfoSize = readPOD<uint32_t>(m, 0, dataEnd);
+		m += 4;
+		dataSize -= 4;
+		if (dataSize < sensorInfoSize) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "sensorInfo"
+				<< ": not enough data, expected "
+				<< (sensorInfoSize) << ", got " << (dataSize);
+			return ret;
+		}
+		ret.sensorInfo =
+			IPADataSerializer<libcamera::IPACameraSensorInfo>::deserialize(m, m + sensorInfoSize, cs);
+		m += sensorInfoSize;
+		dataSize -= sensorInfoSize;
+
+
+		if (dataSize < 4) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "sensorControlsSize"
+				<< ": not enough data, expected "
+				<< (4) << ", got " << (dataSize);
+			return ret;
+		}
+		const size_t sensorControlsSize = readPOD<uint32_t>(m, 0, dataEnd);
+		m += 4;
+		dataSize -= 4;
+		if (dataSize < sensorControlsSize) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "sensorControls"
+				<< ": not enough data, expected "
+				<< (sensorControlsSize) << ", got " << (dataSize);
+			return ret;
+		}
+		if (sensorControlsSize > 0)
+			ret.sensorControls =
+				IPADataSerializer<ControlInfoMap>::deserialize(m, m + sensorControlsSize, cs);
+		m += sensorControlsSize;
+		dataSize -= sensorControlsSize;
+
+
+		if (dataSize < 4) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "sensorControlListSize"
+				<< ": not enough data, expected "
+				<< (4) << ", got " << (dataSize);
+			return ret;
+		}
+		const size_t sensorControlListSize = readPOD<uint32_t>(m, 0, dataEnd);
+		m += 4;
+		dataSize -= 4;
+		if (dataSize < sensorControlListSize) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "sensorControlList"
+				<< ": not enough data, expected "
+				<< (sensorControlListSize) << ", got " << (dataSize);
+			return ret;
+		}
+		if (sensorControlListSize > 0)
+			ret.sensorControlList =
+				IPADataSerializer<ControlList>::deserialize(m, m + sensorControlListSize, cs);
+
+		return ret;
+	}
+
+	static ipa::nxpneo::InitParams
+	deserialize(std::vector<uint8_t> &data,
+		    [[maybe_unused]] std::vector<SharedFD> &fds,
+		    ControlSerializer *cs = nullptr)
+	{
+		return IPADataSerializer<ipa::nxpneo::InitParams>::deserialize(data.cbegin(), data.cend(), cs);
+	}
+
+	static ipa::nxpneo::InitParams
+	deserialize(std::vector<uint8_t>::const_iterator dataBegin,
+		    std::vector<uint8_t>::const_iterator dataEnd,
+		    [[maybe_unused]] std::vector<SharedFD>::const_iterator fdsBegin,
+		    [[maybe_unused]] std::vector<SharedFD>::const_iterator fdsEnd,
+		    ControlSerializer *cs = nullptr)
+	{
+		return IPADataSerializer<ipa::nxpneo::InitParams>::deserialize(dataBegin, dataEnd, cs);
+	}
+};
+
+template<>
 class IPADataSerializer<ipa::nxpneo::IPAConfigInfo>
 {
 public:

@@ -41,12 +41,12 @@ enum class _NxpNeoCmd {
 	MapBuffers = 5,
 	UnmapBuffers = 6,
 	QueueRequest = 7,
-	FillParamsBuffer = 8,
-	ProcessStatsBuffer = 9,
+	ComputeParams = 8,
+	ProcessStats = 9,
 };
 
 enum class _NxpNeoEventCmd {
-	ParamsBufferReady = 1,
+	ParamsComputed = 1,
 	SetSensorControls = 2,
 	MetadataReady = 3,
 };
@@ -58,6 +58,29 @@ enum ISPBufferType {
 	TypeEData = 2,
 	TypeParams = 3,
 	TypeStats = 4,
+};
+
+struct InitParams
+{
+public:
+#ifndef __DOXYGEN__
+	InitParams()
+		: hwRevision(0)
+	{
+	}
+
+	InitParams(uint32_t _hwRevision, const std::string &_sensorEntity, const IPACameraSensorInfo &_sensorInfo, const ControlInfoMap &_sensorControls, const ControlList &_sensorControlList)
+		: hwRevision(_hwRevision), sensorEntity(_sensorEntity), sensorInfo(_sensorInfo), sensorControls(_sensorControls), sensorControlList(_sensorControlList)
+	{
+	}
+#endif
+
+
+	uint32_t hwRevision;
+	std::string sensorEntity;
+	IPACameraSensorInfo sensorInfo;
+	ControlInfoMap sensorControls;
+	ControlList sensorControlList;
 };
 
 struct IPAConfigInfo
@@ -126,10 +149,7 @@ public:
 
 	virtual int32_t init(
 		const IPASettings &settings,
-		const uint32_t hwRevision,
-		const std::string &sensorId,
-		const IPACameraSensorInfo &sensorInfo,
-		const ControlInfoMap &sensorControls,
+		const InitParams &params,
 		ControlInfoMap *ipaControls,
 		SensorConfig *sensorConfig) = 0;
 
@@ -152,16 +172,16 @@ public:
 		const uint32_t frame,
 		const ControlList &reqControls) = 0;
 
-	virtual void fillParamsBuffer(
+	virtual void computeParams(
 		const uint32_t frame,
 		const std::map<uint32_t, uint32_t> &bufferIds) = 0;
 
-	virtual void processStatsBuffer(
+	virtual void processStats(
 		const uint32_t frame,
 		const std::map<uint32_t, uint32_t> &bufferIds,
 		const ControlList &sensorControls) = 0;
 
-	Signal<uint32_t> paramsBufferReady;
+	Signal<uint32_t> paramsComputed;
 
 	Signal<uint32_t, const ControlList &> setSensorControls;
 

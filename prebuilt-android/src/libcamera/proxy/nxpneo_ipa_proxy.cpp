@@ -81,7 +81,7 @@ IPAProxyNxpNeo::IPAProxyNxpNeo(IPAModule *ipam, bool isolate)
 	proxy_.setIPA(ipa_.get());
 
 
-	ipa_->paramsBufferReady.connect(this, &IPAProxyNxpNeo::paramsBufferReadyThread);
+	ipa_->paramsComputed.connect(this, &IPAProxyNxpNeo::paramsComputedThread);
 	ipa_->setSensorControls.connect(this, &IPAProxyNxpNeo::setSensorControlsThread);
 	ipa_->metadataReady.connect(this, &IPAProxyNxpNeo::metadataReadyThread);
 
@@ -105,8 +105,8 @@ void IPAProxyNxpNeo::recvMessage(const IPCMessage &data)
 	_NxpNeoEventCmd _cmd = static_cast<_NxpNeoEventCmd>(data.header().cmd);
 
 	switch (_cmd) {
-	case _NxpNeoEventCmd::ParamsBufferReady: {
-		paramsBufferReadyIPC(data.data().cbegin(), dataSize, data.fds());
+	case _NxpNeoEventCmd::ParamsComputed: {
+		paramsComputedIPC(data.data().cbegin(), dataSize, data.fds());
 		break;
 	}
 	case _NxpNeoEventCmd::SetSensorControls: {
@@ -125,29 +125,23 @@ void IPAProxyNxpNeo::recvMessage(const IPCMessage &data)
 
 int32_t IPAProxyNxpNeo::init(
 	const IPASettings &settings,
-	const uint32_t hwRevision,
-	const std::string &sensorId,
-	const IPACameraSensorInfo &sensorInfo,
-	const ControlInfoMap &sensorControls,
+	const InitParams &params,
 	ControlInfoMap *ipaControls,
 	SensorConfig *sensorConfig)
 {
 	if (isolate_)
-		return initIPC(settings, hwRevision, sensorId, sensorInfo, sensorControls, ipaControls, sensorConfig);
+		return initIPC(settings, params, ipaControls, sensorConfig);
 	else
-		return initThread(settings, hwRevision, sensorId, sensorInfo, sensorControls, ipaControls, sensorConfig);
+		return initThread(settings, params, ipaControls, sensorConfig);
 }
 
 int32_t IPAProxyNxpNeo::initThread(
 	const IPASettings &settings,
-	const uint32_t hwRevision,
-	const std::string &sensorId,
-	const IPACameraSensorInfo &sensorInfo,
-	const ControlInfoMap &sensorControls,
+	const InitParams &params,
 	ControlInfoMap *ipaControls,
 	SensorConfig *sensorConfig)
 {
-	int32_t _ret = ipa_->init(settings, hwRevision, sensorId, sensorInfo, sensorControls, ipaControls, sensorConfig);
+	int32_t _ret = ipa_->init(settings, params, ipaControls, sensorConfig);
 
 	proxy_.moveToThread(&thread_);
 
@@ -156,10 +150,7 @@ int32_t IPAProxyNxpNeo::initThread(
 
 int32_t IPAProxyNxpNeo::initIPC(
 	const IPASettings &settings,
-	const uint32_t hwRevision,
-	const std::string &sensorId,
-	const IPACameraSensorInfo &sensorInfo,
-	const ControlInfoMap &sensorControls,
+	const InitParams &params,
 	ControlInfoMap *ipaControls,
 	SensorConfig *sensorConfig)
 {
@@ -172,32 +163,14 @@ int32_t IPAProxyNxpNeo::initIPC(
 	std::tie(settingsBuf, std::ignore) =
 		IPADataSerializer<IPASettings>::serialize(settings
 );
-	std::vector<uint8_t> hwRevisionBuf;
-	std::tie(hwRevisionBuf, std::ignore) =
-		IPADataSerializer<uint32_t>::serialize(hwRevision
-);
-	std::vector<uint8_t> sensorIdBuf;
-	std::tie(sensorIdBuf, std::ignore) =
-		IPADataSerializer<std::string>::serialize(sensorId
-);
-	std::vector<uint8_t> sensorInfoBuf;
-	std::tie(sensorInfoBuf, std::ignore) =
-		IPADataSerializer<IPACameraSensorInfo>::serialize(sensorInfo
-);
-	std::vector<uint8_t> sensorControlsBuf;
-	std::tie(sensorControlsBuf, std::ignore) =
-		IPADataSerializer<ControlInfoMap>::serialize(sensorControls
+	std::vector<uint8_t> paramsBuf;
+	std::tie(paramsBuf, std::ignore) =
+		IPADataSerializer<InitParams>::serialize(params
 , &controlSerializer_);
 	appendPOD<uint32_t>(_ipcInputBuf.data(), settingsBuf.size());
-	appendPOD<uint32_t>(_ipcInputBuf.data(), hwRevisionBuf.size());
-	appendPOD<uint32_t>(_ipcInputBuf.data(), sensorIdBuf.size());
-	appendPOD<uint32_t>(_ipcInputBuf.data(), sensorInfoBuf.size());
-	appendPOD<uint32_t>(_ipcInputBuf.data(), sensorControlsBuf.size());
+	appendPOD<uint32_t>(_ipcInputBuf.data(), paramsBuf.size());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), settingsBuf.begin(), settingsBuf.end());
-	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), hwRevisionBuf.begin(), hwRevisionBuf.end());
-	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), sensorIdBuf.begin(), sensorIdBuf.end());
-	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), sensorInfoBuf.begin(), sensorInfoBuf.end());
-	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), sensorControlsBuf.begin(), sensorControlsBuf.end());
+	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), paramsBuf.begin(), paramsBuf.end());
 
 
 	int _ret = ipc_->sendSync(_ipcInputBuf, &_ipcOutputBuf);
@@ -520,29 +493,29 @@ void IPAProxyNxpNeo::queueRequestIPC(
 }
 
 
-void IPAProxyNxpNeo::fillParamsBuffer(
+void IPAProxyNxpNeo::computeParams(
 	const uint32_t frame,
 	const std::map<uint32_t, uint32_t> &bufferIds)
 {
 	if (isolate_)
-		fillParamsBufferIPC(frame, bufferIds);
+		computeParamsIPC(frame, bufferIds);
 	else
-		fillParamsBufferThread(frame, bufferIds);
+		computeParamsThread(frame, bufferIds);
 }
 
-void IPAProxyNxpNeo::fillParamsBufferThread(
+void IPAProxyNxpNeo::computeParamsThread(
 	const uint32_t frame,
 	const std::map<uint32_t, uint32_t> &bufferIds)
 {
 	ASSERT(state_ == ProxyRunning);
-	proxy_.invokeMethod(&ThreadProxy::fillParamsBuffer, ConnectionTypeQueued, frame, bufferIds);
+	proxy_.invokeMethod(&ThreadProxy::computeParams, ConnectionTypeQueued, frame, bufferIds);
 }
 
-void IPAProxyNxpNeo::fillParamsBufferIPC(
+void IPAProxyNxpNeo::computeParamsIPC(
 	const uint32_t frame,
 	const std::map<uint32_t, uint32_t> &bufferIds)
 {
-	IPCMessage::Header _header = { static_cast<uint32_t>(_NxpNeoCmd::FillParamsBuffer), seq_++ };
+	IPCMessage::Header _header = { static_cast<uint32_t>(_NxpNeoCmd::ComputeParams), seq_++ };
 	IPCMessage _ipcInputBuf(_header);
 
 
@@ -562,38 +535,38 @@ void IPAProxyNxpNeo::fillParamsBufferIPC(
 
 	int _ret = ipc_->sendAsync(_ipcInputBuf);
 	if (_ret < 0) {
-		LOG(IPAProxy, Error) << "Failed to call fillParamsBuffer";
+		LOG(IPAProxy, Error) << "Failed to call computeParams";
 		return;
 	}
 }
 
 
-void IPAProxyNxpNeo::processStatsBuffer(
+void IPAProxyNxpNeo::processStats(
 	const uint32_t frame,
 	const std::map<uint32_t, uint32_t> &bufferIds,
 	const ControlList &sensorControls)
 {
 	if (isolate_)
-		processStatsBufferIPC(frame, bufferIds, sensorControls);
+		processStatsIPC(frame, bufferIds, sensorControls);
 	else
-		processStatsBufferThread(frame, bufferIds, sensorControls);
+		processStatsThread(frame, bufferIds, sensorControls);
 }
 
-void IPAProxyNxpNeo::processStatsBufferThread(
+void IPAProxyNxpNeo::processStatsThread(
 	const uint32_t frame,
 	const std::map<uint32_t, uint32_t> &bufferIds,
 	const ControlList &sensorControls)
 {
 	ASSERT(state_ == ProxyRunning);
-	proxy_.invokeMethod(&ThreadProxy::processStatsBuffer, ConnectionTypeQueued, frame, bufferIds, sensorControls);
+	proxy_.invokeMethod(&ThreadProxy::processStats, ConnectionTypeQueued, frame, bufferIds, sensorControls);
 }
 
-void IPAProxyNxpNeo::processStatsBufferIPC(
+void IPAProxyNxpNeo::processStatsIPC(
 	const uint32_t frame,
 	const std::map<uint32_t, uint32_t> &bufferIds,
 	const ControlList &sensorControls)
 {
-	IPCMessage::Header _header = { static_cast<uint32_t>(_NxpNeoCmd::ProcessStatsBuffer), seq_++ };
+	IPCMessage::Header _header = { static_cast<uint32_t>(_NxpNeoCmd::ProcessStats), seq_++ };
 	IPCMessage _ipcInputBuf(_header);
 
 
@@ -619,7 +592,7 @@ void IPAProxyNxpNeo::processStatsBufferIPC(
 
 	int _ret = ipc_->sendAsync(_ipcInputBuf);
 	if (_ret < 0) {
-		LOG(IPAProxy, Error) << "Failed to call processStatsBuffer";
+		LOG(IPAProxy, Error) << "Failed to call processStats";
 		return;
 	}
 }
@@ -627,14 +600,14 @@ void IPAProxyNxpNeo::processStatsBufferIPC(
 
 
 
-void IPAProxyNxpNeo::paramsBufferReadyThread(
+void IPAProxyNxpNeo::paramsComputedThread(
 	const uint32_t frame)
 {
 	ASSERT(state_ != ProxyStopped);
-	paramsBufferReady.emit(frame);
+	paramsComputed.emit(frame);
 }
 
-void IPAProxyNxpNeo::paramsBufferReadyIPC(
+void IPAProxyNxpNeo::paramsComputedIPC(
 	[[maybe_unused]] std::vector<uint8_t>::const_iterator data,
 	[[maybe_unused]] size_t dataSize,
 	[[maybe_unused]] const std::vector<SharedFD> &fds)
@@ -650,7 +623,7 @@ void IPAProxyNxpNeo::paramsBufferReadyIPC(
         	data + frameStart,
         	data + dataSize);
 
-	paramsBufferReady.emit(frame);
+	paramsComputed.emit(frame);
 }
 
 void IPAProxyNxpNeo::setSensorControlsThread(
