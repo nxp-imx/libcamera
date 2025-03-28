@@ -725,10 +725,16 @@ void CameraHelperMx95mbcam::controlInfoMapGetAnalogGainRange(
 	/* Fixup HCG gain with conversion ratio */
 	const uint32_t sensorConversionRatioQ16 = calcConvRatio(convGainQ16_);
 	double convGain = static_cast<double>(sensorConversionRatioQ16) / Q16_1;
+	/*
+	 * Ratio between HCG and LCG min values is the maximum between:
+	 * - Gain conversion ratio HCG/LCG (read from OTP)
+	 * - Ratio between total exposure of Long and Short captures
+	 */
+	const uint32_t ratioHcgLcgMin = std::max(convGainQ16_, kRatioL2SQ16);
 
 	/* \todo Append short and very short analog gain values */
 	minGain->clear();
-	minGain->push_back(kMinAnalogGain * convGain);
+	minGain->push_back(kMinAnalogGain * (ratioHcgLcgMin / Q16_1));
 
 	maxGain->clear();
 	maxGain->push_back(kMaxAnalogGain * convGain);
