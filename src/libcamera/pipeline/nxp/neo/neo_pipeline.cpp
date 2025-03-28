@@ -139,7 +139,7 @@ private:
 	void neoStatsBufferReady(FrameBuffer *buffer);
 	void frameStart(uint32_t sequence);
 
-	void ipaParamsBufferReady(unsigned int id);
+	void ipaParamsComputed(unsigned int id);
 	void ipaMetadataReady(unsigned int id, const ControlList &metadata);
 	void ipaSetSensorControls(unsigned int id, const ControlList &sensorControls);
 
@@ -1601,7 +1601,7 @@ int NxpNeoCameraData::loadIPA()
 		return -ENOENT;
 
 	ipa_->setSensorControls.connect(this, &NxpNeoCameraData::ipaSetSensorControls);
-	ipa_->paramsBufferReady.connect(this, &NxpNeoCameraData::ipaParamsBufferReady);
+	ipa_->paramsComputed.connect(this, &NxpNeoCameraData::ipaParamsComputed);
 	ipa_->metadataReady.connect(this, &NxpNeoCameraData::ipaMetadataReady);
 
 	IPACameraSensorInfo sensorInfo{};
@@ -1996,7 +1996,7 @@ void NxpNeoCameraData::isiInputBufferReady(NxpNeoFrames::Info *info)
 				{ ipa::nxpneo::TypeEData, info->eDataBuffer->cookie() });
 		}
 
-		ipa_->fillParamsBuffer(info->id, bufferIds);
+		ipa_->computeParams(info->id, bufferIds);
 	} else {
 		tryCompleteRequest(info);
 	}
@@ -2168,8 +2168,8 @@ void NxpNeoCameraData::neoStatsBufferReady(FrameBuffer *buffer)
 		{ ipa::nxpneo::TypeStats, info->statsBuffer->cookie() },
 	};
 
-	ipa_->processStatsBuffer(info->id, bufferIds,
-				 delayedCtrls_->get(buffer->metadata().sequence));
+	ipa_->processStats(info->id, bufferIds,
+			   delayedCtrls_->get(buffer->metadata().sequence));
 
 	tryCompleteRequest(info);
 }
@@ -2216,7 +2216,7 @@ void NxpNeoCameraData::frameStart(uint32_t sequence)
 				*testPatternMode);
 }
 
-void NxpNeoCameraData::ipaParamsBufferReady(unsigned int id)
+void NxpNeoCameraData::ipaParamsComputed(unsigned int id)
 {
 	NxpNeoFrames::Info *info = frameInfos_.find(id);
 	if (!info)

@@ -61,13 +61,13 @@ interface IPANxpNeoInterface {
 	unmapBuffers(array<uint32> ids);
 
 	[async] queueRequest(uint32 frame, libcamera.ControlList reqControls);
-	[async] fillParamsBuffer(uint32 frame, map<uint32_t, uint32_t> bufferIds);
-	[async] processStatsBuffer(uint32 frame, map<uint32_t, uint32_t> bufferIds,
-				   libcamera.ControlList sensorControls);
+	[async] computeParams(uint32 frame, map<uint32_t, uint32_t> bufferIds);
+	[async] processStats(uint32 frame, map<uint32_t, uint32_t> bufferIds,
+			     libcamera.ControlList sensorControls);
 };
 
 interface IPANxpNeoEventInterface {
-	paramsBufferReady(uint32 frame);
+	paramsComputed(uint32 frame);
 	setSensorControls(uint32 frame, libcamera.ControlList sensorControls);
 	metadataReady(uint32 frame, libcamera.ControlList metadata);
 };

@@ -69,11 +69,11 @@ public:
 	void unmapBuffers(const std::vector<unsigned int> &ids) override;
 
 	void queueRequest(const uint32_t frame, const ControlList &controls) override;
-	void fillParamsBuffer(const uint32_t frame,
-			      const std::map<uint32_t, uint32_t> &bufferIds) override;
-	void processStatsBuffer(const uint32_t frame,
-				const std::map<uint32_t, uint32_t> &bufferIds,
-				const ControlList &sensorControls) override;
+	void computeParams(const uint32_t frame,
+			   const std::map<uint32_t, uint32_t> &bufferIds) override;
+	void processStats(const uint32_t frame,
+			  const std::map<uint32_t, uint32_t> &bufferIds,
+			  const ControlList &sensorControls) override;
 
 protected:
 	std::string logPrefix() const override;
@@ -338,8 +338,8 @@ void IPANxpNeo::queueRequest(const uint32_t frame, const ControlList &controls)
 	}
 }
 
-void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
-				 const std::map<uint32_t, uint32_t> &bufferIds)
+void IPANxpNeo::computeParams(const uint32_t frame,
+			      const std::map<uint32_t, uint32_t> &bufferIds)
 {
 	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
 
@@ -415,12 +415,12 @@ void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
 	for (auto const &algo : algorithms())
 		algo->prepare(context_, frame, frameContext, params);
 
-	paramsBufferReady.emit(frame);
+	paramsComputed.emit(frame);
 }
 
-void IPANxpNeo::processStatsBuffer(const uint32_t frame,
-				   const std::map<uint32_t, uint32_t> &bufferIds,
-				   const ControlList &sensorControls)
+void IPANxpNeo::processStats(const uint32_t frame,
+			     const std::map<uint32_t, uint32_t> &bufferIds,
+			     const ControlList &sensorControls)
 {
 	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
 
