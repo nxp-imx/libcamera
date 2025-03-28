@@ -103,7 +103,8 @@ private:
 	int configureVideoDevice(V4L2VideoDevice *dev, unsigned int pad,
 				 V4L2DeviceFormat *format);
 	int configureVideoDeviceMeta(V4L2VideoDevice *dev,
-				     unsigned int pad, uint32_t fourcc);
+				     unsigned int pad, uint32_t fourcc,
+				     unsigned int size);
 
 	bool padActiveInput1() const { return configInput1_; }
 	bool padActiveFrame() const { return configFrame_; }

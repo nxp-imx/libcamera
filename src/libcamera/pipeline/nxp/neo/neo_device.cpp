@@ -13,6 +13,7 @@
 #include <limits>
 
 #include <linux/media-bus-format.h>
+#include <linux/nxp_neoisp.h>
 
 #include <libcamera/base/log.h>
 #include <libcamera/base/utils.h>
@@ -455,16 +456,19 @@ int NeoDevice::configureVideoDevice(V4L2VideoDevice *dev, unsigned int pad,
  * \param[in] dev video device
  * \param[in] pad NEO subdevice pad linked to the video node
  * \param[in] fourcc fourcc to be configured
+ * \param[in] size the meta buffer size
  *
  * \return 0 on success or a negative error code otherwise
  */
 int NeoDevice::configureVideoDeviceMeta(V4L2VideoDevice *dev,
-					unsigned int pad, uint32_t fourcc)
+					unsigned int pad, uint32_t fourcc,
+					unsigned int size)
 {
 	int ret;
 	V4L2DeviceFormat devFormat = {};
 
 	devFormat.fourcc = V4L2PixelFormat(fourcc);
+	devFormat.planes[0].size = size;
 	ret = dev->setFormat(&devFormat);
 	if (ret) {
 		LOG(NxpNeoDev, Error)
@@ -472,6 +476,14 @@ int NeoDevice::configureVideoDeviceMeta(V4L2VideoDevice *dev,
 			<< "Failed to set format for meta video device pad ("
 			<< pad << ")";
 		return ret;
+	}
+
+	if (devFormat.planes[0].size != size) {
+		LOG(NxpNeoDev, Error)
+			<< logPrefix()
+			<< "Meta buffer size mismatch got "
+			<< devFormat.planes[0].size << " expected " << size;
+		return -EINVAL;
 	}
 
 	LOG(NxpNeoDev, Debug)
@@ -546,12 +558,14 @@ int NeoDevice::configure(PipeConfig &pipeConfig,
 	}
 
 	ret = configureVideoDeviceMeta(params_.get(), PAD_PARAMS,
-				       V4L2_META_FMT_NEO_ISP_PARAMS);
+				       V4L2_META_FMT_NEO_ISP_PARAMS,
+				       sizeof(struct neoisp_meta_params_s));
 	if (ret)
 		return ret;
 
 	ret = configureVideoDeviceMeta(stats_.get(), PAD_STATS,
-				       V4L2_META_FMT_NEO_ISP_STATS);
+				       V4L2_META_FMT_NEO_ISP_STATS,
+				       sizeof(struct neoisp_meta_stats_s));
 	if (ret)
 		return ret;
 
