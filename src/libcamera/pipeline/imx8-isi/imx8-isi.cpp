@@ -717,6 +717,11 @@ StreamConfiguration PipelineHandlerISI::generateYUVConfiguration(Camera *camera,
 	V4L2SubdeviceFormat sensorFmt;
 	sensorFmt.code = mbusCode;
 	std::vector<Size> sizes = data->sensor_->sizes(mbusCode);
+
+	const MediaEntity *entity = data->sensor_->entity();
+	if (entity->function() == MEDIA_ENT_F_PROC_VIDEO_ISP)
+		sizes.push_back(data->sensor_->resolution());
+
 	std::sort(sizes.begin(), sizes.end());
 	std::reverse(sizes.begin(), sizes.end());
 
