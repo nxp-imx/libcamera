@@ -9,6 +9,9 @@ algorithms:
       # ox03c10 HCG+LCG range: 0 - 2^15-1
       # scale = totalBins * 2^16 / inputBitRange
       hist-scale: [ 128, 128, 128, 128 ]
+  - PipeConf:
+      # LPALIGN0=0 to enable 16 to 20-bit non-linear decompression
+      lpalign0: 0
   - HdrDecomp:
       input0:
         # KNEE_POINT[1-4] u16
