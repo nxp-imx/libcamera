@@ -1701,7 +1701,7 @@ bool SimplePipelineHandler::match(DeviceEnumerator *enumerator)
 	bool matched = false;
 
 	for (auto it = mediaDevices.begin(); it != mediaDevices.end(); it++) {
-		MediaDevice *media = it->first;
+		media = it->first;
 		const SimplePipelineInfo *info = it->second;
 		LOG(SimplePipeline, Debug)
 			<< "call matchMedia for pipeline "
