@@ -51,6 +51,21 @@ genrule {
         "sed \"s~@VCS_TAG@~$$GITVERSION~g\" $(in) > $(out)"
 }
 
+genrule {
+    name: "ipa_nxp_neo_version_h",
+    tool_files: [
+        ":libcamera_sources",
+        "utils/gen-version.sh",
+    ],
+    srcs: [ "src/ipa/nxp/neo/neo_ipa_version.h.in", ],
+    out: ["neo_ipa_version.h"],
+    cmd: "SBROOT=$$(realpath .) && " +
+        "cd $$(dirname $$(dirname $(location utils/gen-version.sh))) && " +
+        "GITVERSION=$$(./utils/gen-version.sh | awk '{print $$1}') && " +
+        "cd $$SBROOT && " +
+        "sed \"s~@VCS_TAG@~$$GITVERSION~g\" $(in) > $(out)"
+}
+
 // libcamera-base.so
 cc_library_shared {
     name: "libcamera-base",
@@ -282,7 +297,9 @@ cc_library_shared {
         "src/ipa/nxp/neo/*.cpp",
         "src/ipa/nxp/neo/algorithms/*.cpp",
     ],
-
+    generated_headers: [
+        "ipa_nxp_neo_version_h",
+    ],
     cflags: [
         "-Wall",
         "-Werror",
