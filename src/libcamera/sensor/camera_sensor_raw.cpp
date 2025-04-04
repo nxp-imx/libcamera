@@ -89,6 +89,9 @@ public:
 	std::optional<V4L2Subdevice::Stream> embeddedDataStream() const override;
 	V4L2SubdeviceFormat embeddedDataFormat() const override;
 	int setEmbeddedDataEnabled(bool enable) override;
+	virtual std::optional<V4L2Subdevice::Stream> auxiliaryStream() const override;
+	virtual V4L2SubdeviceFormat auxiliaryFormat() const override;
+	virtual int setAuxiliaryEnabled(bool enable) override;
 
 	const ControlList &properties() const override { return properties_; }
 	int sensorInfo(IPACameraSensorInfo *info) const override;
@@ -128,6 +131,7 @@ private:
 	struct {
 		Streams image;
 		std::optional<Streams> edata;
+		std::optional<Streams> auxiliary;
 	} streams_;
 
 	const CameraSensorProperties *staticProps_;
@@ -209,7 +213,7 @@ CameraSensorRaw::match(MediaEntity *entity)
 		}
 	}
 
-	if (numSinks < 1 || numSinks > 2 || numSources != 1) {
+	if (numSinks < 1 || numSinks > 3 || numSources != 1) {
 		LOG(CameraSensor, Debug)
 			<< entity->name() << ": unsupported number of sinks ("
 			<< numSinks << ") or sources (" << numSources << ")";
@@ -280,6 +284,7 @@ std::optional<int> CameraSensorRaw::init()
 	}
 
 	bool imageStreamFound = false;
+	bool auxiliaryStreamFound = false;
 
 	for (const V4L2Subdevice::Route &route : routing) {
 		if (route.source.pad != sourcePad) {
@@ -309,17 +314,21 @@ std::optional<int> CameraSensorRaw::init()
 
 		switch (*type) {
 		case MediaBusFormatInfo::Type::Image:
-			if (imageStreamFound) {
+			/* Assume that primary image is on the stream 0/0 */
+			if (!imageStreamFound &&
+			    route.source.pad == 0 && route.source.stream == 0) {
+				imageStreamFound = true;
+				streams_.image = { route.sink, route.source };
+			} else if (!auxiliaryStreamFound) {
+				auxiliaryStreamFound = true;
+				streams_.auxiliary = { route.sink, route.source };
+			} else {
 				LOG(CameraSensor, Error)
 					<< "Multiple internal image streams ("
 					<< streams_.image.sink << " and "
 					<< route.sink << ")";
 				return { -EINVAL };
 			}
-
-			imageStreamFound = true;
-			streams_.image.sink = route.sink;
-			streams_.image.source = route.source;
 			break;
 
 		case MediaBusFormatInfo::Type::Metadata:
@@ -365,6 +374,11 @@ std::optional<int> CameraSensorRaw::init()
 		LOG(CameraSensor, Debug)
 			<< "Found embedded data stream " << streams_.edata->sink
 			<< " -> " << streams_.edata->source;
+
+	if (streams_.auxiliary)
+		LOG(CameraSensor, Debug)
+			<< "Found auxiliary stream " << streams_.auxiliary->sink
+			<< " -> " << streams_.auxiliary->source;
 
 	/* Restore the routes to their initial state */
 	ret = subdev_->setRouting(&routing);
@@ -993,6 +1007,70 @@ int CameraSensorRaw::setEmbeddedDataEnabled(bool enable)
 
 	for (const V4L2Subdevice::Route &route : routing) {
 		if (route.source != streams_.edata->source)
+			continue;
+
+		enabled = route.flags & V4L2_SUBDEV_ROUTE_FL_ACTIVE;
+		break;
+	}
+
+	if (enabled != enable)
+		return enabled ? -EISCONN : -ENOSTR;
+
+	return 0;
+}
+
+std::optional<V4L2Subdevice::Stream> CameraSensorRaw::auxiliaryStream() const
+{
+	if (!streams_.auxiliary)
+		return {};
+
+	return { streams_.auxiliary->source };
+}
+
+V4L2SubdeviceFormat CameraSensorRaw::auxiliaryFormat() const
+{
+	if (!streams_.auxiliary)
+		return {};
+
+	V4L2SubdeviceFormat format;
+	int ret = subdev_->getFormat(streams_.auxiliary->source, &format);
+	if (ret)
+		return {};
+
+	return format;
+}
+
+int CameraSensorRaw::setAuxiliaryEnabled(bool enable)
+{
+	int ret;
+
+	if (!streams_.auxiliary)
+		return enable ? -ENOSTR : 0;
+
+	V4L2Subdevice::Routing routing;
+	ret = subdev_->getRouting(&routing);
+	if (ret)
+		return ret;
+
+	for (V4L2Subdevice::Route &route : routing) {
+		if (route.source != streams_.auxiliary->source)
+			continue;
+		route.flags = enable ? V4L2_SUBDEV_ROUTE_FL_ACTIVE : 0;
+	}
+	ret = subdev_->setRouting(&routing);
+	if (ret)
+		return ret;
+
+	/*
+	 * Check if the auxiliary stream has been enabled or disabled
+	 * correctly. Assume at least one route will match the auxiliary
+	 * source stream, as there would be something seriously wrong
+	 * otherwise.
+	 */
+	bool enabled = false;
+
+	for (const V4L2Subdevice::Route &route : routing) {
+		if (route.source != streams_.auxiliary->source)
 			continue;
 
 		enabled = route.flags & V4L2_SUBDEV_ROUTE_FL_ACTIVE;

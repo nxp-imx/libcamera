@@ -68,6 +68,9 @@ public:
 	virtual std::optional<V4L2Subdevice::Stream> embeddedDataStream() const;
 	virtual V4L2SubdeviceFormat embeddedDataFormat() const;
 	virtual int setEmbeddedDataEnabled(bool enable);
+	virtual std::optional<V4L2Subdevice::Stream> auxiliaryStream() const;
+	virtual V4L2SubdeviceFormat auxiliaryFormat() const;
+	virtual int setAuxiliaryEnabled(bool enable);
 
 	virtual const ControlList &properties() const = 0;
 	virtual int sensorInfo(IPACameraSensorInfo *info) const = 0;
