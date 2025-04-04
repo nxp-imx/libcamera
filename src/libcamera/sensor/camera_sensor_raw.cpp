@@ -264,6 +264,21 @@ std::optional<int> CameraSensorRaw::init()
 	if (ret)
 		return { ret };
 
+	/* Activate all routes to query pads formats */
+	V4L2Subdevice::Routing routingActive = routing;
+	for (V4L2Subdevice::Route &route : routingActive) {
+		if (route.source.pad != sourcePad) {
+			LOG(CameraSensor, Error) << "Invalid route " << route;
+			return { -EINVAL };
+		}
+		route.flags = V4L2_SUBDEV_ROUTE_FL_ACTIVE;
+	}
+	ret = subdev_->setRouting(&routingActive);
+	if (ret) {
+		LOG(CameraSensor, Error) << "Could not set routes to active";
+		return { -EINVAL };
+	}
+
 	bool imageStreamFound = false;
 
 	for (const V4L2Subdevice::Route &route : routing) {
@@ -350,6 +365,13 @@ std::optional<int> CameraSensorRaw::init()
 		LOG(CameraSensor, Debug)
 			<< "Found embedded data stream " << streams_.edata->sink
 			<< " -> " << streams_.edata->source;
+
+	/* Restore the routes to their initial state */
+	ret = subdev_->setRouting(&routing);
+	if (ret) {
+		LOG(CameraSensor, Error) << "Could not restore routes state";
+		return { -EINVAL };
+	}
 
 	/*
 	 * 2. Enumerate and cache the media bus codes, sizes and colour filter
