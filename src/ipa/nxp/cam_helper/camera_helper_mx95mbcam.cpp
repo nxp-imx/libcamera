@@ -221,27 +221,33 @@ private:
 
 	/* min/max analog real gain value */
 	static constexpr double kMinAnalogGain = 1.0;
-	static constexpr double kMaxAnalogGain = 15.5;
+	static constexpr double kMaxAnalogGain = 15.0;
 	static constexpr double kDefAnalogGain = 5.0;
 
 	static constexpr float kMinAnalogGainLong = 1.0f;
-	static constexpr float kMaxAnalogGainLong = 15.5f;
+	static constexpr float kMaxAnalogGainLong = 15.0f;
 	static constexpr float kMinAnalogGainShort = 1.0f;
-	static constexpr float kMaxAnalogGainShort = 15.5f;
+	static constexpr float kMaxAnalogGainShort = 15.0f;
+	static constexpr float kMinAnalogGainSpd = 1.0f;
+	static constexpr float kMaxAnalogGainSpd = 15.0f;
 	static constexpr float kMinAnalogGainVs = 1.0f;
-	static constexpr float kMaxAnalogGainVs = 15.5f;
+	static constexpr float kMaxAnalogGainVs = 15.0f;
 
 	static constexpr float kMinDigitalGainLong = 1.0f;
-	static constexpr float kMaxDigitalGainLong = 15.999f;
+	static constexpr float kMaxDigitalGainLong = 15.0f;
 	static constexpr float kMinDigitalGainShort = 1.0f;
-	static constexpr float kMaxDigitalGainShort = 15.999f;
+	static constexpr float kMaxDigitalGainShort = 15.0f;
+	static constexpr float kMinDigitalGainSpd = 1.0f;
+	static constexpr float kMaxDigitalGainSpd = 15.0f;
 	static constexpr float kMinDigitalGainVs = 1.0f;
-	static constexpr float kMaxDigitalGainVs = 15.999f;
+	static constexpr float kMaxDigitalGainVs = 15.0f;
 
 	static constexpr uint32_t kMinAnalogGainLongQ16 = kMinAnalogGainLong * Q16_1;
 	static constexpr uint32_t kMaxAnalogGainLongQ16 = kMaxAnalogGainLong * Q16_1;
 	static constexpr uint32_t kMinAnalogGainShortQ16 = kMinAnalogGainShort * Q16_1;
 	static constexpr uint32_t kMaxAnalogGainShortQ16 = kMaxAnalogGainShort * Q16_1;
+	static constexpr uint32_t kMinAnalogGainSpdQ16 = kMinAnalogGainSpd * Q16_1;
+	static constexpr uint32_t kMaxAnalogGainSpdQ16 = kMaxAnalogGainSpd * Q16_1;
 	static constexpr uint32_t kMinAnalogGainVsQ16 = kMinAnalogGainVs * Q16_1;
 	static constexpr uint32_t kMaxAnalogGainVsQ16 = kMaxAnalogGainVs * Q16_1;
 
@@ -249,6 +255,8 @@ private:
 	static constexpr uint32_t kMaxDigitalGainLongQ16 = kMaxDigitalGainLong * Q16_1;
 	static constexpr uint32_t kMinDigitalGainShortQ16 = kMinDigitalGainShort * Q16_1;
 	static constexpr uint32_t kMaxDigitalGainShortQ16 = kMaxDigitalGainShort * Q16_1;
+	static constexpr uint32_t kMinDigitalGainSpdQ16 = kMinDigitalGainSpd * Q16_1;
+	static constexpr uint32_t kMaxDigitalGainSpdQ16 = kMaxDigitalGainSpd * Q16_1;
 	static constexpr uint32_t kMinDigitalGainVsQ16 = kMinDigitalGainVs * Q16_1;
 	static constexpr uint32_t kMaxDigitalGainVsQ16 = kMaxDigitalGainVs * Q16_1;
 
@@ -281,39 +289,39 @@ private:
 	static constexpr uint32_t kHtsDcg = 0x5E2U;
 	static constexpr uint32_t kHtsSpd = 0x2F1U;
 	static constexpr uint32_t kHtsVs = 0x2F1U;
-	static constexpr uint32_t kHts = kHtsDcg + kHtsVs;
-	static constexpr uint32_t kVts = 0x2AEU;
+	static constexpr uint32_t kHts = kHtsDcg + kHtsSpd + kHtsVs;
+	/* VTS = 675 */
+	static constexpr uint32_t kVts = 0x2A3U;
 
 	static constexpr uint32_t kMinVsExposureLines = 0U;
-	static constexpr uint32_t kMaxVsExposureLines = 4U;
-	static constexpr uint32_t kMinExposureLines = 4U;
-	/* 23281us */
+	static constexpr uint32_t kMaxVsExposureLines = 31U;
+	static constexpr uint32_t kMinExposureLines = 2U;
+	/* max_exp_lines = 631 => max exp_time = 631*48.580=30653us */
 	static constexpr uint32_t kMaxExposureLines = kVts - kMaxVsExposureLines - 12U - 1U;
 
-#if USE_CUSTOM_CONTROLS
-	static constexpr uint32_t kRowTimeNs = (kHts * 1000U) / kSclk;
-#else
 	/*
-	 * Use the actual values from the driver because the ones defined by the
-	 * camHelper distribution function are not correct:
+	 * Double row time: 48.580us
+	 * Can also be retrieved with actual values from the driver:
 	 * double row time = 2 * hts / pixel clock = 2 * 2186 / 90MHz
 	 */
-	static constexpr uint32_t kRowTimeNs = (2 * 2186 * 1000 / 90);
-#endif
+	static constexpr uint32_t kRowTimeNs = (kHts * 1000U) / kSclk;
 
 #ifdef USE_OFFSET_M
 	static constexpr float kOffsetM = 0.232621227534758f;
 #else
 	static constexpr float kOffsetM = 0.0f;
 #endif
-	static constexpr float kOffsetVs = 0.729738894540522f;
+	static constexpr float kOffsetVs = 0.6;
 
-	static constexpr uint32_t kRatioL2SQ16 = 32U * Q16_1;
-	static constexpr uint32_t kRatioL2VsQ16 = 1024U * Q16_1;
+	static constexpr uint32_t kRatioL2SQ16 = 16U * Q16_1;
+	static constexpr uint32_t kRatioL2VsQ16 = 128U * Q16_1;
+	static constexpr uint32_t kRatioL2SpdQ16 = 1024U * Q16_1;
 
 	std::unique_ptr<MdParser> parser_;
 	/* gain conversion ratio of HCG/LCG  */
 	uint32_t convGainQ16_ = 7.32f * Q16_1;
+	/* LPD/SPD sensitivity ratio */
+	uint32_t lpdSpdSensRatioQ16_ = 108.5f * Q16_1;
 };
 
 CameraHelperMx95mbcam::CameraHelperMx95mbcam()
@@ -478,15 +486,28 @@ void CameraHelperMx95mbcam::setControls(const ControlList *sensorCtrls)
 	const struct ox03c10_otp_correction *payload;
 	payload = reinterpret_cast<const struct ox03c10_otp_correction *>(data.data());
 	if (!payload->val1 || !payload->val2) {
-		LOG(NxpCameraHelper, Error) << "Invalid Gain conversion ratio: ["
-					    << payload->val1 << ", "
-					    << payload->val2 << "]";
-		return;
+		LOG(NxpCameraHelper, Warning) << "Invalid Gain conversion ratio: ["
+					      << payload->val1 << ", "
+					      << payload->val2 << "] - Use default: "
+					      << convGainQ16_;
+	} else {
+		double convGainOTP = payload->val1 / static_cast<double>(payload->val2);
+		convGainQ16_ = convGainOTP * Q16_1;
+		LOG(NxpCameraHelper, Debug) << "Gain conversion ratio HCG/LCG: "
+					    << convGainOTP;
 	}
-	double convGainOTP = payload->val1 / static_cast<double>(payload->val2);
-	convGainQ16_ = convGainOTP * Q16_1;
-	LOG(NxpCameraHelper, Debug) << "Gain conversion ratio HCG/LCG: "
-				    << convGainOTP;
+
+	if (!payload->val2 || !payload->val3) {
+		LOG(NxpCameraHelper, Warning) << "Invalid LPD/SPD sensitivity ratio: ["
+					      << payload->val2 << ", "
+					      << payload->val3 << "]  - Use default: "
+					      << lpdSpdSensRatioQ16_;
+	} else {
+		double lpdSpdRatioOTP = payload->val2 / static_cast<double>(payload->val3);
+		lpdSpdSensRatioQ16_ = lpdSpdRatioOTP * Q16_1;
+		LOG(NxpCameraHelper, Debug) << "LPD/SPD sensitivity ratio: "
+					    << lpdSpdRatioOTP;
+	}
 }
 
 void CameraHelperMx95mbcam::controlListSetAGC(
@@ -510,21 +531,23 @@ void CameraHelperMx95mbcam::controlListSetAGC(
 
 	const uint32_t sensorConversionRatio = calcConvRatio(convGainQ16_);
 
-	uint64_t lAgainL, lAgainS, lAgainVS;
-	uint32_t lDgainL, lDgainS, lDgainVS;
+	uint64_t lAgainL, lAgainS, lAgainSPD, lAgainVS;
+	uint32_t lDgainL, lDgainS, lDgainSPD, lDgainVS;
 	uint64_t lAddGain;
 	uint32_t lExpIn = static_cast<uint32_t>(exposure * 1.0e6); // to usec
-	uint32_t lExpLinRows;
-	uint32_t lExpVSinRows;
+	uint32_t lExpLinRows, lExpSPDinRows, lExpVSinRows;
 	uint64_t lExpTotalInRows;
 	uint64_t lExpTotalL;
-	uint64_t lRatioL2S, lRatioL2VS;
+	uint64_t lRatioL2S, lRatioL2SPD, lRatioL2VS;
 	uint64_t lMinGainL;
 	float lTmpF;
 
 	/* Minimum total gain for the Short frame */
 	uint64_t lMinGainS =
 		(static_cast<uint64_t>(kMinAnalogGainShortQ16) * kMinDigitalGainShortQ16) / Q16_1;
+	/* Minimum total gain for the SPD frame */
+	uint64_t lMinGainSPD =
+		(static_cast<uint64_t>(kMinAnalogGainSpdQ16) * kMinDigitalGainSpdQ16) / Q16_1;
 	/* Minimum total gain for the VS frame */
 	uint64_t lMinGainVS =
 		(static_cast<uint64_t>(kMinAnalogGainVsQ16) * kMinDigitalGainVsQ16) / Q16_1;
@@ -544,7 +567,9 @@ void CameraHelperMx95mbcam::controlListSetAGC(
 		}
 	}
 
+	/* Fixed ratios are used by default */
 	lRatioL2S = kRatioL2SQ16;
+	lRatioL2SPD = kRatioL2SpdQ16;
 	lRatioL2VS = kRatioL2VsQ16;
 
 	if (lRatioL2S < sensorConversionRatio) {
@@ -579,6 +604,23 @@ void CameraHelperMx95mbcam::controlListSetAGC(
 
 	/* get lAgainS in ratio to lAgainL */
 	lAgainS = lAgainL * Q16_1 / lRatioL2S;
+
+	/* SPD distribution */
+	lExpSPDinRows = kMaxExposureLines;
+	/* calculations of lAgainSPD with restrictions for SPD max exposure and min SPD gain */
+	lExpTotalInRows = lAgainL * ((uint64_t)lExpLinRows * lpdSpdSensRatioQ16_ / Q16_1); /* total exposure (with rows...) */
+	lAgainSPD = lExpTotalInRows * Q16_1 / (lRatioL2SPD * (uint64_t)lExpSPDinRows);
+	if (lAgainSPD < lMinGainSPD) /* but if min gain restriction fails */
+	{
+		lAgainSPD = lMinGainSPD; /* set mandatory min gain and decrease exposure */
+		lExpSPDinRows = (uint32_t)(lExpTotalInRows * Q16_1 / (lRatioL2SPD * lAgainSPD));
+		if (lExpSPDinRows < kMinExposureLines) {
+			lExpSPDinRows = kMinExposureLines;
+		}
+		lAgainSPD = lExpTotalInRows * Q16_1 / (lRatioL2SPD * (uint64_t)lExpSPDinRows);
+	}
+
+	/* VS distribution */
 	lExpVSinRows = kMaxVsExposureLines; /* default VS exposure to max */
 
 	/* calculations of acAgain with restrictions for VS max exposure and min VS gain */
@@ -611,7 +653,7 @@ void CameraHelperMx95mbcam::controlListSetAGC(
 
 	ox03c10_exposure v4l2Exposures;
 	v4l2Exposures.dcg = lExpLinRows; // DCG_exp_row
-	v4l2Exposures.spd = 0x04; /* keep the default */
+	v4l2Exposures.spd = lExpSPDinRows; // SPD_exp_row
 	v4l2Exposures.vs = lExpVSinRows; // VS_exp_row
 
 	Span<uint8_t> expData(reinterpret_cast<uint8_t *>(&v4l2Exposures), sizeof(v4l2Exposures));
@@ -619,10 +661,12 @@ void CameraHelperMx95mbcam::controlListSetAGC(
 
 	lDgainL = kMinDigitalGainLongQ16;
 	lDgainS = kMinDigitalGainShortQ16;
+	lDgainSPD = kMinDigitalGainVsQ16;
 	lDgainVS = kMinDigitalGainVsQ16;
 
 	lAgainL = (lAgainL * Q16_1) / (((uint64_t)lDgainL * sensorConversionRatio) / Q16_1);
 	lAgainS = (lAgainS * Q16_1) / lDgainS;
+	lAgainSPD = (lAgainSPD * Q16_1) / lDgainSPD;
 	lAgainVS = (lAgainVS * Q16_1) / lDgainVS;
 
 	ox03c10_analog_gain v4l2AnalogGains;
@@ -649,7 +693,16 @@ void CameraHelperMx95mbcam::controlListSetAGC(
 	/* 1.0 = 65536 to 1.0 = 16 conversion */
 	v4l2AnalogGains.lcg = lcgAnalogGain >> 12;
 
-	v4l2AnalogGains.spd = 0x10; /* keep the default */
+	lX3cMinGain = kMinAnalogGainSpdQ16;
+	lX3cMaxGain = kMaxAnalogGainSpdQ16;
+	/* lDgainS corrected to get fraction not covered by lAgainS */
+	const uint32_t spdAnalogGain = distributeAnalogGain(
+		(uint32_t)(lAgainSPD),
+		lX3cMinGain,
+		lX3cMaxGain,
+		&lDgainSPD);
+	/* 1.0 = 65536 to 1.0 = 16 conversion */
+	v4l2AnalogGains.spd = spdAnalogGain >> 12;
 
 	lX3cMinGain = kMinAnalogGainVsQ16;
 	lX3cMaxGain = kMaxAnalogGainVsQ16;
@@ -681,8 +734,12 @@ void CameraHelperMx95mbcam::controlListSetAGC(
 	/* 1.0 = 65536 to 1.0 = 1024 conversion */
 	v4l2DigitalGains.lcg = lcgDigitalGain >> 6;
 
-	/* Keep the default */
-	v4l2DigitalGains.spd = 0x400;
+	lX3cMinGain = kMinDigitalGainSpdQ16;
+	lX3cMaxGain = kMaxDigitalGainSpdQ16;
+	const uint32_t spdDigitalGain =
+		distributeDigitalGain(lDgainSPD, lX3cMinGain, lX3cMaxGain);
+	/* 1.0 = 65536 to 1.0 = 1024 conversion */
+	v4l2DigitalGains.spd = spdDigitalGain >> 6;
 
 	lX3cMinGain = kMinDigitalGainVsQ16;
 	lX3cMaxGain = kMaxDigitalGainVsQ16;
@@ -762,13 +819,13 @@ int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 	uint32_t lcgAnalogGainCode =
 		((registers[AecLcgCtrl14Reg] & 0x1fU) << 7U) |
 		(registers[AecLcgCtrl15Reg] & 0x7fU);
-	uint32_t vsAnalogGainCode =
-		((registers[AecVsCtrl14Reg] & 0x1fU) << 7U) |
-		(registers[AecVsCtrl15Reg] & 0x7fU);
-
+	uint32_t spdAnalogGainCode =
+		((registers[AecSpdCtrl14Reg] & 0x1fU) << 7U) |
+		(registers[AecSpdCtrl15Reg] & 0x7fU);
+	/* SPD analog gain is provided as the last (shortest) capture. */
 	std::array<uint32_t, 3> aGainCodes = { hcgAnalogGainCode,
 					       lcgAnalogGainCode,
-					       vsAnalogGainCode };
+					       spdAnalogGainCode };
 	std::array<float, 3> aGainsArray;
 	analogGains(Span<uint32_t>(aGainCodes), Span<float>(aGainsArray));
 
@@ -788,14 +845,15 @@ int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 		((registers[AecLcgCtrl18Reg] & 0x0fU) << 10U) |
 		(registers[AecLcgCtrl19Reg] << 2U) |
 		(registers[AecLcgCtrl1aReg] & 0x03U);
-	uint32_t vsDigitalGainCode =
-		((registers[AecVsCtrl18Reg] & 0x0fU) << 10U) |
-		(registers[AecVsCtrl19Reg] << 2U) |
-		(registers[AecVsCtrl1aReg] & 0x03U);
+	uint32_t spdDigitalGainCode =
+		((registers[AecSpdCtrl18Reg] & 0x0fU) << 10U) |
+		(registers[AecSpdCtrl19Reg] << 2U) |
+		(registers[AecSpdCtrl1aReg] & 0x03U);
 
+	/* SPD digital gain is provided as the last (shortest) capture. */
 	std::array<uint32_t, 3> dGainCodes = { hcgDigitalGainCode,
 					       lcgDigitalGainCode,
-					       vsDigitalGainCode };
+					       spdDigitalGainCode };
 	std::array<float, 3> dGainsArray;
 	digitalGains(Span<uint32_t>(dGainCodes), Span<float>(dGainsArray));
 
@@ -805,18 +863,16 @@ int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 	/* Exposure */
 	uint32_t dcgExposure =
 		(registers[AecHcgCtrl0eReg] << 8U) | registers[AecHcgCtrl0fReg];
-	uint32_t vsExposure =
-		(registers[AecVsCtrl0eReg] << 8U) | registers[AecVsCtrl0fReg];
+	uint32_t spdExposure =
+		(registers[AecSpdCtrl0eReg] << 8U) | registers[AecSpdCtrl0fReg];
 
-	float dcgExposureS =
-		dcgExposure * kRowTimeNs / 1.0e9f;
-	/* Fixup VS exposure with OffsetVS (double) raw */
-	float vsExposureS =
-		(1.0 + kOffsetVs) * vsExposure * kRowTimeNs / 1.0e9f;
+	float dcgExposureS = dcgExposure * kRowTimeNs / 1.0e9f;
+	/* SPD exposure time is provided as the last (shortest) capture. */
+	float spdExposureS = spdExposure * kRowTimeNs / 1.0e9f;
 
 	std::array<float, 3> exposuresArray = { dcgExposureS,
 						dcgExposureS,
-						vsExposureS };
+						spdExposureS };
 
 	Span<float> exposures = Span<float>(exposuresArray);
 	mdControls->set(md::Exposure, exposures);
@@ -880,12 +936,6 @@ void CameraHelperMx95mbcam::controlListSetAWB(
 		wbGains[i].b = uGains[3];
 	}
 
-	/* SPD is not used - set it to 1.0 */
-	wbGains[2].r = Q10_1;
-	wbGains[2].gr = Q10_1;
-	wbGains[2].gb = Q10_1;
-	wbGains[2].b = Q10_1;
-
 	Span<uint8_t> data(reinterpret_cast<uint8_t *>(wbGains), sizeof(wbGains));
 	ctrls->set(V4L2_CID_OX03C10_WB_GAIN, data);
 }
@@ -905,9 +955,10 @@ int CameraHelperMx95mbcam::sensorControlsToMetaData(const ControlList *sensorCtr
 		const struct ox03c10_analog_gain *aGainSensor =
 			reinterpret_cast<const struct ox03c10_analog_gain *>(data.data());
 
+		/* SPD analog gain is provided as the last (shortest) capture. */
 		std::array<uint32_t, 3> aGainCodes = { aGainSensor->hcg,
 						       aGainSensor->lcg,
-						       aGainSensor->vs };
+						       aGainSensor->spd };
 		analogGains(Span<uint32_t>(aGainCodes), Span<float>(aGainsArray));
 
 		/* Fixup HCG gain with conversion ratio */
@@ -929,9 +980,10 @@ int CameraHelperMx95mbcam::sensorControlsToMetaData(const ControlList *sensorCtr
 		const struct ox03c10_digital_gain *dGainSensor =
 			reinterpret_cast<const struct ox03c10_digital_gain *>(data.data());
 
+		/* SPD digital gain is provided as the last (shortest) capture. */
 		std::array<uint32_t, 3> dGainCodes = { dGainSensor->hcg,
 						       dGainSensor->lcg,
-						       dGainSensor->vs };
+						       dGainSensor->spd };
 		digitalGains(Span<uint32_t>(dGainCodes), Span<float>(dGainsArray));
 	} else {
 		LOG(NxpCameraHelper, Warning) << "Invalid digital gain control";
@@ -949,12 +1001,12 @@ int CameraHelperMx95mbcam::sensorControlsToMetaData(const ControlList *sensorCtr
 			reinterpret_cast<const struct ox03c10_exposure *>(data.data());
 
 		float dcgExposureS = exposure->dcg * kRowTimeNs / 1.0e9f;
-		/* Fixup VS exposure with OffsetVS (double) raw */
-		float vsExposureS = (1.0 + kOffsetVs) * exposure->vs * kRowTimeNs / 1.0e9f;
+		float spdExposureS = exposure->spd * kRowTimeNs / 1.0e9f;
 
+		/* SPD exposure time is provided as the last (shortest) capture. */
 		exposureArray[0] = dcgExposureS;
 		exposureArray[1] = dcgExposureS;
-		exposureArray[2] = vsExposureS;
+		exposureArray[2] = spdExposureS;
 	} else {
 		LOG(NxpCameraHelper, Warning) << "Invalid exposure control";
 		ret = -1;
