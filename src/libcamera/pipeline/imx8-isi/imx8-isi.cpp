@@ -75,7 +75,7 @@ public:
 	unsigned int xbarSink_ = 0;
 	unsigned int sensorSourcePadIdx_ = 0;
 	unsigned int pipeOffset_ = 0;
-	Size sensorSizeMax_ = { 0, 0 };
+	Size sensorSizeMax_ = Size(0, 0);
 };
 
 class ISICameraConfiguration : public CameraConfiguration
@@ -530,7 +530,11 @@ ISICameraConfiguration::validateYuv(std::set<Stream *> &availableStreams,
 
 		/* Cap the streams size to the maximum accepted resolution. */
 		Size configSize = cfg.size;
-		cfg.size.boundTo(maxResolution).boundTo(data_->sensorSizeMax_);
+		cfg.size.boundTo(maxResolution);
+
+		if (data_->sensorSizeMax_ != Size(0, 0))
+			cfg.size.boundTo(data_->sensorSizeMax_);
+
 		if (cfg.size != configSize) {
 			LOG(ISI, Debug)
 				<< "Stream " << i << " adjusted to " << cfg.size;
