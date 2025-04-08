@@ -1,12 +1,16 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * neo_utils.h - Helpers for NXP NEO pipeline
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  */
 
 #pragma once
 
+#include <map>
+
 #include <linux/v4l2-subdev.h>
+
+#include <libcamera/orientation.h>
 
 #include "libcamera/internal/camera_sensor.h"
 #include "libcamera/internal/media_device.h"
@@ -34,29 +38,27 @@ public:
 		unsigned int sinkStream_;
 	};
 
-	CameraMediaStream()
-		: isiPipe_(0), mbusCode_(0), embeddedLines_(0) {}
-	CameraMediaStream(std::vector<StreamLink> &links,
-			  unsigned int pipe, uint32_t code, unsigned int lines)
-		: streamLinks_(links),
-		  isiPipe_(pipe), mbusCode_(code), embeddedLines_(lines) {}
+	CameraMediaStream() {}
+	CameraMediaStream(std::vector<StreamLink> &links, unsigned int pipe)
+		: streamLinks_(links), isiPipe_(pipe) {}
 	virtual ~CameraMediaStream() {}
 
 	const std::vector<StreamLink> &streamLinks() const { return streamLinks_; }
 	unsigned int pipe() const { return isiPipe_; }
 	std::string toString() const;
 
-	/* \todo remove those methods */
-	unsigned int mbusCode() const { return mbusCode_; }
-	unsigned int embeddedLines() const { return embeddedLines_; }
-
 private:
 	std::vector<StreamLink> streamLinks_;
-	unsigned int isiPipe_;
+	unsigned int isiPipe_ = 0;
+};
 
-	/* \todo remove those fields */
-	uint32_t mbusCode_;
-	unsigned int embeddedLines_;
+struct CameraProperties {
+	bool hdrStream;
+	bool eDataStream;
+	bool multiCamera;
+	std::optional<unsigned int> formatBpp;
+	std::optional<Size> formatSize;
+	std::optional<Orientation> orientation;
 };
 
 class CameraInfo
@@ -65,31 +67,24 @@ public:
 	CameraInfo() {}
 	virtual ~CameraInfo() {}
 
-	bool hasStream(unsigned int id) const;
-	bool hasStreamInput0() const { return hasStream(STREAM_INPUT0); }
-	bool hasStreamInput1() const { return hasStream(STREAM_INPUT1); }
-	bool hasStreamEmbedded() const { return hasStream(STREAM_EMBEDDED); }
+	const CameraMediaStream *stream(unsigned int id) const;
+	bool hasStream(unsigned int id) const { return stream(id); }
 
-	const CameraMediaStream *getStream(unsigned int id) const
-	{
-		if ((id < STREAM_MAX) && (streams_[id].has_value()))
-			return &streams_[id].value();
-		else
-			return nullptr;
-	}
+	const CameraProperties &cameraProperties() const { return *properties_; }
 
-	const CameraMediaStream *getStreamInput0() const { return getStream(STREAM_INPUT0); }
-	const CameraMediaStream *getStreamInput1() const { return getStream(STREAM_INPUT1); }
-	const CameraMediaStream *getStreamEmbedded() const { return getStream(STREAM_EMBEDDED); }
-
-private:
 	enum {
 		STREAM_INPUT0 = 0,
 		STREAM_INPUT1,
-		STREAM_EMBEDDED,
+		STREAM_EDATA,
 		STREAM_MAX,
 	};
-	std::array<std::optional<CameraMediaStream>, STREAM_MAX> streams_;
+	static constexpr std::array<unsigned int, STREAM_MAX> kCameraStreams = {
+		STREAM_INPUT0, STREAM_INPUT1, STREAM_EDATA
+	};
+
+private:
+	std::map<unsigned int, CameraMediaStream> streams_;
+	CameraProperties *properties_ = nullptr;
 
 	friend PipelineConfig;
 };
@@ -97,30 +92,37 @@ private:
 using RoutingMap = std::map<MediaEntity *, V4L2Subdevice::Routing>;
 using CameraMap = std::map<std::string, CameraInfo>;
 
+struct GlobalInfo {
+	static constexpr unsigned int kBufferCount = 4;
+	GlobalInfo()
+		: bufferCount(kBufferCount) {}
+
+	unsigned int bufferCount;
+};
+
 class PipelineConfig
 {
 public:
 	PipelineConfig(){};
-	virtual ~PipelineConfig(){};
-	int load(std::string file, MediaDevice *media, ISIDevice *isiDevice);
-	const CameraInfo *getCameraInfo(std::string name) const;
-	const RoutingMap &getRoutingMap() const;
+	virtual ~PipelineConfig();
+	int load(const std::string &file, std::shared_ptr<ISIDevice> isiDevice);
+	const CameraInfo *cameraInfo(const std::string &name) const;
+	const RoutingMap &routingMap() const;
+	const GlobalInfo &globalInfo() const;
 
 private:
 	static constexpr unsigned int kPadAny =
 		std::numeric_limits<unsigned int>::max();
 
-	int loadFromFile(std::string file, MediaDevice *media, ISIDevice *isiDevice);
-
-	int loadAutoDetect(MediaDevice *media, ISIDevice *isiDevice);
-	int loadAutoDetectCameraStream(MediaDevice *media,
-				       ISIDevice *isiDevice, unsigned int pipe,
+	int loadAutoDetect();
+	int loadAutoDetectCameraStream(unsigned int pipe,
 				       MediaEntity *sensorEntity,
+				       unsigned int sensorPad,
+				       unsigned int sensorStream,
 				       std::map<MediaPad *, unsigned int> *streamMap,
-				       std::map<MediaEntity *, V4L2Subdevice::Routing> *routingMap,
+				       RoutingMap *routingMap,
 				       CameraMediaStream *cameraMediaStream);
-	int loadAutoDetectFindPaths(MediaDevice *media,
-				    MediaEntity *fromEntity, unsigned int fromPad,
+	int loadAutoDetectFindPaths(MediaEntity *fromEntity, unsigned int fromPad,
 				    MediaEntity *toEntity, unsigned int toPad,
 				    std::vector<std::vector<MediaLink *>> *linkPaths);
 	unsigned int loadAutoDetectPadToStream(std::map<MediaPad *, unsigned int> *streamMap,
@@ -129,20 +131,19 @@ private:
 				   V4L2Subdevice::Stream *sinkStream,
 				   V4L2Subdevice::Stream *sourceStream,
 				   std::map<MediaEntity *, V4L2Subdevice::Routing> *routingMap);
+	int loadAutoDetectMultiCamera();
 
-	int parsePlatform(const YamlObject &platform, MediaDevice *media,
-			  ISIDevice *isiDevice);
-	int parseMatch(const YamlObject &match, MediaDevice *media);
-	int parseRoutings(const YamlObject &platform, MediaDevice *media);
-	int parseCameras(const YamlObject &platform, MediaDevice *media,
-			 ISIDevice *isiDevice);
-	int parseReserveIsi(ISIDevice *isiDevice);
-	std::optional<CameraMediaStream>
-	parseMediaStream(const YamlObject &camera, std::string key,
-			 MediaDevice *media);
+	int parseCameras(const YamlObject &cameras);
+	int parseGlobal(const YamlObject &global);
+
+	int loadFileConfig(const std::string &file);
 
 	RoutingMap routingMap_;
 	CameraMap cameraMap_;
+	std::shared_ptr<ISIDevice> isiDevice_;
+
+	std::map<std::string, CameraProperties> namePropertiesMap_;
+	std::map<std::string, CameraProperties> modelPropertiesMap_;
 
 	/* Configuration file routes sequence elements */
 	enum {
@@ -153,6 +154,8 @@ private:
 		ROUTE_FLAGS,
 		ROUTE_MAX,
 	};
+
+	GlobalInfo globalInfo_;
 };
 
 } // namespace nxpneo

@@ -39,16 +39,26 @@ public:
         	const IPASettings &settings,
         	const SharedFD &fdStats,
         	const SharedFD &fdParams,
-        	const ControlInfoMap &sensorCtrlInfoMap) override;
+        	const ControlInfoMap &sensorCtrlInfoMap,
+        	ControlInfoMap *ipaControls) override;
 
         int32_t start() override;
 
         void stop() override;
 
         int32_t configure(
-        	const ControlInfoMap &sensorCtrlInfoMap) override;
+        	const IPAConfigInfo &configInfo) override;
+
+        void queueRequest(
+        	const uint32_t frame,
+        	const ControlList &sensorControls) override;
+
+        void computeParams(
+        	const uint32_t frame) override;
 
         void processStats(
+        	const uint32_t frame,
+        	const uint32_t bufferId,
         	const ControlList &sensorControls) override;
 
 	Signal<const ControlList &> setSensorControls;
@@ -64,12 +74,14 @@ private:
         	const IPASettings &settings,
         	const SharedFD &fdStats,
         	const SharedFD &fdParams,
-        	const ControlInfoMap &sensorCtrlInfoMap);
+        	const ControlInfoMap &sensorCtrlInfoMap,
+        	ControlInfoMap *ipaControls);
         int32_t initIPC(
         	const IPASettings &settings,
         	const SharedFD &fdStats,
         	const SharedFD &fdParams,
-        	const ControlInfoMap &sensorCtrlInfoMap);
+        	const ControlInfoMap &sensorCtrlInfoMap,
+        	ControlInfoMap *ipaControls);
 
         int32_t startThread();
         int32_t startIPC();
@@ -78,13 +90,29 @@ private:
         void stopIPC();
 
         int32_t configureThread(
-        	const ControlInfoMap &sensorCtrlInfoMap);
+        	const IPAConfigInfo &configInfo);
         int32_t configureIPC(
-        	const ControlInfoMap &sensorCtrlInfoMap);
+        	const IPAConfigInfo &configInfo);
+
+        void queueRequestThread(
+        	const uint32_t frame,
+        	const ControlList &sensorControls);
+        void queueRequestIPC(
+        	const uint32_t frame,
+        	const ControlList &sensorControls);
+
+        void computeParamsThread(
+        	const uint32_t frame);
+        void computeParamsIPC(
+        	const uint32_t frame);
 
         void processStatsThread(
+        	const uint32_t frame,
+        	const uint32_t bufferId,
         	const ControlList &sensorControls);
         void processStatsIPC(
+        	const uint32_t frame,
+        	const uint32_t bufferId,
         	const ControlList &sensorControls);
 
 
@@ -125,10 +153,23 @@ private:
 		{
 			return ipa_->start();
 		}
-		void processStats(
+		void queueRequest(
+                	const uint32_t frame,
                 	const ControlList &sensorControls)
 		{
-			ipa_->processStats(sensorControls);
+			ipa_->queueRequest(frame, sensorControls);
+		}
+		void computeParams(
+                	const uint32_t frame)
+		{
+			ipa_->computeParams(frame);
+		}
+		void processStats(
+                	const uint32_t frame,
+                	const uint32_t bufferId,
+                	const ControlList &sensorControls)
+		{
+			ipa_->processStats(frame, bufferId, sensorControls);
 		}
 
 	private:

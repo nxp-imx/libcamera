@@ -6,7 +6,7 @@
  *
  * camera_helper.h
  * Helper class that performs sensor-specific parameter computations
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  */
 
 #pragma once
@@ -64,6 +64,7 @@ public:
 	CameraHelper();
 	virtual ~CameraHelper() = default;
 	virtual void setCameraMode(const CameraMode &mode);
+	virtual void setControls(const ControlList *sensorCtrls);
 
 	virtual void controlListSetAGC(
 		ControlList *ctrls, double exposure, double gain) const;
@@ -89,7 +90,7 @@ public:
 		bool rgbIr;
 	};
 
-	virtual const Attributes *attributes() const { return &attributes_; };
+	virtual const Attributes *attributes() const { return &attributes_; }
 
 	virtual int parseEmbedded(
 		Span<const uint8_t> buffer, ControlList *mdControls);
@@ -129,10 +130,10 @@ private:
 };
 
 template<typename _Helper>
-class CamerarHelperFactory final : public CameraHelperFactoryBase
+class CameraHelperFactory final : public CameraHelperFactoryBase
 {
 public:
-	CamerarHelperFactory(const char *name)
+	CameraHelperFactory(const char *name)
 		: CameraHelperFactoryBase(name)
 	{
 	}
@@ -145,7 +146,7 @@ private:
 };
 
 #define REGISTER_CAMERA_HELPER(name, helper) \
-	static CamerarHelperFactory<helper> global_##helper##Factory(name);
+	static CameraHelperFactory<helper> global_##helper##Factory(name);
 
 } /* namespace nxp */
 

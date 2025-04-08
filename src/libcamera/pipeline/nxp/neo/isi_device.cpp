@@ -4,12 +4,11 @@
  *     src/libcamera/pipeline/ipu3/cio2.cpp
  * Copyright (C) 2019, Google Inc.
  *
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  * isi_device.cpp - NXP ISI
  */
 
 #include <limits>
-#include <math.h>
 
 #include <linux/media-bus-format.h>
 
@@ -26,7 +25,6 @@
 #include "libcamera/internal/v4l2_subdevice.h"
 
 #include "isi_device.h"
-
 
 namespace libcamera {
 
@@ -272,6 +270,8 @@ const std::map<uint32_t, V4L2PixelFormat> &ISIPipe::mediaBusToPixelFormats()
 		{ MEDIA_BUS_FMT_Y10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_Y10) },
 		{ MEDIA_BUS_FMT_Y12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_Y12) },
 		{ MEDIA_BUS_FMT_Y16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_Y16) },
+		/* Metadata formats */
+		{ MEDIA_BUS_FMT_META_8, V4L2PixelFormat(V4L2_META_FMT_GENERIC_8) },
 	};
 
 	return formats;
@@ -290,7 +290,7 @@ const std::map<uint32_t, V4L2PixelFormat> &ISIPipe::mediaBusToPixelFormats()
  *
  * \return 0 in case of success, or a negative error value
  */
-int ISIDevice::init(const MediaDevice *media)
+int ISIDevice::init(MediaDevice *media)
 {
 	int ret;
 

@@ -9,7 +9,7 @@
  * Copyright (C) 2021, Ideas On Board
  *
  * agc.cpp - AGC/AEC mean-based control algorithm
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  */
 
 #include "agc.h"
@@ -25,6 +25,7 @@
 #include <libcamera/control_ids.h>
 #include <libcamera/ipa/core_ipa_interface.h>
 
+#include "libipa/colours.h"
 #include "libipa/histogram.h"
 
 /**
@@ -156,8 +157,8 @@ int Agc::configure(IPAContext &context, const IPACameraSensorInfo &configInfo)
 	context.activeState.agc.exposureMode = exposureModeHelpers().begin()->first;
 
 	/* \todo Run this again when FrameDurationLimits is passed in */
-	setLimits(context.configuration.sensor.minShutterSpeed,
-		  context.configuration.sensor.maxShutterSpeed,
+	setLimits(context.configuration.sensor.minExposureTime,
+		  context.configuration.sensor.maxExposureTime,
 		  context.configuration.sensor.minAnalogueGain,
 		  context.configuration.sensor.maxAnalogueGain);
 	resetFrameCount();
@@ -302,39 +303,30 @@ void Agc::fillMetadata(IPAContext &context, IPAFrameContext &frameContext,
  */
 double Agc::estimateLuminance(double gain) const
 {
-	double redSum = 0, greenSum = 0, blueSum = 0;
-	double redMean = 0, greenMean = 0, blueMean = 0;
-	uint32_t redPixelsCount = 0, greenPixelsCount = 0, bluePixelsCount = 0;
+	RGB<double> sums{ 0.0 };
+	RGB<double> means{ 0.0 };
+	RGB<double> pixelsCounts{ 0.0 };
 
 	for (unsigned int i = 0; i < rgbTriples_.size(); i++) {
 		/* Accumulate weighted bin */
-		redSum += std::get<0>(rgbTriples_[i]) * gain * i;
-		greenSum += std::get<1>(rgbTriples_[i]) * gain * i;
-		blueSum += std::get<2>(rgbTriples_[i]) * gain * i;
+		sums.r() += std::get<0>(rgbTriples_[i]) * gain * i;
+		sums.g() += std::get<1>(rgbTriples_[i]) * gain * i;
+		sums.b() += std::get<2>(rgbTriples_[i]) * gain * i;
 
-		redPixelsCount += std::get<0>(rgbTriples_[i]);
-		greenPixelsCount += std::get<1>(rgbTriples_[i]);
-		bluePixelsCount += std::get<2>(rgbTriples_[i]);
+		pixelsCounts.r() += std::get<0>(rgbTriples_[i]);
+		pixelsCounts.g() += std::get<1>(rgbTriples_[i]);
+		pixelsCounts.b() += std::get<2>(rgbTriples_[i]);
 	}
 
-	redMean = std::min(redSum / redPixelsCount,
-			   static_cast<double>(NEO_HIST_BIN_SIZE - 1));
-	greenMean = std::min(greenSum / greenPixelsCount,
-			     static_cast<double>(NEO_HIST_BIN_SIZE - 1));
-	blueMean = std::min(blueSum / bluePixelsCount,
-			    static_cast<double>(NEO_HIST_BIN_SIZE - 1));
-
-	LOG(NxpNeoAlgoAgc, Debug) << "Mean [R,G,B]: " << redMean
-				  << ", " << greenMean << ", " << blueMean
+	means = sums / pixelsCounts;
+	means = means.min(static_cast<double>(NEO_HIST_BIN_SIZE - 1));
+	LOG(NxpNeoAlgoAgc, Debug) << "Means: " << means
 				  << " - gain=" << gain;
 	/*
 	 * Apply the AWB gains to approximate colours correctly, use the Rec.
 	 * 601 formula to calculate the relative luminance, and normalize it.
 	 */
-	double ySum = redMean * rGain_ * 0.299 +
-		      greenMean * gGain_ * 0.587 +
-		      blueMean * bGain_ * 0.114;
-
+	double ySum = rec601LuminanceFromRGB(means * gains_);
 	return ySum / (NEO_HIST_BIN_SIZE - 1);
 }
 
@@ -392,9 +384,13 @@ void Agc::process(IPAContext &context, [[maybe_unused]] const uint32_t frame,
 	}
 
 	Histogram hist = parseStatistics(stats);
-	rGain_ = context.activeState.awb.gains.automatic.red;
-	gGain_ = context.activeState.awb.gains.automatic.green;
-	bGain_ = context.activeState.awb.gains.automatic.blue;
+	auto &awb = context.activeState.awb;
+
+	/* If the AWB algorithm is disabled, use 1.0 for the gains. */
+	if (frameContext.awb.colorGainsSet)
+		gains_ = awb.autoEnabled ? awb.gains.automatic : awb.gains.manual;
+	else
+		gains_ = RGB<double>{ 1.0 };
 
 	/*
 	 * The Agc algorithm needs to know the effective exposure value that was
@@ -408,20 +404,20 @@ void Agc::process(IPAContext &context, [[maybe_unused]] const uint32_t frame,
 		<< "Sensor[Exposure, Gain]= "
 		<< exposureTime << ", " << analogueGain << " - frame=" << frame;
 
-	utils::Duration shutterTime;
+	utils::Duration newExposureTime;
 	double aGain, dGain;
-	std::tie(shutterTime, aGain, dGain) =
+	std::tie(newExposureTime, aGain, dGain) =
 		calculateNewEv(context.activeState.agc.constraintMode,
 			       context.activeState.agc.exposureMode, hist,
 			       effectiveExposureValue);
 
 	LOG(NxpNeoAlgoAgc, Debug)
-		<< "Divided up shutter, analogue gain and digital gain are "
-		<< shutterTime << ", " << aGain << " and " << dGain;
+		<< "Divided up exposure time, analogue gain and digital gain are "
+		<< newExposureTime << ", " << aGain << " and " << dGain;
 
 	IPAActiveState &activeState = context.activeState;
 	/* Update the estimated exposure and gain. */
-	activeState.agc.automatic.exposure = shutterTime / context.configuration.sensor.lineDuration;
+	activeState.agc.automatic.exposure = newExposureTime / context.configuration.sensor.lineDuration;
 	activeState.agc.automatic.gain = aGain;
 
 	/*

@@ -12,6 +12,14 @@ module ipa.nxpneo;
 
 import "include/libcamera/ipa/core.mojom";
 
+struct InitParams {
+	uint32 hwRevision;
+	string sensorEntity;
+	libcamera.IPACameraSensorInfo sensorInfo;
+	libcamera.ControlInfoMap sensorControls;
+	libcamera.ControlList sensorControlList;
+};
+
 struct IPAConfigInfo {
 	libcamera.IPACameraSensorInfo sensorInfo;
 	libcamera.ControlInfoMap sensorControls;
@@ -28,12 +36,17 @@ struct SensorConfig {
 	bool rgbIr;
 };
 
+/* Buffer types used as key in buffersId maps */
+enum ISPBufferType {
+	TypeInput0,
+	TypeInput1,
+	TypeEData,
+	TypeParams,
+	TypeStats,
+};
+
 interface IPANxpNeoInterface {
-	init(libcamera.IPASettings settings,
-	     uint32 hwRevision,
-	     string sensorId,
-	     libcamera.IPACameraSensorInfo sensorInfo,
-	     libcamera.ControlInfoMap sensorControls)
+	init(libcamera.IPASettings settings, InitParams params)
 		=> (int32 ret,
 		    libcamera.ControlInfoMap ipaControls,
 		    SensorConfig sensorConfig);
@@ -48,14 +61,13 @@ interface IPANxpNeoInterface {
 	unmapBuffers(array<uint32> ids);
 
 	[async] queueRequest(uint32 frame, libcamera.ControlList reqControls);
-	[async] fillParamsBuffer(uint32 frame, uint32 paramsbufferId,
-				 uint32 rawBufferId);
-	[async] processStatsBuffer(uint32 frame, uint32 bufferId,
-				   libcamera.ControlList sensorControls);
+	[async] computeParams(uint32 frame, map<uint32_t, uint32_t> bufferIds);
+	[async] processStats(uint32 frame, map<uint32_t, uint32_t> bufferIds,
+			     libcamera.ControlList sensorControls);
 };
 
 interface IPANxpNeoEventInterface {
-	paramsBufferReady(uint32 frame);
+	paramsComputed(uint32 frame);
 	setSensorControls(uint32 frame, libcamera.ControlList sensorControls);
 	metadataReady(uint32 frame, libcamera.ControlList metadata);
 };

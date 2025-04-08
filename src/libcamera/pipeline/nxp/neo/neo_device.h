@@ -4,7 +4,7 @@
  *     src/libcamera/pipeline/ipu3/imgu.h
  * Copyright (C) 2019, Google Inc.
  *
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  * neo_device.h - NXP NEO
  */
 
@@ -26,6 +26,8 @@ struct StreamConfiguration;
 class NeoDevice
 {
 public:
+	static constexpr unsigned int kRawWidthMax = 4096;
+
 	struct PipeConfig {
 		unsigned int topLines;
 	};

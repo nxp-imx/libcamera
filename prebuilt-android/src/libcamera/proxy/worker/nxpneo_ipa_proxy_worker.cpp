@@ -73,16 +73,10 @@ public:
 		case _NxpNeoCmd::Init: {
 		                
                 	[[maybe_unused]] const size_t settingsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 0);
-                	[[maybe_unused]] const size_t hwRevisionBufSize = readPOD<uint32_t>(_ipcMessage.data(), 4);
-                	[[maybe_unused]] const size_t sensorIdBufSize = readPOD<uint32_t>(_ipcMessage.data(), 8);
-                	[[maybe_unused]] const size_t sensorInfoBufSize = readPOD<uint32_t>(_ipcMessage.data(), 12);
-                	[[maybe_unused]] const size_t sensorControlsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 16);
+                	[[maybe_unused]] const size_t paramsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 4);
 
-                	const size_t settingsStart = 20;
-                	const size_t hwRevisionStart = settingsStart + settingsBufSize;
-                	const size_t sensorIdStart = hwRevisionStart + hwRevisionBufSize;
-                	const size_t sensorInfoStart = sensorIdStart + sensorIdBufSize;
-                	const size_t sensorControlsStart = sensorInfoStart + sensorInfoBufSize;
+                	const size_t settingsStart = 8;
+                	const size_t paramsStart = settingsStart + settingsBufSize;
 
 
                 	IPASettings settings =
@@ -90,24 +84,9 @@ public:
                         	_ipcMessage.data().cbegin() + settingsStart,
                         	_ipcMessage.data().cbegin() + settingsStart + settingsBufSize);
 
-                	uint32_t hwRevision =
-                        IPADataSerializer<uint32_t>::deserialize(
-                        	_ipcMessage.data().cbegin() + hwRevisionStart,
-                        	_ipcMessage.data().cbegin() + hwRevisionStart + hwRevisionBufSize);
-
-                	std::string sensorId =
-                        IPADataSerializer<std::string>::deserialize(
-                        	_ipcMessage.data().cbegin() + sensorIdStart,
-                        	_ipcMessage.data().cbegin() + sensorIdStart + sensorIdBufSize);
-
-                	IPACameraSensorInfo sensorInfo =
-                        IPADataSerializer<IPACameraSensorInfo>::deserialize(
-                        	_ipcMessage.data().cbegin() + sensorInfoStart,
-                        	_ipcMessage.data().cbegin() + sensorInfoStart + sensorInfoBufSize);
-
-                	ControlInfoMap sensorControls =
-                        IPADataSerializer<ControlInfoMap>::deserialize(
-                        	_ipcMessage.data().cbegin() + sensorControlsStart,
+                	InitParams params =
+                        IPADataSerializer<InitParams>::deserialize(
+                        	_ipcMessage.data().cbegin() + paramsStart,
                         	_ipcMessage.data().cend(),
                         	&controlSerializer_);
 
@@ -116,7 +95,7 @@ public:
 
 			SensorConfig sensorConfig;
 
-			int32_t _callRet =ipa_->init(settings, hwRevision, sensorId, sensorInfo, sensorControls, &ipaControls, &sensorConfig);
+			int32_t _callRet =ipa_->init(settings, params, &ipaControls, &sensorConfig);
 
 			IPCMessage::Header header = { _ipcMessage.header().cmd, _ipcMessage.header().cookie };
 			IPCMessage _response(header);
@@ -314,15 +293,13 @@ ipa_->queueRequest(frame, reqControls);
 			break;
 		}
 
-		case _NxpNeoCmd::FillParamsBuffer: {
+		case _NxpNeoCmd::ComputeParams: {
 		                
                 	[[maybe_unused]] const size_t frameBufSize = readPOD<uint32_t>(_ipcMessage.data(), 0);
-                	[[maybe_unused]] const size_t paramsbufferIdBufSize = readPOD<uint32_t>(_ipcMessage.data(), 4);
-                	[[maybe_unused]] const size_t rawBufferIdBufSize = readPOD<uint32_t>(_ipcMessage.data(), 8);
+                	[[maybe_unused]] const size_t bufferIdsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 4);
 
-                	const size_t frameStart = 12;
-                	const size_t paramsbufferIdStart = frameStart + frameBufSize;
-                	const size_t rawBufferIdStart = paramsbufferIdStart + paramsbufferIdBufSize;
+                	const size_t frameStart = 8;
+                	const size_t bufferIdsStart = frameStart + frameBufSize;
 
 
                 	uint32_t frame =
@@ -330,30 +307,25 @@ ipa_->queueRequest(frame, reqControls);
                         	_ipcMessage.data().cbegin() + frameStart,
                         	_ipcMessage.data().cbegin() + frameStart + frameBufSize);
 
-                	uint32_t paramsbufferId =
-                        IPADataSerializer<uint32_t>::deserialize(
-                        	_ipcMessage.data().cbegin() + paramsbufferIdStart,
-                        	_ipcMessage.data().cbegin() + paramsbufferIdStart + paramsbufferIdBufSize);
-
-                	uint32_t rawBufferId =
-                        IPADataSerializer<uint32_t>::deserialize(
-                        	_ipcMessage.data().cbegin() + rawBufferIdStart,
+                	std::map<uint32_t, uint32_t> bufferIds =
+                        IPADataSerializer<std::map<uint32_t, uint32_t>>::deserialize(
+                        	_ipcMessage.data().cbegin() + bufferIdsStart,
                         	_ipcMessage.data().cend());
 
-ipa_->fillParamsBuffer(frame, paramsbufferId, rawBufferId);
+ipa_->computeParams(frame, bufferIds);
 
 			break;
 		}
 
-		case _NxpNeoCmd::ProcessStatsBuffer: {
+		case _NxpNeoCmd::ProcessStats: {
 		                
                 	[[maybe_unused]] const size_t frameBufSize = readPOD<uint32_t>(_ipcMessage.data(), 0);
-                	[[maybe_unused]] const size_t bufferIdBufSize = readPOD<uint32_t>(_ipcMessage.data(), 4);
+                	[[maybe_unused]] const size_t bufferIdsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 4);
                 	[[maybe_unused]] const size_t sensorControlsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 8);
 
                 	const size_t frameStart = 12;
-                	const size_t bufferIdStart = frameStart + frameBufSize;
-                	const size_t sensorControlsStart = bufferIdStart + bufferIdBufSize;
+                	const size_t bufferIdsStart = frameStart + frameBufSize;
+                	const size_t sensorControlsStart = bufferIdsStart + bufferIdsBufSize;
 
 
                 	uint32_t frame =
@@ -361,10 +333,10 @@ ipa_->fillParamsBuffer(frame, paramsbufferId, rawBufferId);
                         	_ipcMessage.data().cbegin() + frameStart,
                         	_ipcMessage.data().cbegin() + frameStart + frameBufSize);
 
-                	uint32_t bufferId =
-                        IPADataSerializer<uint32_t>::deserialize(
-                        	_ipcMessage.data().cbegin() + bufferIdStart,
-                        	_ipcMessage.data().cbegin() + bufferIdStart + bufferIdBufSize);
+                	std::map<uint32_t, uint32_t> bufferIds =
+                        IPADataSerializer<std::map<uint32_t, uint32_t>>::deserialize(
+                        	_ipcMessage.data().cbegin() + bufferIdsStart,
+                        	_ipcMessage.data().cbegin() + bufferIdsStart + bufferIdsBufSize);
 
                 	ControlList sensorControls =
                         IPADataSerializer<ControlList>::deserialize(
@@ -372,7 +344,7 @@ ipa_->fillParamsBuffer(frame, paramsbufferId, rawBufferId);
                         	_ipcMessage.data().cend(),
                         	&controlSerializer_);
 
-ipa_->processStatsBuffer(frame, bufferId, sensorControls);
+ipa_->processStats(frame, bufferIds, sensorControls);
 
 			break;
 		}
@@ -398,7 +370,7 @@ ipa_->processStatsBuffer(frame, bufferId, sensorControls);
 			return EXIT_FAILURE;
 		}
 
-		ipa_->paramsBufferReady.connect(this, &IPAProxyNxpNeoWorker::paramsBufferReady);
+		ipa_->paramsComputed.connect(this, &IPAProxyNxpNeoWorker::paramsComputed);
 		ipa_->setSensorControls.connect(this, &IPAProxyNxpNeoWorker::setSensorControls);
 		ipa_->metadataReady.connect(this, &IPAProxyNxpNeoWorker::metadataReady);
 		return 0;
@@ -420,11 +392,11 @@ ipa_->processStatsBuffer(frame, bufferId, sensorControls);
 private:
 
 
-        void paramsBufferReady(
+        void paramsComputed(
         	const uint32_t frame)
 	{
 		IPCMessage::Header header = {
-			static_cast<uint32_t>(_NxpNeoEventCmd::ParamsBufferReady),
+			static_cast<uint32_t>(_NxpNeoEventCmd::ParamsComputed),
 			0
 		};
 		IPCMessage _message(header);
@@ -439,9 +411,9 @@ private:
 		int _ret = socket_.send(_message.payload());
 		if (_ret < 0)
 			LOG(IPAProxyNxpNeoWorker, Error)
-				<< "Sending event paramsBufferReady() failed: " << _ret;
+				<< "Sending event paramsComputed() failed: " << _ret;
 
-		LOG(IPAProxyNxpNeoWorker, Debug) << "paramsBufferReady done";
+		LOG(IPAProxyNxpNeoWorker, Debug) << "paramsComputed done";
 	}
 
         void setSensorControls(

@@ -4,7 +4,7 @@
  *     src/libcamera/pipeline/ipu3/imgu.cpp
  * Copyright (C) 2019, Google Inc.
  *
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  * neo_device.cpp - NXP NEO
  */
 
@@ -23,7 +23,6 @@
 #include "libcamera/internal/media_device.h"
 
 #include "neo_device.h"
-
 
 namespace libcamera {
 
@@ -423,7 +422,7 @@ int NeoDevice::enableLinks(bool input1, bool frame, bool ir,
 }
 
 /**
- * \brief Configure NEO video device \a dev with the given \a format.
+ * \brief Configure NEO video device \a dev with the given \a format
  * \param[in] dev video device
  * \param[in] pad NEO subdevice pad linked to the video node
  * \param[in] format video device format to be configured
@@ -452,7 +451,7 @@ int NeoDevice::configureVideoDevice(V4L2VideoDevice *dev, unsigned int pad,
 }
 
 /**
- * \brief Configure NEO meta video device \a dev with the given \a fourcc.
+ * \brief Configure NEO meta video device \a dev with the given \a fourcc
  * \param[in] dev video device
  * \param[in] pad NEO subdevice pad linked to the video node
  * \param[in] fourcc fourcc to be configured

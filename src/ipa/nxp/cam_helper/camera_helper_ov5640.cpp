@@ -26,8 +26,9 @@ class CameraHelperOv5640 : public CameraHelper
 public:
 	CameraHelperOv5640()
 	{
-		gainType_ = AnalogueGainLinear;
-		gainConstants_.linear = { 1, 0, 0, 16 };
+		/* From datasheet: 0x10 at 10bits. */
+		blackLevel_ = 1024;
+		gain_ = AnalogueGainLinear{ 1, 0, 0, 16 };
 	}
 };
 

@@ -27,6 +27,7 @@ filegroup {
     srcs: [
         ".git/**/*",
         ".gitignore",
+        ".editorconfig",
         ".clang*",
         ".reuse/**/*",
         "subprojects/.gitignore",
@@ -43,6 +44,21 @@ genrule {
     ],
     srcs: [ "src/libcamera/version.cpp.in", ],
     out: ["version.cpp"],
+    cmd: "SBROOT=$$(realpath .) && " +
+        "cd $$(dirname $$(dirname $(location utils/gen-version.sh))) && " +
+        "GITVERSION=$$(./utils/gen-version.sh | awk '{print $$1}') && " +
+        "cd $$SBROOT && " +
+        "sed \"s~@VCS_TAG@~$$GITVERSION~g\" $(in) > $(out)"
+}
+
+genrule {
+    name: "ipa_nxp_neo_version_h",
+    tool_files: [
+        ":libcamera_sources",
+        "utils/gen-version.sh",
+    ],
+    srcs: [ "src/ipa/nxp/neo/neo_ipa_version.h.in", ],
+    out: ["neo_ipa_version.h"],
     cmd: "SBROOT=$$(realpath .) && " +
         "cd $$(dirname $$(dirname $(location utils/gen-version.sh))) && " +
         "GITVERSION=$$(./utils/gen-version.sh | awk '{print $$1}') && " +
@@ -127,6 +143,7 @@ cc_library_shared {
         "src/libcamera/ipc_pipe_unixsocket.cpp",
         "src/libcamera/ipc_unixsocket.cpp",
         "src/libcamera/mapped_framebuffer.cpp",
+        "src/libcamera/matrix.cpp",
         "src/libcamera/media_device.cpp",
         "src/libcamera/media_object.cpp",
         "src/libcamera/pipeline_handler.cpp",
@@ -141,6 +158,7 @@ cc_library_shared {
         "src/libcamera/v4l2_videodevice.cpp",
         "src/libcamera/yaml_parser.cpp",
         "src/libcamera/sensor/camera_sensor.cpp",
+        "src/libcamera/sensor/camera_sensor_legacy.cpp",
         "src/libcamera/sensor/camera_sensor_properties.cpp",
         "src/libcamera/pipeline/nxp/neo/*.cpp",
         "src/libcamera/pipeline/imx8-isi/*.cpp",
@@ -163,7 +181,7 @@ cc_library_shared {
         "-DIPA_PROXY_DIR=\"/vendor/bin\"",
         "-DIPA_CONFIG_DIR=\"/vendor/etc/configs/libcamera\"",
         "-DIPA_MODULE_DIR=\"/vendor/lib64/ipa\"",
-        "-DNXP_NEO_PIPELINE_DATA_DIR=\"/vendor/etc/configs/libcamera\"",
+        "-DNXP_NEO_PIPELINE_DATA_DIR=\"/vendor/etc/configs/libcamera/nxp/neo\"",
         "-DHAVE_IPA_PUBKEY=1",
         "-DHAVE_MEMFD_CREATE=1",
         "-DHAVE_FILE_SEALS=1",
@@ -279,7 +297,9 @@ cc_library_shared {
         "src/ipa/nxp/neo/*.cpp",
         "src/ipa/nxp/neo/algorithms/*.cpp",
     ],
-
+    generated_headers: [
+        "ipa_nxp_neo_version_h",
+    ],
     cflags: [
         "-Wall",
         "-Werror",
@@ -316,8 +336,8 @@ cc_library_shared {
 genrule {
     name: "ipa_nxp_neo_sign",
     tool_files: ["src/ipa/ipa-sign.sh"],
-    srcs: [
-        ":libcamera_gen_ipa_priv_key",
+    srcs: [":libcamera_gen_ipa_priv_key",],
+    device_first_srcs: [
         ":ipa_nxp_neo",
     ],
     out: ["ipa_nxp_neo.so.sign"],
@@ -460,7 +480,7 @@ cc_binary {
 // config.yaml
 prebuilt_etc {
     name: "config.yaml",
-    sub_dir: "configs/libcamera",
+    sub_dir: "configs/libcamera/nxp/neo",
     src: "src/libcamera/pipeline/nxp/neo/data/config.yaml",
     vendor: true,
 }

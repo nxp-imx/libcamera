@@ -5,7 +5,7 @@
  * Copyright (C) 2021-2022, Ideas On Board
  *
  * agc.h - NXP NEO AGC/AEC mean-based control algorithm
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  */
 
 #pragma once
@@ -51,9 +51,7 @@ private:
 			  ControlList &metadata);
 	Histogram parseStatistics(const neoisp_meta_stats_s *stats);
 
-	double rGain_;
-	double gGain_;
-	double bGain_;
+	RGB<double> gains_;
 	std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> rgbTriples_;
 
 	static constexpr size_t kNumHist = 4;

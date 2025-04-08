@@ -1,0 +1,29 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+/*
+ * Copyright 2025 NXP
+ *
+ * Nxp Neo IPA version
+ *
+ * This file is auto-generated. Do not edit.
+ */
+
+namespace libcamera {
+
+namespace ipa::nxpneo {
+
+namespace {
+
+struct IpaVersion {
+	static const std::string &version() { return version_; }
+
+private:
+	static const std::string version_;
+};
+
+const std::string IpaVersion::version_("v@VCS_TAG@");
+
+} // namespace
+
+} // namespace ipa::nxpneo
+
+} /* namespace libcamera */

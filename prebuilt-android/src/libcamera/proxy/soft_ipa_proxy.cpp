@@ -122,21 +122,23 @@ int32_t IPAProxySoft::init(
 	const IPASettings &settings,
 	const SharedFD &fdStats,
 	const SharedFD &fdParams,
-	const ControlInfoMap &sensorCtrlInfoMap)
+	const ControlInfoMap &sensorCtrlInfoMap,
+	ControlInfoMap *ipaControls)
 {
 	if (isolate_)
-		return initIPC(settings, fdStats, fdParams, sensorCtrlInfoMap);
+		return initIPC(settings, fdStats, fdParams, sensorCtrlInfoMap, ipaControls);
 	else
-		return initThread(settings, fdStats, fdParams, sensorCtrlInfoMap);
+		return initThread(settings, fdStats, fdParams, sensorCtrlInfoMap, ipaControls);
 }
 
 int32_t IPAProxySoft::initThread(
 	const IPASettings &settings,
 	const SharedFD &fdStats,
 	const SharedFD &fdParams,
-	const ControlInfoMap &sensorCtrlInfoMap)
+	const ControlInfoMap &sensorCtrlInfoMap,
+	ControlInfoMap *ipaControls)
 {
-	int32_t _ret = ipa_->init(settings, fdStats, fdParams, sensorCtrlInfoMap);
+	int32_t _ret = ipa_->init(settings, fdStats, fdParams, sensorCtrlInfoMap, ipaControls);
 
 	proxy_.moveToThread(&thread_);
 
@@ -147,7 +149,8 @@ int32_t IPAProxySoft::initIPC(
 	const IPASettings &settings,
 	const SharedFD &fdStats,
 	const SharedFD &fdParams,
-	const ControlInfoMap &sensorCtrlInfoMap)
+	const ControlInfoMap &sensorCtrlInfoMap,
+	ControlInfoMap *ipaControls)
 {
 	IPCMessage::Header _header = { static_cast<uint32_t>(_SoftCmd::Init), seq_++ };
 	IPCMessage _ipcInputBuf(_header);
@@ -196,7 +199,16 @@ int32_t IPAProxySoft::initIPC(
 
 
 
+	const size_t ipaControlsStart = 4;
 
+
+	if (ipaControls) {
+                *ipaControls =
+                IPADataSerializer<ControlInfoMap>::deserialize(
+                	_ipcOutputBuf.data().cbegin() + ipaControlsStart,
+                	_ipcOutputBuf.data().cend(),
+                	&controlSerializer_);
+	}
 
 
 	return _retValue;
@@ -290,23 +302,23 @@ void IPAProxySoft::stopIPC()
 
 
 int32_t IPAProxySoft::configure(
-	const ControlInfoMap &sensorCtrlInfoMap)
+	const IPAConfigInfo &configInfo)
 {
 	if (isolate_)
-		return configureIPC(sensorCtrlInfoMap);
+		return configureIPC(configInfo);
 	else
-		return configureThread(sensorCtrlInfoMap);
+		return configureThread(configInfo);
 }
 
 int32_t IPAProxySoft::configureThread(
-	const ControlInfoMap &sensorCtrlInfoMap)
+	const IPAConfigInfo &configInfo)
 {
-	return ipa_->configure(sensorCtrlInfoMap);
+	return ipa_->configure(configInfo);
 
 }
 
 int32_t IPAProxySoft::configureIPC(
-	const ControlInfoMap &sensorCtrlInfoMap)
+	const IPAConfigInfo &configInfo)
 {
 	controlSerializer_.reset();
 	IPCMessage::Header _header = { static_cast<uint32_t>(_SoftCmd::Configure), seq_++ };
@@ -314,11 +326,11 @@ int32_t IPAProxySoft::configureIPC(
 	IPCMessage _ipcOutputBuf;
 
 
-	std::vector<uint8_t> sensorCtrlInfoMapBuf;
-	std::tie(sensorCtrlInfoMapBuf, std::ignore) =
-		IPADataSerializer<ControlInfoMap>::serialize(sensorCtrlInfoMap
+	std::vector<uint8_t> configInfoBuf;
+	std::tie(configInfoBuf, std::ignore) =
+		IPADataSerializer<IPAConfigInfo>::serialize(configInfo
 , &controlSerializer_);
-	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), sensorCtrlInfoMapBuf.begin(), sensorCtrlInfoMapBuf.end());
+	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), configInfoBuf.begin(), configInfoBuf.end());
 
 
 	int _ret = ipc_->sendSync(_ipcInputBuf, &_ipcOutputBuf);
@@ -339,33 +351,138 @@ int32_t IPAProxySoft::configureIPC(
 }
 
 
-void IPAProxySoft::processStats(
+void IPAProxySoft::queueRequest(
+	const uint32_t frame,
 	const ControlList &sensorControls)
 {
 	if (isolate_)
-		processStatsIPC(sensorControls);
+		queueRequestIPC(frame, sensorControls);
 	else
-		processStatsThread(sensorControls);
+		queueRequestThread(frame, sensorControls);
 }
 
-void IPAProxySoft::processStatsThread(
+void IPAProxySoft::queueRequestThread(
+	const uint32_t frame,
 	const ControlList &sensorControls)
 {
 	ASSERT(state_ == ProxyRunning);
-	proxy_.invokeMethod(&ThreadProxy::processStats, ConnectionTypeQueued, sensorControls);
+	proxy_.invokeMethod(&ThreadProxy::queueRequest, ConnectionTypeQueued, frame, sensorControls);
+}
+
+void IPAProxySoft::queueRequestIPC(
+	const uint32_t frame,
+	const ControlList &sensorControls)
+{
+	IPCMessage::Header _header = { static_cast<uint32_t>(_SoftCmd::QueueRequest), seq_++ };
+	IPCMessage _ipcInputBuf(_header);
+
+
+	std::vector<uint8_t> frameBuf;
+	std::tie(frameBuf, std::ignore) =
+		IPADataSerializer<uint32_t>::serialize(frame
+);
+	std::vector<uint8_t> sensorControlsBuf;
+	std::tie(sensorControlsBuf, std::ignore) =
+		IPADataSerializer<ControlList>::serialize(sensorControls
+, &controlSerializer_);
+	appendPOD<uint32_t>(_ipcInputBuf.data(), frameBuf.size());
+	appendPOD<uint32_t>(_ipcInputBuf.data(), sensorControlsBuf.size());
+	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), frameBuf.begin(), frameBuf.end());
+	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), sensorControlsBuf.begin(), sensorControlsBuf.end());
+
+
+	int _ret = ipc_->sendAsync(_ipcInputBuf);
+	if (_ret < 0) {
+		LOG(IPAProxy, Error) << "Failed to call queueRequest";
+		return;
+	}
+}
+
+
+void IPAProxySoft::computeParams(
+	const uint32_t frame)
+{
+	if (isolate_)
+		computeParamsIPC(frame);
+	else
+		computeParamsThread(frame);
+}
+
+void IPAProxySoft::computeParamsThread(
+	const uint32_t frame)
+{
+	ASSERT(state_ == ProxyRunning);
+	proxy_.invokeMethod(&ThreadProxy::computeParams, ConnectionTypeQueued, frame);
+}
+
+void IPAProxySoft::computeParamsIPC(
+	const uint32_t frame)
+{
+	IPCMessage::Header _header = { static_cast<uint32_t>(_SoftCmd::ComputeParams), seq_++ };
+	IPCMessage _ipcInputBuf(_header);
+
+
+	std::vector<uint8_t> frameBuf;
+	std::tie(frameBuf, std::ignore) =
+		IPADataSerializer<uint32_t>::serialize(frame
+);
+	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), frameBuf.begin(), frameBuf.end());
+
+
+	int _ret = ipc_->sendAsync(_ipcInputBuf);
+	if (_ret < 0) {
+		LOG(IPAProxy, Error) << "Failed to call computeParams";
+		return;
+	}
+}
+
+
+void IPAProxySoft::processStats(
+	const uint32_t frame,
+	const uint32_t bufferId,
+	const ControlList &sensorControls)
+{
+	if (isolate_)
+		processStatsIPC(frame, bufferId, sensorControls);
+	else
+		processStatsThread(frame, bufferId, sensorControls);
+}
+
+void IPAProxySoft::processStatsThread(
+	const uint32_t frame,
+	const uint32_t bufferId,
+	const ControlList &sensorControls)
+{
+	ASSERT(state_ == ProxyRunning);
+	proxy_.invokeMethod(&ThreadProxy::processStats, ConnectionTypeQueued, frame, bufferId, sensorControls);
 }
 
 void IPAProxySoft::processStatsIPC(
+	const uint32_t frame,
+	const uint32_t bufferId,
 	const ControlList &sensorControls)
 {
 	IPCMessage::Header _header = { static_cast<uint32_t>(_SoftCmd::ProcessStats), seq_++ };
 	IPCMessage _ipcInputBuf(_header);
 
 
+	std::vector<uint8_t> frameBuf;
+	std::tie(frameBuf, std::ignore) =
+		IPADataSerializer<uint32_t>::serialize(frame
+);
+	std::vector<uint8_t> bufferIdBuf;
+	std::tie(bufferIdBuf, std::ignore) =
+		IPADataSerializer<uint32_t>::serialize(bufferId
+);
 	std::vector<uint8_t> sensorControlsBuf;
 	std::tie(sensorControlsBuf, std::ignore) =
 		IPADataSerializer<ControlList>::serialize(sensorControls
 , &controlSerializer_);
+	appendPOD<uint32_t>(_ipcInputBuf.data(), frameBuf.size());
+	appendPOD<uint32_t>(_ipcInputBuf.data(), bufferIdBuf.size());
+	appendPOD<uint32_t>(_ipcInputBuf.data(), sensorControlsBuf.size());
+	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), frameBuf.begin(), frameBuf.end());
+	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), bufferIdBuf.begin(), bufferIdBuf.end());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), sensorControlsBuf.begin(), sensorControlsBuf.end());
 
 

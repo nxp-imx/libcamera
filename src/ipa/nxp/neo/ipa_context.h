@@ -5,7 +5,7 @@
  * Copyright (C) 2021-2022, Ideas On Board
  *
  * ipa_context.h - NXP NEO IPA Context
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  */
 
 #pragma once
@@ -19,8 +19,10 @@
 
 #include <libcamera/ipa/core_ipa_interface.h>
 
+#include "libcamera/internal/matrix.h"
+
 #include <libipa/fc_queue.h>
-#include <libipa/matrix.h>
+#include <libipa/vector.h>
 
 #include "nxp/cam_helper/camera_helper.h"
 
@@ -40,8 +42,16 @@ struct IPASessionConfiguration {
 	} awb;
 
 	struct {
-		utils::Duration minShutterSpeed;
-		utils::Duration maxShutterSpeed;
+		/* BLC offsets applicable to the current driver mode */
+		uint16_t offsetRed_;
+		uint16_t offsetGreenR_;
+		uint16_t offsetGreenB_;
+		uint16_t offsetBlue_;
+	} blc;
+
+	struct {
+		utils::Duration minExposureTime;
+		utils::Duration maxExposureTime;
 		double minAnalogueGain;
 		double maxAnalogueGain;
 
@@ -49,8 +59,6 @@ struct IPASessionConfiguration {
 		utils::Duration lineDuration;
 		Size size;
 		uint32_t bpp;
-
-		size_t metaDataSize;
 	} sensor;
 
 	struct {
@@ -78,16 +86,8 @@ struct IPAActiveState {
 
 	struct {
 		struct {
-			struct {
-				double red;
-				double green;
-				double blue;
-			} manual;
-			struct {
-				double red;
-				double green;
-				double blue;
-			} automatic;
+			RGB<double> manual;
+			RGB<double> automatic;
 		} gains;
 
 		unsigned int temperatureK;
@@ -107,12 +107,7 @@ struct IPAFrameContext : public FrameContext {
 	} agc;
 
 	struct {
-		struct {
-			double red;
-			double green;
-			double blue;
-		} gains;
-
+		RGB<double> gains;
 		unsigned int temperatureK;
 		bool autoEnabled;
 		bool colorGainsSet;

@@ -5,7 +5,7 @@
  * Copyright (C) 2019, Google Inc.
  *
  * neo_ipa.cpp - NXP NEO Image Processing Algorithms
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  */
 
 #include <algorithm>
@@ -36,6 +36,7 @@
 #include "algorithms/algorithm.h"
 
 #include "ipa_context.h"
+#include "neo_ipa_version.h"
 
 namespace libcamera {
 
@@ -55,10 +56,7 @@ class IPANxpNeo : public IPANxpNeoInterface, public Module
 public:
 	IPANxpNeo();
 
-	int init(const IPASettings &settings, unsigned int hwRevision,
-		 const std::string &sensorId,
-		 const IPACameraSensorInfo &sensorInfo,
-		 const ControlInfoMap &sensorControls,
+	int init(const IPASettings &settings, const InitParams &params,
 		 ControlInfoMap *ipaControls,
 		 SensorConfig *sensorConfig) override;
 	int start() override;
@@ -71,11 +69,11 @@ public:
 	void unmapBuffers(const std::vector<unsigned int> &ids) override;
 
 	void queueRequest(const uint32_t frame, const ControlList &controls) override;
-	void fillParamsBuffer(const uint32_t frame,
-			      const uint32_t paramsBufferId,
-			      const uint32_t rawBufferId) override;
-	void processStatsBuffer(const uint32_t frame, const uint32_t bufferId,
-				const ControlList &sensorControls) override;
+	void computeParams(const uint32_t frame,
+			   const std::map<uint32_t, uint32_t> &bufferIds) override;
+	void processStats(const uint32_t frame,
+			  const std::map<uint32_t, uint32_t> &bufferIds,
+			  const ControlList &sensorControls) override;
 
 protected:
 	std::string logPrefix() const override;
@@ -123,15 +121,14 @@ std::string IPANxpNeo::logPrefix() const
 	return "nxpneo";
 }
 
-int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
-		    const std::string &sensorId,
-		    const IPACameraSensorInfo &sensorInfo,
-		    const ControlInfoMap &sensorControls,
+int IPANxpNeo::init(const IPASettings &settings, const InitParams &params,
 		    ControlInfoMap *ipaControls,
 		    SensorConfig *sensorConfig)
 {
-	LOG(NxpNeoIPA, Debug) << "Hardware revision is " << hwRevision;
-	LOG(NxpNeoIPA, Debug) << "Sensor id: " << sensorId;
+	LOG(NxpNeoIPA, Info) << "IPANxpNeo NXPNEO_IPA_" << IpaVersion::version();
+
+	LOG(NxpNeoIPA, Debug) << "Hardware revision is " << params.hwRevision;
+	LOG(NxpNeoIPA, Debug) << "Sensor entity: " << params.sensorEntity;
 
 	context_.camHelper = CameraHelperFactoryBase::create(settings.sensorModel);
 	if (!context_.camHelper) {
@@ -141,8 +138,8 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 		return -ENODEV;
 	}
 
-	context_.configuration.sensor.lineDuration = sensorInfo.minLineLength
-						   * 1.0s / sensorInfo.pixelRate;
+	context_.configuration.sensor.lineDuration = params.sensorInfo.minLineLength
+						* 1.0s / params.sensorInfo.pixelRate;
 
 	/* Load the tuning data file. */
 	File file(settings.configurationFile);
@@ -180,7 +177,7 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 	}
 
 	/* Initialize controls. */
-	updateControls(sensorInfo, sensorControls, ipaControls);
+	updateControls(params.sensorInfo, params.sensorControls, ipaControls);
 
 	/* Initialize SensorConfig parameters */
 	const CameraHelper::Attributes *attributes = context_.camHelper->attributes();
@@ -199,6 +196,9 @@ int IPANxpNeo::init(const IPASettings &settings, unsigned int hwRevision,
 
 	sensorConfig->embeddedTopLines = attributes->mdParams.topLines;
 	sensorConfig->rgbIr = attributes->rgbIr;
+
+	/* Set the camera helper with sensor control values. */
+	context_.camHelper->setControls(&params.sensorControlList);
 
 	return 0;
 }
@@ -262,13 +262,13 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 
 	/*
 	 * When the AGC computes the new exposure values for a frame, it needs
-	 * to know the limits for shutter speed and analogue gain.
+	 * to know the limits for exposure time and analogue gain.
 	 * As it depends on the sensor, update it with the controls.
 	 *
-	 * \todo take VBLANK into account for maximum shutter speed
+	 * \todo take VBLANK into account for maximum exposure time
 	 */
-	context_.configuration.sensor.minShutterSpeed = vMinExposure[0] * 1.0s;
-	context_.configuration.sensor.maxShutterSpeed = vMaxExposure[0] * 1.0s;
+	context_.configuration.sensor.minExposureTime = vMinExposure[0] * 1.0s;
+	context_.configuration.sensor.maxExposureTime = vMaxExposure[0] * 1.0s;
 
 	context_.configuration.sensor.minAnalogueGain = vMinGain[0];
 	context_.configuration.sensor.maxAnalogueGain = vMaxGain[0];
@@ -276,16 +276,6 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	uint32_t bpp = ipaConfig.sensorInfo.bitsPerPixel;
 
 	context_.configuration.sensor.bpp = bpp;
-
-	/* Embedded metadata size computation */
-	size_t bytepp;
-	if (bpp <= 8)
-		bytepp = sizeof(uint8_t);
-	else
-		bytepp = sizeof(uint16_t);
-	uint32_t topLines = context_.camHelper->attributes()->mdParams.topLines;
-	context_.configuration.sensor.metaDataSize =
-		topLines * context_.configuration.sensor.size.width * bytepp;
 
 	/* Active streams */
 	std::vector<IPAStream> &streams = context_.configuration.streams;
@@ -348,17 +338,17 @@ void IPANxpNeo::queueRequest(const uint32_t frame, const ControlList &controls)
 	}
 }
 
-void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
-				 const uint32_t paramsBufferId,
-				 const uint32_t rawBufferId)
+void IPANxpNeo::computeParams(const uint32_t frame,
+			      const std::map<uint32_t, uint32_t> &bufferIds)
 {
 	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
 
 	/*
-	 * Metadata parsing is done when CameraHelper implementation for the
-	 * sensor reports that some top lines are used for embedded data.
-	 * A necessary condition for the top lines parsing to be possible is
-	 * that the raw buffer was mapped in the IPA with mapBuffer() call.
+	 * Metadata parsing is done either from image pixel data top lines, or
+	 * from a separate camera stream in a dedicated buffer.
+	 * A necessary condition for the pixel data top lines parsing to be
+	 * possible is that the raw buffer has been mapped in the IPA beforehand
+	 * with the mapBuffer() call.
 	 * However, when a raw stream is active concurrently with a decoded
 	 * stream, the raw buffers used by the pipeline are provided by
 	 * the application instead of being internally allocated. Thus, raw
@@ -367,21 +357,54 @@ void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
 	 * doable.
 	 */
 
-	const IPASessionConfiguration &sessionConfig = context_.configuration;
-
 	ControlList &controls = frameContext.sensor.mdControls;
 	controls = ControlList(md::controlIdMap);
-
 	frameContext.sensor.metaDataValid = false;
-	size_t metadataSize = sessionConfig.sensor.metaDataSize;
-	if (metadataSize && mappedBuffers_.count(rawBufferId)) {
-		uint8_t *metadata = mappedBuffers_.at(rawBufferId).planes()[0].data();
-		Span<uint8_t> mdBuffer(metadata, metadataSize);
-		int ret = context_.camHelper->parseEmbedded(mdBuffer, &controls);
-		frameContext.sensor.metaDataValid = (ret == 0);
+
+	uint8_t *metaData = nullptr;
+	size_t metaSize = 0;
+
+	/*
+	 * Look for metadata availability, either from the camera embedded data
+	 * stream or from the pixel data top lines.
+	 */
+	auto eDataIt = bufferIds.find(TypeEData);
+	unsigned int eDataBufferId =
+		eDataIt != bufferIds.end() ? eDataIt->second : 0;
+	if (eDataBufferId && mappedBuffers_.count(eDataBufferId)) {
+		const MappedBuffer::Plane &plane =
+			mappedBuffers_.at(eDataBufferId).planes()[0];
+		metaData = plane.data();
+		metaSize = plane.size_bytes();
+	} else {
+		auto input0It = bufferIds.find(TypeInput0);
+		unsigned int rawBufferId =
+			input0It != bufferIds.end() ? input0It->second : 0;
+		if (rawBufferId && mappedBuffers_.count(rawBufferId)) {
+			const MappedBuffer::Plane &plane =
+				mappedBuffers_.at(rawBufferId).planes()[0];
+			metaData = plane.data();
+			uint32_t topLines =
+				context_.camHelper->attributes()->mdParams.topLines;
+			unsigned int bpp = context_.configuration.sensor.bpp;
+			size_t bytepp = bpp <= 8 ? sizeof(uint8_t) : sizeof(uint16_t);
+			unsigned int width =
+				context_.configuration.sensor.size.width;
+			metaSize = topLines * width * bytepp;
+		}
+	}
+
+	if (metaSize) {
+		Span<uint8_t> mdBuffer(metaData, metaSize);
+		if (!context_.camHelper->parseEmbedded(mdBuffer, &controls))
+			frameContext.sensor.metaDataValid = true;
 	}
 
 	/* Prepare parameters buffer. */
+	auto paramsIter = bufferIds.find(TypeParams);
+	unsigned int paramsBufferId =
+		paramsIter != bufferIds.end() ? paramsIter->second : 0;
+	ASSERT(mappedBuffers_.count(paramsBufferId));
 	neoisp_meta_params_s *params =
 		reinterpret_cast<neoisp_meta_params_s *>(
 			mappedBuffers_.at(paramsBufferId).planes()[0].data());
@@ -392,17 +415,23 @@ void IPANxpNeo::fillParamsBuffer(const uint32_t frame,
 	for (auto const &algo : algorithms())
 		algo->prepare(context_, frame, frameContext, params);
 
-	paramsBufferReady.emit(frame);
+	paramsComputed.emit(frame);
 }
 
-void IPANxpNeo::processStatsBuffer(const uint32_t frame, const uint32_t bufferId,
-				   const ControlList &sensorControls)
+void IPANxpNeo::processStats(const uint32_t frame,
+			     const std::map<uint32_t, uint32_t> &bufferIds,
+			     const ControlList &sensorControls)
 {
 	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
 
 	const neoisp_meta_stats_s *stats;
+
+	auto statsIter = bufferIds.find(TypeStats);
+	unsigned int statsBufferId =
+		statsIter != bufferIds.end() ? statsIter->second : 0;
+	ASSERT(mappedBuffers_.count(statsBufferId));
 	stats = reinterpret_cast<neoisp_meta_stats_s *>(
-		mappedBuffers_.at(bufferId).planes()[0].data());
+		mappedBuffers_.at(statsBufferId).planes()[0].data());
 
 	ControlList &mdControls = frameContext.sensor.mdControls;
 

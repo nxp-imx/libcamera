@@ -12,8 +12,9 @@
 
 #include <linux/nxp_neoisp.h>
 
+#include "libcamera/internal/matrix.h"
+
 #include "libipa/interpolator.h"
-#include "libipa/matrix.h"
 
 #include "algorithm.h"
 

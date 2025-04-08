@@ -157,7 +157,7 @@ namespace controls {
  * \brief Specify an exposure mode for the AE algorithm to use.
  *
  * The exposure modes specify how the desired total exposure is divided
- * between the shutter time and the sensor's analogue gain. They are
+ * between the exposure time and the sensor's analogue gain. They are
  * platform specific, and not all exposure modes may be supported.
  */
 
@@ -177,8 +177,7 @@ namespace controls {
 
 /**
  * \var ExposureTime
- * \brief Exposure time (shutter speed) for the frame applied in the sensor
- * device.
+ * \brief Exposure time for the frame applied in the sensor device.
  *
  * This value is specified in micro-seconds.
  *
@@ -336,7 +335,19 @@ namespace controls {
  * \var AwbEnable
  * \brief Enable or disable the AWB.
  *
+ * When AWB is enabled, the algorithm estimates the colour temperature of
+ * the scene and computes colour gains and the colour correction matrix
+ * automatically. The computed colour temperature, gains and correction
+ * matrix are reported in metadata. The corresponding controls are ignored
+ * if set in a request.
+ *
+ * When AWB is disabled, the colour temperature, gains and correction
+ * matrix are not updated automatically and can be set manually in
+ * requests.
+ *
+ * \sa ColourCorrectionMatrix
  * \sa ColourGains
+ * \sa ColourTemperature
  */
 
 /**
@@ -403,15 +414,32 @@ namespace controls {
  * order.
  *
  * ColourGains can only be applied in a Request when the AWB is disabled.
+ * If ColourGains is set in a request but ColourTemperature is not, the
+ * implementation shall calculate and set the ColourTemperature based on
+ * the ColourGains.
  *
  * \sa AwbEnable
+ * \sa ColourTemperature
  */
 
 /**
  * \var ColourTemperature
- * \brief Report the estimate of the colour temperature for the frame, in kelvin.
+ * \brief ColourTemperature of the frame, in kelvin.
  *
- * The ColourTemperature control can only be returned in metadata.
+ * ColourTemperature can only be applied in a Request when the AWB is
+ * disabled.
+ *
+ * If ColourTemperature is set in a request but ColourGains is not, the
+ * implementation shall calculate and set the ColourGains based on the
+ * given ColourTemperature. If ColourTemperature is set (either directly,
+ * or indirectly by setting ColourGains) but ColourCorrectionMatrix is not,
+ * the ColourCorrectionMatrix is updated based on the ColourTemperature.
+ *
+ * The ColourTemperature used to process the frame is reported in metadata.
+ *
+ * \sa AwbEnable
+ * \sa ColourCorrectionMatrix
+ * \sa ColourGains
  */
 
 /**
@@ -466,6 +494,12 @@ namespace controls {
  * white-balanced, but before any gamma transformation. The 3x3 matrix is
  * stored in conventional reading order in an array of 9 floating point
  * values.
+ *
+ * ColourCorrectionMatrix can only be applied in a Request when the AWB is 
+ * disabled.
+ *
+ * \sa AwbEnable
+ * \sa ColourTemperature
  */
 
 /**
@@ -522,14 +556,13 @@ namespace controls {
  * values to be the same. Setting both values to 0 reverts to using the
  * camera defaults.
  *
- * The maximum frame duration provides the absolute limit to the shutter
- * speed computed by the AE algorithm and it overrides any exposure mode
+ * The maximum frame duration provides the absolute limit to the exposure
+ * time computed by the AE algorithm and it overrides any exposure mode
  * setting specified with controls::AeExposureMode. Similarly, when a
  * manual exposure time is set through controls::ExposureTime, it also
  * gets clipped to the limits set by this control. When reported in
- * metadata, the control expresses the minimum and maximum frame
- * durations used after being clipped to the sensor provided frame
- * duration limits.
+ * metadata, the control expresses the minimum and maximum frame durations
+ * used after being clipped to the sensor provided frame duration limits.
  *
  * \sa AeExposureMode
  * \sa ExposureTime
@@ -1128,6 +1161,11 @@ namespace controls {
  */
 
 /**
+ * \var DebugMetadataEnable
+ * \brief Enable or disable the debug metadata.
+ */
+
+/**
  * \brief Namespace for draft controls
  */
 namespace draft {
@@ -1436,7 +1474,102 @@ namespace draft {
  * ANDROID_SENSOR_TEST_PATTERN_MODE.
  */
 
+/**
+ * \enum FaceDetectModeEnum
+ * \brief Supported FaceDetectMode values
+ *
+ * \var FaceDetectModeOff
+ * \brief Pipeline doesn't perform face detection and doesn't report any
+ * control related to face detection.
+ *
+ * \var FaceDetectModeSimple
+ * \brief Pipeline performs face detection and reports the
+ * FaceDetectFaceRectangles and FaceDetectFaceScores controls for each
+ * detected face. FaceDetectFaceLandmarks and FaceDetectFaceIds are
+ * optional.
+ *
+ * \var FaceDetectModeFull
+ * \brief Pipeline performs face detection and reports all the controls
+ * related to face detection including FaceDetectFaceRectangles,
+ * FaceDetectFaceScores, FaceDetectFaceLandmarks, and
+ * FaceDeteceFaceIds for each detected face.
+ */
+
+/**
+ * \var FaceDetectModeValues
+ * \brief List of all FaceDetectMode supported values
+ */
+
+/**
+ * \var FaceDetectModeNameValueMap
+ * \brief Map of all FaceDetectMode supported value names (in std::string format) to value
+ */
+
+/**
+ * \var FaceDetectMode
+ * \brief Control to select the face detection mode used by the pipeline.
+ *
+ * Currently identical to ANDROID_STATISTICS_FACE_DETECT_MODE.
+ *
+ * \sa FaceDetectFaceRectangles
+ * \sa FaceDetectFaceScores
+ * \sa FaceDetectFaceLandmarks
+ * \sa FaceDetectFaceIds
+ */
+
+/**
+ * \var FaceDetectFaceRectangles
+ * \brief Boundary rectangles of the detected faces. The number of values is
+ * the number of detected faces.
+ *
+ * The FaceDetectFaceRectangles control can only be returned in metadata.
+ *
+ * Currently identical to ANDROID_STATISTICS_FACE_RECTANGLES.
+ */
+
+/**
+ * \var FaceDetectFaceScores
+ * \brief Confidence score of each of the detected faces. The range of score is
+ * [0, 100]. The number of values should be the number of faces reported
+ * in FaceDetectFaceRectangles.
+ *
+ * The FaceDetectFaceScores control can only be returned in metadata.
+ *
+ * Currently identical to ANDROID_STATISTICS_FACE_SCORES.
+ */
+
+/**
+ * \var FaceDetectFaceLandmarks
+ * \brief Array of human face landmark coordinates in format [..., left_eye_i,
+ * right_eye_i, mouth_i, left_eye_i+1, ...], with i = index of face. The
+ * number of values should be 3 * the number of faces reported in
+ * FaceDetectFaceRectangles.
+ *
+ * The FaceDetectFaceLandmarks control can only be returned in metadata.
+ *
+ * Currently identical to ANDROID_STATISTICS_FACE_LANDMARKS.
+ */
+
+/**
+ * \var FaceDetectFaceIds
+ * \brief Each detected face is given a unique ID that is valid for as long as the
+ * face is visible to the camera device. A face that leaves the field of
+ * view and later returns may be assigned a new ID. The number of values
+ * should be the number of faces reported in FaceDetectFaceRectangles.
+ *
+ * The FaceDetectFaceIds control can only be returned in metadata.
+ *
+ * Currently identical to ANDROID_STATISTICS_FACE_IDS.
+ */
+
 } /* namespace draft */
+
+/**
+ * \brief Namespace for debug controls
+ */
+namespace debug {
+
+} /* namespace debug */
 
 
 #ifndef __DOXYGEN__
@@ -1445,8 +1578,10 @@ namespace draft {
  * them as functions.
  */
 
-extern const Control<bool> AeEnable(AE_ENABLE, "AeEnable");
-extern const Control<bool> AeLocked(AE_LOCKED, "AeLocked");
+extern const Control<bool> AeEnable(AE_ENABLE, "AeEnable", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
+extern const Control<bool> AeLocked(AE_LOCKED, "AeLocked", "libcamera", ControlId::Direction::Out);
+
 extern const std::array<const ControlValue, 4> AeMeteringModeValues = {
 	static_cast<int32_t>(MeteringCentreWeighted),
 	static_cast<int32_t>(MeteringSpot),
@@ -1459,7 +1594,8 @@ extern const std::map<std::string, int32_t> AeMeteringModeNameValueMap = {
 	{ "MeteringMatrix", MeteringMatrix },
 	{ "MeteringCustom", MeteringCustom },
 };
-extern const Control<int32_t> AeMeteringMode(AE_METERING_MODE, "AeMeteringMode");
+extern const Control<int32_t> AeMeteringMode(AE_METERING_MODE, "AeMeteringMode", "libcamera", ControlId::Direction::In | ControlId::Direction::Out, AeMeteringModeNameValueMap);
+
 extern const std::array<const ControlValue, 4> AeConstraintModeValues = {
 	static_cast<int32_t>(ConstraintNormal),
 	static_cast<int32_t>(ConstraintHighlight),
@@ -1472,7 +1608,8 @@ extern const std::map<std::string, int32_t> AeConstraintModeNameValueMap = {
 	{ "ConstraintShadows", ConstraintShadows },
 	{ "ConstraintCustom", ConstraintCustom },
 };
-extern const Control<int32_t> AeConstraintMode(AE_CONSTRAINT_MODE, "AeConstraintMode");
+extern const Control<int32_t> AeConstraintMode(AE_CONSTRAINT_MODE, "AeConstraintMode", "libcamera", ControlId::Direction::In | ControlId::Direction::Out, AeConstraintModeNameValueMap);
+
 extern const std::array<const ControlValue, 4> AeExposureModeValues = {
 	static_cast<int32_t>(ExposureNormal),
 	static_cast<int32_t>(ExposureShort),
@@ -1485,10 +1622,14 @@ extern const std::map<std::string, int32_t> AeExposureModeNameValueMap = {
 	{ "ExposureLong", ExposureLong },
 	{ "ExposureCustom", ExposureCustom },
 };
-extern const Control<int32_t> AeExposureMode(AE_EXPOSURE_MODE, "AeExposureMode");
-extern const Control<float> ExposureValue(EXPOSURE_VALUE, "ExposureValue");
-extern const Control<int32_t> ExposureTime(EXPOSURE_TIME, "ExposureTime");
-extern const Control<float> AnalogueGain(ANALOGUE_GAIN, "AnalogueGain");
+extern const Control<int32_t> AeExposureMode(AE_EXPOSURE_MODE, "AeExposureMode", "libcamera", ControlId::Direction::In | ControlId::Direction::Out, AeExposureModeNameValueMap);
+
+extern const Control<float> ExposureValue(EXPOSURE_VALUE, "ExposureValue", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
+extern const Control<int32_t> ExposureTime(EXPOSURE_TIME, "ExposureTime", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
+extern const Control<float> AnalogueGain(ANALOGUE_GAIN, "AnalogueGain", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
 extern const std::array<const ControlValue, 3> AeFlickerModeValues = {
 	static_cast<int32_t>(FlickerOff),
 	static_cast<int32_t>(FlickerManual),
@@ -1499,13 +1640,20 @@ extern const std::map<std::string, int32_t> AeFlickerModeNameValueMap = {
 	{ "FlickerManual", FlickerManual },
 	{ "FlickerAuto", FlickerAuto },
 };
-extern const Control<int32_t> AeFlickerMode(AE_FLICKER_MODE, "AeFlickerMode");
-extern const Control<int32_t> AeFlickerPeriod(AE_FLICKER_PERIOD, "AeFlickerPeriod");
-extern const Control<int32_t> AeFlickerDetected(AE_FLICKER_DETECTED, "AeFlickerDetected");
-extern const Control<float> Brightness(BRIGHTNESS, "Brightness");
-extern const Control<float> Contrast(CONTRAST, "Contrast");
-extern const Control<float> Lux(LUX, "Lux");
-extern const Control<bool> AwbEnable(AWB_ENABLE, "AwbEnable");
+extern const Control<int32_t> AeFlickerMode(AE_FLICKER_MODE, "AeFlickerMode", "libcamera", ControlId::Direction::In | ControlId::Direction::Out, AeFlickerModeNameValueMap);
+
+extern const Control<int32_t> AeFlickerPeriod(AE_FLICKER_PERIOD, "AeFlickerPeriod", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
+extern const Control<int32_t> AeFlickerDetected(AE_FLICKER_DETECTED, "AeFlickerDetected", "libcamera", ControlId::Direction::Out);
+
+extern const Control<float> Brightness(BRIGHTNESS, "Brightness", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
+extern const Control<float> Contrast(CONTRAST, "Contrast", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
+extern const Control<float> Lux(LUX, "Lux", "libcamera", ControlId::Direction::Out);
+
+extern const Control<bool> AwbEnable(AWB_ENABLE, "AwbEnable", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
 extern const std::array<const ControlValue, 8> AwbModeValues = {
 	static_cast<int32_t>(AwbAuto),
 	static_cast<int32_t>(AwbIncandescent),
@@ -1526,21 +1674,36 @@ extern const std::map<std::string, int32_t> AwbModeNameValueMap = {
 	{ "AwbCloudy", AwbCloudy },
 	{ "AwbCustom", AwbCustom },
 };
-extern const Control<int32_t> AwbMode(AWB_MODE, "AwbMode");
-extern const Control<bool> AwbLocked(AWB_LOCKED, "AwbLocked");
-extern const Control<Span<const float, 2>> ColourGains(COLOUR_GAINS, "ColourGains");
-extern const Control<int32_t> ColourTemperature(COLOUR_TEMPERATURE, "ColourTemperature");
-extern const Control<float> Saturation(SATURATION, "Saturation");
-extern const Control<Span<const int32_t, 4>> SensorBlackLevels(SENSOR_BLACK_LEVELS, "SensorBlackLevels");
-extern const Control<float> Sharpness(SHARPNESS, "Sharpness");
-extern const Control<int32_t> FocusFoM(FOCUS_FO_M, "FocusFoM");
-extern const Control<Span<const float, 9>> ColourCorrectionMatrix(COLOUR_CORRECTION_MATRIX, "ColourCorrectionMatrix");
-extern const Control<Rectangle> ScalerCrop(SCALER_CROP, "ScalerCrop");
-extern const Control<float> DigitalGain(DIGITAL_GAIN, "DigitalGain");
-extern const Control<int64_t> FrameDuration(FRAME_DURATION, "FrameDuration");
-extern const Control<Span<const int64_t, 2>> FrameDurationLimits(FRAME_DURATION_LIMITS, "FrameDurationLimits");
-extern const Control<float> SensorTemperature(SENSOR_TEMPERATURE, "SensorTemperature");
-extern const Control<int64_t> SensorTimestamp(SENSOR_TIMESTAMP, "SensorTimestamp");
+extern const Control<int32_t> AwbMode(AWB_MODE, "AwbMode", "libcamera", ControlId::Direction::In | ControlId::Direction::Out, AwbModeNameValueMap);
+
+extern const Control<bool> AwbLocked(AWB_LOCKED, "AwbLocked", "libcamera", ControlId::Direction::Out);
+
+extern const Control<Span<const float, 2>> ColourGains(COLOUR_GAINS, "ColourGains", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
+extern const Control<int32_t> ColourTemperature(COLOUR_TEMPERATURE, "ColourTemperature", "libcamera", ControlId::Direction::Out);
+
+extern const Control<float> Saturation(SATURATION, "Saturation", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
+extern const Control<Span<const int32_t, 4>> SensorBlackLevels(SENSOR_BLACK_LEVELS, "SensorBlackLevels", "libcamera", ControlId::Direction::Out);
+
+extern const Control<float> Sharpness(SHARPNESS, "Sharpness", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
+extern const Control<int32_t> FocusFoM(FOCUS_FO_M, "FocusFoM", "libcamera", ControlId::Direction::Out);
+
+extern const Control<Span<const float, 9>> ColourCorrectionMatrix(COLOUR_CORRECTION_MATRIX, "ColourCorrectionMatrix", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
+extern const Control<Rectangle> ScalerCrop(SCALER_CROP, "ScalerCrop", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
+extern const Control<float> DigitalGain(DIGITAL_GAIN, "DigitalGain", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
+extern const Control<int64_t> FrameDuration(FRAME_DURATION, "FrameDuration", "libcamera", ControlId::Direction::Out);
+
+extern const Control<Span<const int64_t, 2>> FrameDurationLimits(FRAME_DURATION_LIMITS, "FrameDurationLimits", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
+extern const Control<float> SensorTemperature(SENSOR_TEMPERATURE, "SensorTemperature", "libcamera", ControlId::Direction::Out);
+
+extern const Control<int64_t> SensorTimestamp(SENSOR_TIMESTAMP, "SensorTimestamp", "libcamera", ControlId::Direction::Out);
+
 extern const std::array<const ControlValue, 3> AfModeValues = {
 	static_cast<int32_t>(AfModeManual),
 	static_cast<int32_t>(AfModeAuto),
@@ -1551,7 +1714,8 @@ extern const std::map<std::string, int32_t> AfModeNameValueMap = {
 	{ "AfModeAuto", AfModeAuto },
 	{ "AfModeContinuous", AfModeContinuous },
 };
-extern const Control<int32_t> AfMode(AF_MODE, "AfMode");
+extern const Control<int32_t> AfMode(AF_MODE, "AfMode", "libcamera", ControlId::Direction::In | ControlId::Direction::Out, AfModeNameValueMap);
+
 extern const std::array<const ControlValue, 3> AfRangeValues = {
 	static_cast<int32_t>(AfRangeNormal),
 	static_cast<int32_t>(AfRangeMacro),
@@ -1562,7 +1726,8 @@ extern const std::map<std::string, int32_t> AfRangeNameValueMap = {
 	{ "AfRangeMacro", AfRangeMacro },
 	{ "AfRangeFull", AfRangeFull },
 };
-extern const Control<int32_t> AfRange(AF_RANGE, "AfRange");
+extern const Control<int32_t> AfRange(AF_RANGE, "AfRange", "libcamera", ControlId::Direction::In | ControlId::Direction::Out, AfRangeNameValueMap);
+
 extern const std::array<const ControlValue, 2> AfSpeedValues = {
 	static_cast<int32_t>(AfSpeedNormal),
 	static_cast<int32_t>(AfSpeedFast),
@@ -1571,7 +1736,8 @@ extern const std::map<std::string, int32_t> AfSpeedNameValueMap = {
 	{ "AfSpeedNormal", AfSpeedNormal },
 	{ "AfSpeedFast", AfSpeedFast },
 };
-extern const Control<int32_t> AfSpeed(AF_SPEED, "AfSpeed");
+extern const Control<int32_t> AfSpeed(AF_SPEED, "AfSpeed", "libcamera", ControlId::Direction::In | ControlId::Direction::Out, AfSpeedNameValueMap);
+
 extern const std::array<const ControlValue, 2> AfMeteringValues = {
 	static_cast<int32_t>(AfMeteringAuto),
 	static_cast<int32_t>(AfMeteringWindows),
@@ -1580,8 +1746,10 @@ extern const std::map<std::string, int32_t> AfMeteringNameValueMap = {
 	{ "AfMeteringAuto", AfMeteringAuto },
 	{ "AfMeteringWindows", AfMeteringWindows },
 };
-extern const Control<int32_t> AfMetering(AF_METERING, "AfMetering");
-extern const Control<Span<const Rectangle>> AfWindows(AF_WINDOWS, "AfWindows");
+extern const Control<int32_t> AfMetering(AF_METERING, "AfMetering", "libcamera", ControlId::Direction::In | ControlId::Direction::Out, AfMeteringNameValueMap);
+
+extern const Control<Span<const Rectangle>> AfWindows(AF_WINDOWS, "AfWindows", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
 extern const std::array<const ControlValue, 2> AfTriggerValues = {
 	static_cast<int32_t>(AfTriggerStart),
 	static_cast<int32_t>(AfTriggerCancel),
@@ -1590,7 +1758,8 @@ extern const std::map<std::string, int32_t> AfTriggerNameValueMap = {
 	{ "AfTriggerStart", AfTriggerStart },
 	{ "AfTriggerCancel", AfTriggerCancel },
 };
-extern const Control<int32_t> AfTrigger(AF_TRIGGER, "AfTrigger");
+extern const Control<int32_t> AfTrigger(AF_TRIGGER, "AfTrigger", "libcamera", ControlId::Direction::In, AfTriggerNameValueMap);
+
 extern const std::array<const ControlValue, 3> AfPauseValues = {
 	static_cast<int32_t>(AfPauseImmediate),
 	static_cast<int32_t>(AfPauseDeferred),
@@ -1601,8 +1770,10 @@ extern const std::map<std::string, int32_t> AfPauseNameValueMap = {
 	{ "AfPauseDeferred", AfPauseDeferred },
 	{ "AfPauseResume", AfPauseResume },
 };
-extern const Control<int32_t> AfPause(AF_PAUSE, "AfPause");
-extern const Control<float> LensPosition(LENS_POSITION, "LensPosition");
+extern const Control<int32_t> AfPause(AF_PAUSE, "AfPause", "libcamera", ControlId::Direction::In, AfPauseNameValueMap);
+
+extern const Control<float> LensPosition(LENS_POSITION, "LensPosition", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
 extern const std::array<const ControlValue, 4> AfStateValues = {
 	static_cast<int32_t>(AfStateIdle),
 	static_cast<int32_t>(AfStateScanning),
@@ -1615,7 +1786,8 @@ extern const std::map<std::string, int32_t> AfStateNameValueMap = {
 	{ "AfStateFocused", AfStateFocused },
 	{ "AfStateFailed", AfStateFailed },
 };
-extern const Control<int32_t> AfState(AF_STATE, "AfState");
+extern const Control<int32_t> AfState(AF_STATE, "AfState", "libcamera", ControlId::Direction::Out, AfStateNameValueMap);
+
 extern const std::array<const ControlValue, 3> AfPauseStateValues = {
 	static_cast<int32_t>(AfPauseStateRunning),
 	static_cast<int32_t>(AfPauseStatePausing),
@@ -1626,7 +1798,8 @@ extern const std::map<std::string, int32_t> AfPauseStateNameValueMap = {
 	{ "AfPauseStatePausing", AfPauseStatePausing },
 	{ "AfPauseStatePaused", AfPauseStatePaused },
 };
-extern const Control<int32_t> AfPauseState(AF_PAUSE_STATE, "AfPauseState");
+extern const Control<int32_t> AfPauseState(AF_PAUSE_STATE, "AfPauseState", "libcamera", ControlId::Direction::Out, AfPauseStateNameValueMap);
+
 extern const std::array<const ControlValue, 5> HdrModeValues = {
 	static_cast<int32_t>(HdrModeOff),
 	static_cast<int32_t>(HdrModeMultiExposureUnmerged),
@@ -1641,7 +1814,8 @@ extern const std::map<std::string, int32_t> HdrModeNameValueMap = {
 	{ "HdrModeSingleExposure", HdrModeSingleExposure },
 	{ "HdrModeNight", HdrModeNight },
 };
-extern const Control<int32_t> HdrMode(HDR_MODE, "HdrMode");
+extern const Control<int32_t> HdrMode(HDR_MODE, "HdrMode", "libcamera", ControlId::Direction::In | ControlId::Direction::Out, HdrModeNameValueMap);
+
 extern const std::array<const ControlValue, 4> HdrChannelValues = {
 	static_cast<int32_t>(HdrChannelNone),
 	static_cast<int32_t>(HdrChannelShort),
@@ -1654,8 +1828,12 @@ extern const std::map<std::string, int32_t> HdrChannelNameValueMap = {
 	{ "HdrChannelMedium", HdrChannelMedium },
 	{ "HdrChannelLong", HdrChannelLong },
 };
-extern const Control<int32_t> HdrChannel(HDR_CHANNEL, "HdrChannel");
-extern const Control<float> Gamma(GAMMA, "Gamma");
+extern const Control<int32_t> HdrChannel(HDR_CHANNEL, "HdrChannel", "libcamera", ControlId::Direction::Out, HdrChannelNameValueMap);
+
+extern const Control<float> Gamma(GAMMA, "Gamma", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
+extern const Control<bool> DebugMetadataEnable(DEBUG_METADATA_ENABLE, "DebugMetadataEnable", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
 
 
 namespace draft {
@@ -1670,7 +1848,8 @@ extern const std::map<std::string, int32_t> AePrecaptureTriggerNameValueMap = {
 	{ "AePrecaptureTriggerStart", AePrecaptureTriggerStart },
 	{ "AePrecaptureTriggerCancel", AePrecaptureTriggerCancel },
 };
-extern const Control<int32_t> AePrecaptureTrigger(AE_PRECAPTURE_TRIGGER, "AePrecaptureTrigger");
+extern const Control<int32_t> AePrecaptureTrigger(AE_PRECAPTURE_TRIGGER, "AePrecaptureTrigger", "draft", ControlId::Direction::In | ControlId::Direction::Out, AePrecaptureTriggerNameValueMap);
+
 extern const std::array<const ControlValue, 5> NoiseReductionModeValues = {
 	static_cast<int32_t>(NoiseReductionModeOff),
 	static_cast<int32_t>(NoiseReductionModeFast),
@@ -1685,7 +1864,8 @@ extern const std::map<std::string, int32_t> NoiseReductionModeNameValueMap = {
 	{ "NoiseReductionModeMinimal", NoiseReductionModeMinimal },
 	{ "NoiseReductionModeZSL", NoiseReductionModeZSL },
 };
-extern const Control<int32_t> NoiseReductionMode(NOISE_REDUCTION_MODE, "NoiseReductionMode");
+extern const Control<int32_t> NoiseReductionMode(NOISE_REDUCTION_MODE, "NoiseReductionMode", "draft", ControlId::Direction::In | ControlId::Direction::Out, NoiseReductionModeNameValueMap);
+
 extern const std::array<const ControlValue, 3> ColorCorrectionAberrationModeValues = {
 	static_cast<int32_t>(ColorCorrectionAberrationOff),
 	static_cast<int32_t>(ColorCorrectionAberrationFast),
@@ -1696,7 +1876,8 @@ extern const std::map<std::string, int32_t> ColorCorrectionAberrationModeNameVal
 	{ "ColorCorrectionAberrationFast", ColorCorrectionAberrationFast },
 	{ "ColorCorrectionAberrationHighQuality", ColorCorrectionAberrationHighQuality },
 };
-extern const Control<int32_t> ColorCorrectionAberrationMode(COLOR_CORRECTION_ABERRATION_MODE, "ColorCorrectionAberrationMode");
+extern const Control<int32_t> ColorCorrectionAberrationMode(COLOR_CORRECTION_ABERRATION_MODE, "ColorCorrectionAberrationMode", "draft", ControlId::Direction::In | ControlId::Direction::Out, ColorCorrectionAberrationModeNameValueMap);
+
 extern const std::array<const ControlValue, 6> AeStateValues = {
 	static_cast<int32_t>(AeStateInactive),
 	static_cast<int32_t>(AeStateSearching),
@@ -1713,7 +1894,8 @@ extern const std::map<std::string, int32_t> AeStateNameValueMap = {
 	{ "AeStateFlashRequired", AeStateFlashRequired },
 	{ "AeStatePrecapture", AeStatePrecapture },
 };
-extern const Control<int32_t> AeState(AE_STATE, "AeState");
+extern const Control<int32_t> AeState(AE_STATE, "AeState", "draft", ControlId::Direction::Out, AeStateNameValueMap);
+
 extern const std::array<const ControlValue, 4> AwbStateValues = {
 	static_cast<int32_t>(AwbStateInactive),
 	static_cast<int32_t>(AwbStateSearching),
@@ -1726,8 +1908,10 @@ extern const std::map<std::string, int32_t> AwbStateNameValueMap = {
 	{ "AwbConverged", AwbConverged },
 	{ "AwbLocked", AwbLocked },
 };
-extern const Control<int32_t> AwbState(AWB_STATE, "AwbState");
-extern const Control<int64_t> SensorRollingShutterSkew(SENSOR_ROLLING_SHUTTER_SKEW, "SensorRollingShutterSkew");
+extern const Control<int32_t> AwbState(AWB_STATE, "AwbState", "draft", ControlId::Direction::Out, AwbStateNameValueMap);
+
+extern const Control<int64_t> SensorRollingShutterSkew(SENSOR_ROLLING_SHUTTER_SKEW, "SensorRollingShutterSkew", "draft", ControlId::Direction::Out);
+
 extern const std::array<const ControlValue, 2> LensShadingMapModeValues = {
 	static_cast<int32_t>(LensShadingMapModeOff),
 	static_cast<int32_t>(LensShadingMapModeOn),
@@ -1736,9 +1920,12 @@ extern const std::map<std::string, int32_t> LensShadingMapModeNameValueMap = {
 	{ "LensShadingMapModeOff", LensShadingMapModeOff },
 	{ "LensShadingMapModeOn", LensShadingMapModeOn },
 };
-extern const Control<int32_t> LensShadingMapMode(LENS_SHADING_MAP_MODE, "LensShadingMapMode");
-extern const Control<int32_t> PipelineDepth(PIPELINE_DEPTH, "PipelineDepth");
-extern const Control<int32_t> MaxLatency(MAX_LATENCY, "MaxLatency");
+extern const Control<int32_t> LensShadingMapMode(LENS_SHADING_MAP_MODE, "LensShadingMapMode", "draft", ControlId::Direction::In | ControlId::Direction::Out, LensShadingMapModeNameValueMap);
+
+extern const Control<int32_t> PipelineDepth(PIPELINE_DEPTH, "PipelineDepth", "draft", ControlId::Direction::Out);
+
+extern const Control<int32_t> MaxLatency(MAX_LATENCY, "MaxLatency", "draft", ControlId::Direction::Out);
+
 extern const std::array<const ControlValue, 6> TestPatternModeValues = {
 	static_cast<int32_t>(TestPatternModeOff),
 	static_cast<int32_t>(TestPatternModeSolidColor),
@@ -1755,10 +1942,37 @@ extern const std::map<std::string, int32_t> TestPatternModeNameValueMap = {
 	{ "TestPatternModePn9", TestPatternModePn9 },
 	{ "TestPatternModeCustom1", TestPatternModeCustom1 },
 };
-extern const Control<int32_t> TestPatternMode(TEST_PATTERN_MODE, "TestPatternMode");
+extern const Control<int32_t> TestPatternMode(TEST_PATTERN_MODE, "TestPatternMode", "draft", ControlId::Direction::In | ControlId::Direction::Out, TestPatternModeNameValueMap);
+
+extern const std::array<const ControlValue, 3> FaceDetectModeValues = {
+	static_cast<int32_t>(FaceDetectModeOff),
+	static_cast<int32_t>(FaceDetectModeSimple),
+	static_cast<int32_t>(FaceDetectModeFull),
+};
+extern const std::map<std::string, int32_t> FaceDetectModeNameValueMap = {
+	{ "FaceDetectModeOff", FaceDetectModeOff },
+	{ "FaceDetectModeSimple", FaceDetectModeSimple },
+	{ "FaceDetectModeFull", FaceDetectModeFull },
+};
+extern const Control<int32_t> FaceDetectMode(FACE_DETECT_MODE, "FaceDetectMode", "draft", ControlId::Direction::In | ControlId::Direction::Out, FaceDetectModeNameValueMap);
+
+extern const Control<Span<const Rectangle>> FaceDetectFaceRectangles(FACE_DETECT_FACE_RECTANGLES, "FaceDetectFaceRectangles", "draft", ControlId::Direction::Out);
+
+extern const Control<Span<const uint8_t>> FaceDetectFaceScores(FACE_DETECT_FACE_SCORES, "FaceDetectFaceScores", "draft", ControlId::Direction::Out);
+
+extern const Control<Span<const Point>> FaceDetectFaceLandmarks(FACE_DETECT_FACE_LANDMARKS, "FaceDetectFaceLandmarks", "draft", ControlId::Direction::Out);
+
+extern const Control<Span<const int32_t>> FaceDetectFaceIds(FACE_DETECT_FACE_IDS, "FaceDetectFaceIds", "draft", ControlId::Direction::Out);
+
 
 
 } /* namespace draft */
+
+namespace debug {
+
+
+
+} /* namespace debug */
 
 #endif /* __DOXYGEN__ */
 
@@ -1812,6 +2026,7 @@ extern const ControlIdMap controls {
 	{ HDR_MODE, &HdrMode },
 	{ HDR_CHANNEL, &HdrChannel },
 	{ GAMMA, &Gamma },
+	{ DEBUG_METADATA_ENABLE, &DebugMetadataEnable },
 	{ draft::AE_PRECAPTURE_TRIGGER, &draft::AePrecaptureTrigger },
 	{ draft::NOISE_REDUCTION_MODE, &draft::NoiseReductionMode },
 	{ draft::COLOR_CORRECTION_ABERRATION_MODE, &draft::ColorCorrectionAberrationMode },
@@ -1822,6 +2037,11 @@ extern const ControlIdMap controls {
 	{ draft::PIPELINE_DEPTH, &draft::PipelineDepth },
 	{ draft::MAX_LATENCY, &draft::MaxLatency },
 	{ draft::TEST_PATTERN_MODE, &draft::TestPatternMode },
+	{ draft::FACE_DETECT_MODE, &draft::FaceDetectMode },
+	{ draft::FACE_DETECT_FACE_RECTANGLES, &draft::FaceDetectFaceRectangles },
+	{ draft::FACE_DETECT_FACE_SCORES, &draft::FaceDetectFaceScores },
+	{ draft::FACE_DETECT_FACE_LANDMARKS, &draft::FaceDetectFaceLandmarks },
+	{ draft::FACE_DETECT_FACE_IDS, &draft::FaceDetectFaceIds },
 };
 
 } /* namespace controls */

@@ -37,10 +37,7 @@ public:
 
         int32_t init(
         	const IPASettings &settings,
-        	const uint32_t hwRevision,
-        	const std::string &sensorId,
-        	const IPACameraSensorInfo &sensorInfo,
-        	const ControlInfoMap &sensorControls,
+        	const InitParams &params,
         	ControlInfoMap *ipaControls,
         	SensorConfig *sensorConfig) override;
 
@@ -63,17 +60,16 @@ public:
         	const uint32_t frame,
         	const ControlList &reqControls) override;
 
-        void fillParamsBuffer(
+        void computeParams(
         	const uint32_t frame,
-        	const uint32_t paramsbufferId,
-        	const uint32_t rawBufferId) override;
+        	const std::map<uint32_t, uint32_t> &bufferIds) override;
 
-        void processStatsBuffer(
+        void processStats(
         	const uint32_t frame,
-        	const uint32_t bufferId,
+        	const std::map<uint32_t, uint32_t> &bufferIds,
         	const ControlList &sensorControls) override;
 
-	Signal<uint32_t> paramsBufferReady;
+	Signal<uint32_t> paramsComputed;
 
 	Signal<uint32_t, const ControlList &> setSensorControls;
 
@@ -86,18 +82,12 @@ private:
 
         int32_t initThread(
         	const IPASettings &settings,
-        	const uint32_t hwRevision,
-        	const std::string &sensorId,
-        	const IPACameraSensorInfo &sensorInfo,
-        	const ControlInfoMap &sensorControls,
+        	const InitParams &params,
         	ControlInfoMap *ipaControls,
         	SensorConfig *sensorConfig);
         int32_t initIPC(
         	const IPASettings &settings,
-        	const uint32_t hwRevision,
-        	const std::string &sensorId,
-        	const IPACameraSensorInfo &sensorInfo,
-        	const ControlInfoMap &sensorControls,
+        	const InitParams &params,
         	ControlInfoMap *ipaControls,
         	SensorConfig *sensorConfig);
 
@@ -133,28 +123,26 @@ private:
         	const uint32_t frame,
         	const ControlList &reqControls);
 
-        void fillParamsBufferThread(
+        void computeParamsThread(
         	const uint32_t frame,
-        	const uint32_t paramsbufferId,
-        	const uint32_t rawBufferId);
-        void fillParamsBufferIPC(
+        	const std::map<uint32_t, uint32_t> &bufferIds);
+        void computeParamsIPC(
         	const uint32_t frame,
-        	const uint32_t paramsbufferId,
-        	const uint32_t rawBufferId);
+        	const std::map<uint32_t, uint32_t> &bufferIds);
 
-        void processStatsBufferThread(
+        void processStatsThread(
         	const uint32_t frame,
-        	const uint32_t bufferId,
+        	const std::map<uint32_t, uint32_t> &bufferIds,
         	const ControlList &sensorControls);
-        void processStatsBufferIPC(
+        void processStatsIPC(
         	const uint32_t frame,
-        	const uint32_t bufferId,
+        	const std::map<uint32_t, uint32_t> &bufferIds,
         	const ControlList &sensorControls);
 
 
-        void paramsBufferReadyThread(
+        void paramsComputedThread(
         	const uint32_t frame);
-	void paramsBufferReadyIPC(
+	void paramsComputedIPC(
 		std::vector<uint8_t>::const_iterator data,
 		size_t dataSize,
 		const std::vector<SharedFD> &fds);
@@ -205,19 +193,18 @@ private:
 		{
 			ipa_->queueRequest(frame, reqControls);
 		}
-		void fillParamsBuffer(
+		void computeParams(
                 	const uint32_t frame,
-                	const uint32_t paramsbufferId,
-                	const uint32_t rawBufferId)
+                	const std::map<uint32_t, uint32_t> &bufferIds)
 		{
-			ipa_->fillParamsBuffer(frame, paramsbufferId, rawBufferId);
+			ipa_->computeParams(frame, bufferIds);
 		}
-		void processStatsBuffer(
+		void processStats(
                 	const uint32_t frame,
-                	const uint32_t bufferId,
+                	const std::map<uint32_t, uint32_t> &bufferIds,
                 	const ControlList &sensorControls)
 		{
-			ipa_->processStatsBuffer(frame, bufferId, sensorControls);
+			ipa_->processStats(frame, bufferIds, sensorControls);
 		}
 
 	private:

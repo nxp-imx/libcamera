@@ -39,6 +39,9 @@ namespace nxp {
 
 namespace md {
 
+constexpr char const *kVendor = "nxp";
+constexpr ControlId::Direction kDirection = ControlId::Direction::Out;
+
 /*
  * Embedded data controls definition
  * Controls represent the embedded data values that are parsed and reported in a
@@ -51,7 +54,8 @@ namespace md {
  *
  * Values correspond to Long and optionally Short and Very Short captures.
  */
-const Control<Span<const float>> AnalogueGain(ANALOGUE_GAIN, "AnalogueGain");
+const Control<Span<const float>>
+	AnalogueGain(ANALOGUE_GAIN, "AnalogueGain", kVendor, kDirection);
 
 /**
  * \var DigitalGain
@@ -59,7 +63,8 @@ const Control<Span<const float>> AnalogueGain(ANALOGUE_GAIN, "AnalogueGain");
  *
  * Values correspond to Long and optionally Short and Very Short captures.
  */
-const Control<Span<const float>> DigitalGain(DIGITAL_GAIN, "DigitalGain");
+const Control<Span<const float>>
+	DigitalGain(DIGITAL_GAIN, "DigitalGain", kVendor, kDirection);
 
 /**
  * \var Exposure
@@ -67,7 +72,8 @@ const Control<Span<const float>> DigitalGain(DIGITAL_GAIN, "DigitalGain");
  *
  * Values correspond to Long and optionally Short and Very Short captures.
  */
-const Control<Span<const float>> Exposure(EXPOSURE, "Exposure");
+const Control<Span<const float>>
+	Exposure(EXPOSURE, "Exposure", kVendor, kDirection);
 
 /**
  * \var WhiteBalanceGain
@@ -76,14 +82,16 @@ const Control<Span<const float>> Exposure(EXPOSURE, "Exposure");
  * Values correspond to Red, GreenR, GreenB and Blue color channels for Long
  * and optionally Short and Very Short captures.
  */
-const Control<Span<const float>> WhiteBalanceGain(WB_GAIN, "WhiteBalanceGain");
+const Control<Span<const float>>
+	WhiteBalanceGain(WB_GAIN, "WhiteBalanceGain", kVendor, kDirection);
 
 /**
  * \var Temperature
  * \brief Sensor temperature
  * Temperature format is real degrees Celsius.
  */
-const Control<const float> Temperature(TEMPERATURE, "Temperature");
+const Control<const float>
+	Temperature(TEMPERATURE, "Temperature", kVendor, kDirection);
 
 const ControlIdMap controlIdMap{
 	{ ANALOGUE_GAIN, &AnalogueGain },
@@ -183,6 +191,22 @@ void CameraHelper::setCameraMode(const CameraMode &mode)
 		<< ") Frame length (min/max) ("
 		<< mode.minFrameLength << "/" << mode.maxFrameLength
 		<< ") Line duration " << lineDuration();
+}
+
+/**
+ * \brief Configure the camera helper with sensor control values
+ *
+ * This function passes the sensor control list populated with the actual
+ * control values read from the sensor.
+ * The usage from CameraHelper can be for instance to access the sensor
+ * calibrated values in OTP.
+ *
+ * \param[in] sensorCtrls The sensor control list
+ */
+void CameraHelper::setControls(const ControlList *sensorCtrls)
+{
+	/* Nothing to do */
+	(void)sensorCtrls;
 }
 
 /**
@@ -439,7 +463,7 @@ bool CameraHelper::controlListHasId(const ControlList *ctrls, unsigned int id)
  * \brief Base class for camera sensor helper factories
  *
  * The CameraHelperFactoryBase class is the base of all specializations of
- * the CamerarHelperFactory class template. It implements the factory
+ * the CameraHelperFactory class template. It implements the factory
  * registration, maintains a registry of factories, and provides access to the
  * registered factories.
  */
@@ -514,8 +538,8 @@ std::vector<CameraHelperFactoryBase *> &CameraHelperFactoryBase::factories()
 }
 
 /**
- * \class CamerarHelperFactory
- * \brief Registration of CamerarHelperFactory classes and creation of instances
+ * \class CameraHelperFactory
+ * \brief Registration of CameraHelperFactory classes and creation of instances
  * \tparam _Helper The camera sensor helper class type for this factory
  *
  * To facilitate discovery and instantiation of CameraHelper classes, the
@@ -527,7 +551,7 @@ std::vector<CameraHelperFactoryBase *> &CameraHelperFactoryBase::factories()
  */
 
 /**
- * \fn CamerarHelperFactory::CamerarHelperFactory(const char *name)
+ * \fn CameraHelperFactory::CameraHelperFactory(const char *name)
  * \brief Construct a camera sensor helper factory
  * \param[in] name Name of the camera sensor helper class
  *
@@ -539,7 +563,7 @@ std::vector<CameraHelperFactoryBase *> &CameraHelperFactoryBase::factories()
  */
 
 /**
- * \fn CamerarHelperFactory::createInstance() const
+ * \fn CameraHelperFactory::createInstance() const
  * \brief Create an instance of the CameraSensorHelper corresponding to the
  * factory
  *
