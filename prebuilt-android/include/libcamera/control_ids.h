@@ -25,54 +25,63 @@ extern const ControlIdMap controls;
 
 enum {
 	AE_ENABLE = 1,
-	AE_LOCKED = 2,
+	AE_STATE = 2,
 	AE_METERING_MODE = 3,
 	AE_CONSTRAINT_MODE = 4,
 	AE_EXPOSURE_MODE = 5,
 	EXPOSURE_VALUE = 6,
 	EXPOSURE_TIME = 7,
-	ANALOGUE_GAIN = 8,
-	AE_FLICKER_MODE = 9,
-	AE_FLICKER_PERIOD = 10,
-	AE_FLICKER_DETECTED = 11,
-	BRIGHTNESS = 12,
-	CONTRAST = 13,
-	LUX = 14,
-	AWB_ENABLE = 15,
-	AWB_MODE = 16,
-	AWB_LOCKED = 17,
-	COLOUR_GAINS = 18,
-	COLOUR_TEMPERATURE = 19,
-	SATURATION = 20,
-	SENSOR_BLACK_LEVELS = 21,
-	SHARPNESS = 22,
-	FOCUS_FO_M = 23,
-	COLOUR_CORRECTION_MATRIX = 24,
-	SCALER_CROP = 25,
-	DIGITAL_GAIN = 26,
-	FRAME_DURATION = 27,
-	FRAME_DURATION_LIMITS = 28,
-	SENSOR_TEMPERATURE = 29,
-	SENSOR_TIMESTAMP = 30,
-	AF_MODE = 31,
-	AF_RANGE = 32,
-	AF_SPEED = 33,
-	AF_METERING = 34,
-	AF_WINDOWS = 35,
-	AF_TRIGGER = 36,
-	AF_PAUSE = 37,
-	LENS_POSITION = 38,
-	AF_STATE = 39,
-	AF_PAUSE_STATE = 40,
-	HDR_MODE = 41,
-	HDR_CHANNEL = 42,
-	GAMMA = 43,
-	DEBUG_METADATA_ENABLE = 44,
+	EXPOSURE_TIME_MODE = 8,
+	ANALOGUE_GAIN = 9,
+	ANALOGUE_GAIN_MODE = 10,
+	AE_FLICKER_MODE = 11,
+	AE_FLICKER_PERIOD = 12,
+	AE_FLICKER_DETECTED = 13,
+	BRIGHTNESS = 14,
+	CONTRAST = 15,
+	LUX = 16,
+	AWB_ENABLE = 17,
+	AWB_MODE = 18,
+	AWB_LOCKED = 19,
+	COLOUR_GAINS = 20,
+	COLOUR_TEMPERATURE = 21,
+	SATURATION = 22,
+	SENSOR_BLACK_LEVELS = 23,
+	SHARPNESS = 24,
+	FOCUS_FO_M = 25,
+	COLOUR_CORRECTION_MATRIX = 26,
+	SCALER_CROP = 27,
+	DIGITAL_GAIN = 28,
+	FRAME_DURATION = 29,
+	FRAME_DURATION_LIMITS = 30,
+	SENSOR_TEMPERATURE = 31,
+	SENSOR_TIMESTAMP = 32,
+	AF_MODE = 33,
+	AF_RANGE = 34,
+	AF_SPEED = 35,
+	AF_METERING = 36,
+	AF_WINDOWS = 37,
+	AF_TRIGGER = 38,
+	AF_PAUSE = 39,
+	LENS_POSITION = 40,
+	AF_STATE = 41,
+	AF_PAUSE_STATE = 42,
+	HDR_MODE = 43,
+	HDR_CHANNEL = 44,
+	GAMMA = 45,
+	DEBUG_METADATA_ENABLE = 46,
 };
 
 
 extern const Control<bool> AeEnable;
-extern const Control<bool> AeLocked;
+enum AeStateEnum {
+	AeStateIdle = 0,
+	AeStateSearching = 1,
+	AeStateConverged = 2,
+};
+extern const std::array<const ControlValue, 3> AeStateValues;
+extern const std::map<std::string, int32_t> AeStateNameValueMap;
+extern const Control<int32_t> AeState;
 enum AeMeteringModeEnum {
 	MeteringCentreWeighted = 0,
 	MeteringSpot = 1,
@@ -102,7 +111,21 @@ extern const std::map<std::string, int32_t> AeExposureModeNameValueMap;
 extern const Control<int32_t> AeExposureMode;
 extern const Control<float> ExposureValue;
 extern const Control<int32_t> ExposureTime;
+enum ExposureTimeModeEnum {
+	ExposureTimeModeAuto = 0,
+	ExposureTimeModeManual = 1,
+};
+extern const std::array<const ControlValue, 2> ExposureTimeModeValues;
+extern const std::map<std::string, int32_t> ExposureTimeModeNameValueMap;
+extern const Control<int32_t> ExposureTimeMode;
 extern const Control<float> AnalogueGain;
+enum AnalogueGainModeEnum {
+	AnalogueGainModeAuto = 0,
+	AnalogueGainModeManual = 1,
+};
+extern const std::array<const ControlValue, 2> AnalogueGainModeValues;
+extern const std::map<std::string, int32_t> AnalogueGainModeNameValueMap;
+extern const Control<int32_t> AnalogueGainMode;
 enum AeFlickerModeEnum {
 	FlickerOff = 0,
 	FlickerManual = 1,
@@ -239,18 +262,17 @@ enum {
 	AE_PRECAPTURE_TRIGGER = 10001,
 	NOISE_REDUCTION_MODE = 10002,
 	COLOR_CORRECTION_ABERRATION_MODE = 10003,
-	AE_STATE = 10004,
-	AWB_STATE = 10005,
-	SENSOR_ROLLING_SHUTTER_SKEW = 10006,
-	LENS_SHADING_MAP_MODE = 10007,
-	PIPELINE_DEPTH = 10008,
-	MAX_LATENCY = 10009,
-	TEST_PATTERN_MODE = 10010,
-	FACE_DETECT_MODE = 10011,
-	FACE_DETECT_FACE_RECTANGLES = 10012,
-	FACE_DETECT_FACE_SCORES = 10013,
-	FACE_DETECT_FACE_LANDMARKS = 10014,
-	FACE_DETECT_FACE_IDS = 10015,
+	AWB_STATE = 10004,
+	SENSOR_ROLLING_SHUTTER_SKEW = 10005,
+	LENS_SHADING_MAP_MODE = 10006,
+	PIPELINE_DEPTH = 10007,
+	MAX_LATENCY = 10008,
+	TEST_PATTERN_MODE = 10009,
+	FACE_DETECT_MODE = 10010,
+	FACE_DETECT_FACE_RECTANGLES = 10011,
+	FACE_DETECT_FACE_SCORES = 10012,
+	FACE_DETECT_FACE_LANDMARKS = 10013,
+	FACE_DETECT_FACE_IDS = 10014,
 };
 
 
@@ -280,17 +302,6 @@ enum ColorCorrectionAberrationModeEnum {
 extern const std::array<const ControlValue, 3> ColorCorrectionAberrationModeValues;
 extern const std::map<std::string, int32_t> ColorCorrectionAberrationModeNameValueMap;
 extern const Control<int32_t> ColorCorrectionAberrationMode;
-enum AeStateEnum {
-	AeStateInactive = 0,
-	AeStateSearching = 1,
-	AeStateConverged = 2,
-	AeStateLocked = 3,
-	AeStateFlashRequired = 4,
-	AeStatePrecapture = 5,
-};
-extern const std::array<const ControlValue, 6> AeStateValues;
-extern const std::map<std::string, int32_t> AeStateNameValueMap;
-extern const Control<int32_t> AeState;
 enum AwbStateEnum {
 	AwbStateInactive = 0,
 	AwbStateSearching = 1,

@@ -129,6 +129,8 @@ TRACEPOINT_EVENT(
  * request.tp - Tracepoints for the request object
  */
 
+#include <stdint.h>
+
 #include <libcamera/framebuffer.h>
 
 #include "libcamera/internal/request.h"

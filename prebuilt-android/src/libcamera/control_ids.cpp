@@ -24,20 +24,89 @@ namespace controls {
 
 /**
  * \var AeEnable
- * \brief Enable or disable the AE.
+ * \brief Enable or disable the AEGC algorithm. When this control is set to true,
+ * both ExposureTimeMode and AnalogueGainMode are set to auto, and if this
+ * control is set to false then both are set to manual.
  *
- * \sa ExposureTime AnalogueGain
+ * If ExposureTimeMode or AnalogueGainMode are also set in the same
+ * request as AeEnable, then the modes supplied by ExposureTimeMode or
+ * AnalogueGainMode will take precedence.
+ *
+ * \sa ExposureTimeMode AnalogueGainMode
  */
 
 /**
- * \var AeLocked
- * \brief Report the lock status of a running AE algorithm.
+ * \enum AeStateEnum
+ * \brief Supported AeState values
  *
- * If the AE algorithm is locked the value shall be set to true, if it's
- * converging it shall be set to false. If the AE algorithm is not
- * running the control shall not be present in the metadata control list.
+ * \var AeStateIdle
+ * \brief The AEGC algorithm is inactive.
  *
- * \sa AeEnable
+ * This state is returned when both AnalogueGainMode and
+ * ExposureTimeMode are set to Manual and the algorithm is not
+ * actively computing any value.
+ *
+ * \var AeStateSearching
+ * \brief The AEGC algorithm is actively computing new values, for either the
+ * exposure time or the analogue gain, but has not converged to a
+ * stable result yet.
+ *
+ * This state is returned if at least one of AnalogueGainMode or
+ * ExposureTimeMode is auto and the algorithm hasn't converged yet.
+ *
+ * The AEGC algorithm converges once stable values are computed for
+ * all of the controls set to be computed in Auto mode. Once the
+ * algorithm converges the state is moved to AeStateConverged.
+ *
+ * \var AeStateConverged
+ * \brief The AEGC algorithm has converged.
+ *
+ * This state is returned if at least one of AnalogueGainMode or
+ * ExposureTimeMode is Auto, and the AEGC algorithm has converged to a
+ * stable value.
+ *
+ * If the measurements move too far away from the convergence point
+ * then the AEGC algorithm might start adjusting again, in which case
+ * the state is moved to AeStateSearching.
+ */
+
+/**
+ * \var AeStateValues
+ * \brief List of all AeState supported values
+ */
+
+/**
+ * \var AeStateNameValueMap
+ * \brief Map of all AeState supported value names (in std::string format) to value
+ */
+
+/**
+ * \var AeState
+ * \brief Report the AEGC algorithm state.
+ *
+ * The AEGC algorithm computes the exposure time and the analogue gain
+ * to be applied to the image sensor.
+ *
+ * The AEGC algorithm behaviour is controlled by the ExposureTimeMode and
+ * AnalogueGainMode controls, which allow applications to decide how
+ * the exposure time and gain are computed, in Auto or Manual mode,
+ * independently from one another.
+ *
+ * The AeState control reports the AEGC algorithm state through a single
+ * value and describes it as a single computation block which computes
+ * both the exposure time and the analogue gain values.
+ *
+ * When both the exposure time and analogue gain values are configured to
+ * be in Manual mode, the AEGC algorithm is quiescent and does not actively
+ * compute any value and the AeState control will report AeStateIdle.
+ *
+ * When at least the exposure time or analogue gain are configured to be
+ * computed by the AEGC algorithm, the AeState control will report if the
+ * algorithm has converged to stable values for all of the controls set
+ * to be computed in Auto mode.
+ *
+ * \sa AnalogueGainMode
+ * \sa ExposureTimeMode
  */
 
 /**
@@ -159,6 +228,12 @@ namespace controls {
  * The exposure modes specify how the desired total exposure is divided
  * between the exposure time and the sensor's analogue gain. They are
  * platform specific, and not all exposure modes may be supported.
+ *
+ * When one of AnalogueGainMode or ExposureTimeMode is set to Manual,
+ * the fixed values will override any choices made by AeExposureMode.
+ *
+ * \sa AnalogueGainMode
+ * \sa ExposureTimeMode
  */
 
 /**
@@ -166,13 +241,15 @@ namespace controls {
  * \brief Specify an Exposure Value (EV) parameter.
  *
  * The EV parameter will only be applied if the AE algorithm is currently
- * enabled.
+ * enabled, that is, at least one of AnalogueGainMode and ExposureTimeMode
+ * are in Auto mode.
  *
  * By convention EV adjusts the exposure as log2. For example
  * EV = [-2, -1, -0.5, 0, 0.5, 1, 2] results in an exposure adjustment
  * of [1/4x, 1/2x, 1/sqrt(2)x, 1x, sqrt(2)x, 2x, 4x].
  *
- * \sa AeEnable
+ * \sa AnalogueGainMode
+ * \sa ExposureTimeMode
  */
 
 /**
@@ -181,17 +258,119 @@ namespace controls {
  *
  * This value is specified in micro-seconds.
  *
- * Setting this value means that it is now fixed and the AE algorithm may
- * not change it. Setting it back to zero returns it to the control of the
+ * This control will only take effect if ExposureTimeMode is Manual. If
+ * this control is set when ExposureTimeMode is Auto, the value will be
+ * ignored and will not be retained.
+ *
+ * When reported in metadata, this control indicates what exposure time
+ * was used for the current frame, regardless of ExposureTimeMode.
+ * ExposureTimeMode will indicate the source of the exposure time value,
+ * whether it came from the AE algorithm or not.
+ *
+ * \sa AnalogueGain
+ * \sa ExposureTimeMode
+ */
+
+/**
+ * \enum ExposureTimeModeEnum
+ * \brief Supported ExposureTimeMode values
+ *
+ * \var ExposureTimeModeAuto
+ * \brief The exposure time will be calculated automatically and set by the
  * AE algorithm.
  *
- * \sa AnalogueGain AeEnable
+ * If ExposureTime is set while this mode is active, it will be
+ * ignored, and its value will not be retained.
  *
- * \todo Document the interactions between AeEnable and setting a fixed
- * value for this control. Consider interactions with other AE features,
- * such as aperture and aperture/shutter priority mode, and decide if
- * control of which features should be automatically adjusted shouldn't
- * better be handled through a separate AE mode control.
+ * When transitioning from Manual to Auto mode, the AEGC should start
+ * its adjustments based on the last set manual ExposureTime value.
+ *
+ * \var ExposureTimeModeManual
+ * \brief The exposure time will not be updated by the AE algorithm.
+ *
+ * When transitioning from Auto to Manual mode, the last computed
+ * exposure value is used until a new value is specified through the
+ * ExposureTime control. If an ExposureTime value is specified in the
+ * same request where the ExposureTimeMode is changed from Auto to
+ * Manual, the provided ExposureTime is applied immediately.
+ */
+
+/**
+ * \var ExposureTimeModeValues
+ * \brief List of all ExposureTimeMode supported values
+ */
+
+/**
+ * \var ExposureTimeModeNameValueMap
+ * \brief Map of all ExposureTimeMode supported value names (in std::string format) to value
+ */
+
+/**
+ * \var ExposureTimeMode
+ * \brief Controls the source of the exposure time that is applied to the image
+ * sensor.
+ *
+ * When set to Auto, the AE algorithm computes the exposure time and
+ * configures the image sensor accordingly. When set to Manual, the value
+ * of the ExposureTime control is used.
+ *
+ * When transitioning from Auto to Manual mode and no ExposureTime control
+ * is provided by the application, the last value computed by the AE
+ * algorithm when the mode was Auto will be used. If the ExposureTimeMode
+ * was never set to Auto (either because the camera started in Manual mode,
+ * or Auto is not supported by the camera), the camera should use a
+ * best-effort default value.
+ *
+ * If ExposureTimeModeManual is supported, the ExposureTime control must
+ * also be supported.
+ *
+ * Cameras that support manual control of the sensor shall support manual
+ * mode for both ExposureTimeMode and AnalogueGainMode, and shall expose
+ * the ExposureTime and AnalogueGain controls. If the camera also has an
+ * AEGC implementation, both ExposureTimeMode and AnalogueGainMode shall
+ * support both manual and auto mode. If auto mode is available, it shall
+ * be the default mode. These rules do not apply to black box cameras
+ * such as UVC cameras, where the available gain and exposure modes are
+ * completely dependent on what the device exposes.
+ *
+ * \par Flickerless exposure mode transitions
+ *
+ * Applications that wish to transition from ExposureTimeModeAuto to direct
+ * control of the exposure time without causing extra flicker can do so by
+ * selecting an ExposureTime value as close as possible to the last value
+ * computed by the auto exposure algorithm in order to avoid any visible
+ * flickering.
+ *
+ * To select the correct value to use as ExposureTime value, applications
+ * should accommodate the natural delay in applying controls caused by the
+ * capture pipeline frame depth.
+ *
+ * When switching to manual exposure mode, applications should not
+ * immediately specify an ExposureTime value in the same request where
+ * ExposureTimeMode is set to Manual. They should instead wait for the
+ * first Request where ExposureTimeMode is reported as
+ * ExposureTimeModeManual in the Request metadata, and use the reported
+ * ExposureTime to populate the control value in the next Request to be
+ * queued to the Camera.
+ *
+ * The implementation of the auto-exposure algorithm should equally try to
+ * minimize flickering and when transitioning from manual exposure mode to
+ * auto exposure use the last value provided by the application as starting
+ * point.
+ *
+ * 1. Start with ExposureTimeMode set to Auto
+ *
+ * 2. Set ExposureTimeMode to Manual
+ *
+ * 3. Wait for the first completed request that has ExposureTimeMode
+ * set to Manual
+ *
+ * 4. Copy the value reported in ExposureTime into a new request, and
+ * submit it
+ *
+ * 5. Proceed to run manual exposure time as desired
+ *
+ * \sa ExposureTime
  */
 
 /**
@@ -201,17 +380,88 @@ namespace controls {
  * The value of the control specifies the gain multiplier applied to all
  * colour channels. This value cannot be lower than 1.0.
  *
- * Setting this value means that it is now fixed and the AE algorithm may
- * not change it. Setting it back to zero returns it to the control of the
- * AE algorithm.
+ * This control will only take effect if AnalogueGainMode is Manual. If
+ * this control is set when AnalogueGainMode is Auto, the value will be
+ * ignored and will not be retained.
  *
- * \sa ExposureTime AeEnable
+ * When reported in metadata, this control indicates what analogue gain
+ * was used for the current request, regardless of AnalogueGainMode.
+ * AnalogueGainMode will indicate the source of the analogue gain value,
+ * whether it came from the AEGC algorithm or not.
  *
- * \todo Document the interactions between AeEnable and setting a fixed
- * value for this control. Consider interactions with other AE features,
- * such as aperture and aperture/shutter priority mode, and decide if
- * control of which features should be automatically adjusted shouldn't
- * better be handled through a separate AE mode control.
+ * \sa ExposureTime
+ * \sa AnalogueGainMode
+ */
+
+/**
+ * \enum AnalogueGainModeEnum
+ * \brief Supported AnalogueGainMode values
+ *
+ * \var AnalogueGainModeAuto
+ * \brief The analogue gain will be calculated automatically and set by the
+ * AEGC algorithm.
+ *
+ * If AnalogueGain is set while this mode is active, it will be
+ * ignored, and it will also not be retained.
+ *
+ * When transitioning from Manual to Auto mode, the AEGC should start
+ * its adjustments based on the last set manual AnalogueGain value.
+ *
+ * \var AnalogueGainModeManual
+ * \brief The analogue gain will not be updated by the AEGC algorithm.
+ *
+ * When transitioning from Auto to Manual mode, the last computed
+ * gain value is used until a new value is specified through the
+ * AnalogueGain control. If an AnalogueGain value is specified in the
+ * same request where the AnalogueGainMode is changed from Auto to
+ * Manual, the provided AnalogueGain is applied immediately.
+ */
+
+/**
+ * \var AnalogueGainModeValues
+ * \brief List of all AnalogueGainMode supported values
+ */
+
+/**
+ * \var AnalogueGainModeNameValueMap
+ * \brief Map of all AnalogueGainMode supported value names (in std::string format) to value
+ */
+
+/**
+ * \var AnalogueGainMode
+ * \brief Controls the source of the analogue gain that is applied to the image
+ * sensor.
+ *
+ * When set to Auto, the AEGC algorithm computes the analogue gain and
+ * configures the image sensor accordingly. When set to Manual, the value
+ * of the AnalogueGain control is used.
+ *
+ * When transitioning from Auto to Manual mode and no AnalogueGain control
+ * is provided by the application, the last value computed by the AEGC
+ * algorithm when the mode was Auto will be used. If the AnalogueGainMode
+ * was never set to Auto (either because the camera started in Manual mode,
+ * or Auto is not supported by the camera), the camera should use a
+ * best-effort default value.
+ *
+ * If AnalogueGainModeManual is supported, the AnalogueGain control must
+ * also be supported.
+ *
+ * For cameras where we have control over the ISP, both ExposureTimeMode
+ * and AnalogueGainMode are expected to support manual mode, and both
+ * controls (as well as ExposureTimeMode and AnalogueGain) are expected to
+ * be present. If the camera also has an AEGC implementation, both
+ * ExposureTimeMode and AnalogueGainMode shall support both manual and
+ * auto mode. If auto mode is available, it shall be the default mode.
+ * These rules do not apply to black box cameras such as UVC cameras,
+ * where the available gain and exposure modes are completely dependent on
+ * what the hardware exposes.
+ *
+ * The same procedure described for performing flickerless transitions in
+ * the ExposureTimeMode control documentation can be applied to analogue
+ * gain.
+ *
+ * \sa ExposureTimeMode
+ * \sa AnalogueGain
  */
 
 /**
@@ -1276,48 +1526,6 @@ namespace draft {
  */
 
 /**
- * \enum AeStateEnum
- * \brief Supported AeState values
- *
- * \var AeStateInactive
- * \brief The AE algorithm is inactive.
- *
- * \var AeStateSearching
- * \brief The AE algorithm has not converged yet.
- *
- * \var AeStateConverged
- * \brief The AE algorithm has converged.
- *
- * \var AeStateLocked
- * \brief The AE algorithm is locked.
- *
- * \var AeStateFlashRequired
- * \brief The AE algorithm would need a flash for good results
- *
- * \var AeStatePrecapture
- * \brief The AE algorithm has started a pre-capture metering session.
- * \sa AePrecaptureTrigger
- */
-
-/**
- * \var AeStateValues
- * \brief List of all AeState supported values
- */
-
-/**
- * \var AeStateNameValueMap
- * \brief Map of all AeState supported value names (in std::string format) to value
- */
-
-/**
- * \var AeState
- * \brief Control to report the current AE algorithm state. Currently identical to
- * ANDROID_CONTROL_AE_STATE.
- *
- *  Current state of the AE algorithm.
- */
-
-/**
  * \enum AwbStateEnum
  * \brief Supported AwbState values
  *
@@ -1578,9 +1786,19 @@ namespace debug {
  * them as functions.
  */
 
-extern const Control<bool> AeEnable(AE_ENABLE, "AeEnable", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+extern const Control<bool> AeEnable(AE_ENABLE, "AeEnable", "libcamera", ControlId::Direction::In);
 
-extern const Control<bool> AeLocked(AE_LOCKED, "AeLocked", "libcamera", ControlId::Direction::Out);
+extern const std::array<const ControlValue, 3> AeStateValues = {
+	static_cast<int32_t>(AeStateIdle),
+	static_cast<int32_t>(AeStateSearching),
+	static_cast<int32_t>(AeStateConverged),
+};
+extern const std::map<std::string, int32_t> AeStateNameValueMap = {
+	{ "AeStateIdle", AeStateIdle },
+	{ "AeStateSearching", AeStateSearching },
+	{ "AeStateConverged", AeStateConverged },
+};
+extern const Control<int32_t> AeState(AE_STATE, "AeState", "libcamera", ControlId::Direction::Out, AeStateNameValueMap);
 
 extern const std::array<const ControlValue, 4> AeMeteringModeValues = {
 	static_cast<int32_t>(MeteringCentreWeighted),
@@ -1628,7 +1846,27 @@ extern const Control<float> ExposureValue(EXPOSURE_VALUE, "ExposureValue", "libc
 
 extern const Control<int32_t> ExposureTime(EXPOSURE_TIME, "ExposureTime", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
 
+extern const std::array<const ControlValue, 2> ExposureTimeModeValues = {
+	static_cast<int32_t>(ExposureTimeModeAuto),
+	static_cast<int32_t>(ExposureTimeModeManual),
+};
+extern const std::map<std::string, int32_t> ExposureTimeModeNameValueMap = {
+	{ "ExposureTimeModeAuto", ExposureTimeModeAuto },
+	{ "ExposureTimeModeManual", ExposureTimeModeManual },
+};
+extern const Control<int32_t> ExposureTimeMode(EXPOSURE_TIME_MODE, "ExposureTimeMode", "libcamera", ControlId::Direction::In | ControlId::Direction::Out, ExposureTimeModeNameValueMap);
+
 extern const Control<float> AnalogueGain(ANALOGUE_GAIN, "AnalogueGain", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
+extern const std::array<const ControlValue, 2> AnalogueGainModeValues = {
+	static_cast<int32_t>(AnalogueGainModeAuto),
+	static_cast<int32_t>(AnalogueGainModeManual),
+};
+extern const std::map<std::string, int32_t> AnalogueGainModeNameValueMap = {
+	{ "AnalogueGainModeAuto", AnalogueGainModeAuto },
+	{ "AnalogueGainModeManual", AnalogueGainModeManual },
+};
+extern const Control<int32_t> AnalogueGainMode(ANALOGUE_GAIN_MODE, "AnalogueGainMode", "libcamera", ControlId::Direction::In | ControlId::Direction::Out, AnalogueGainModeNameValueMap);
 
 extern const std::array<const ControlValue, 3> AeFlickerModeValues = {
 	static_cast<int32_t>(FlickerOff),
@@ -1878,24 +2116,6 @@ extern const std::map<std::string, int32_t> ColorCorrectionAberrationModeNameVal
 };
 extern const Control<int32_t> ColorCorrectionAberrationMode(COLOR_CORRECTION_ABERRATION_MODE, "ColorCorrectionAberrationMode", "draft", ControlId::Direction::In | ControlId::Direction::Out, ColorCorrectionAberrationModeNameValueMap);
 
-extern const std::array<const ControlValue, 6> AeStateValues = {
-	static_cast<int32_t>(AeStateInactive),
-	static_cast<int32_t>(AeStateSearching),
-	static_cast<int32_t>(AeStateConverged),
-	static_cast<int32_t>(AeStateLocked),
-	static_cast<int32_t>(AeStateFlashRequired),
-	static_cast<int32_t>(AeStatePrecapture),
-};
-extern const std::map<std::string, int32_t> AeStateNameValueMap = {
-	{ "AeStateInactive", AeStateInactive },
-	{ "AeStateSearching", AeStateSearching },
-	{ "AeStateConverged", AeStateConverged },
-	{ "AeStateLocked", AeStateLocked },
-	{ "AeStateFlashRequired", AeStateFlashRequired },
-	{ "AeStatePrecapture", AeStatePrecapture },
-};
-extern const Control<int32_t> AeState(AE_STATE, "AeState", "draft", ControlId::Direction::Out, AeStateNameValueMap);
-
 extern const std::array<const ControlValue, 4> AwbStateValues = {
 	static_cast<int32_t>(AwbStateInactive),
 	static_cast<int32_t>(AwbStateSearching),
@@ -1984,13 +2204,15 @@ namespace debug {
  */
 extern const ControlIdMap controls {
 	{ AE_ENABLE, &AeEnable },
-	{ AE_LOCKED, &AeLocked },
+	{ AE_STATE, &AeState },
 	{ AE_METERING_MODE, &AeMeteringMode },
 	{ AE_CONSTRAINT_MODE, &AeConstraintMode },
 	{ AE_EXPOSURE_MODE, &AeExposureMode },
 	{ EXPOSURE_VALUE, &ExposureValue },
 	{ EXPOSURE_TIME, &ExposureTime },
+	{ EXPOSURE_TIME_MODE, &ExposureTimeMode },
 	{ ANALOGUE_GAIN, &AnalogueGain },
+	{ ANALOGUE_GAIN_MODE, &AnalogueGainMode },
 	{ AE_FLICKER_MODE, &AeFlickerMode },
 	{ AE_FLICKER_PERIOD, &AeFlickerPeriod },
 	{ AE_FLICKER_DETECTED, &AeFlickerDetected },
@@ -2030,7 +2252,6 @@ extern const ControlIdMap controls {
 	{ draft::AE_PRECAPTURE_TRIGGER, &draft::AePrecaptureTrigger },
 	{ draft::NOISE_REDUCTION_MODE, &draft::NoiseReductionMode },
 	{ draft::COLOR_CORRECTION_ABERRATION_MODE, &draft::ColorCorrectionAberrationMode },
-	{ draft::AE_STATE, &draft::AeState },
 	{ draft::AWB_STATE, &draft::AwbState },
 	{ draft::SENSOR_ROLLING_SHUTTER_SKEW, &draft::SensorRollingShutterSkew },
 	{ draft::LENS_SHADING_MAP_MODE, &draft::LensShadingMapMode },

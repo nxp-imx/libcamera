@@ -39,8 +39,10 @@ public:
         	const IPASettings &settings,
         	const SharedFD &fdStats,
         	const SharedFD &fdParams,
-        	const ControlInfoMap &sensorCtrlInfoMap,
-        	ControlInfoMap *ipaControls) override;
+        	const IPACameraSensorInfo &sensorInfo,
+        	const ControlInfoMap &sensorControls,
+        	ControlInfoMap *ipaControls,
+        	bool *ccmEnabled) override;
 
         int32_t start() override;
 
@@ -65,6 +67,8 @@ public:
 
 	Signal<> setIspParams;
 
+	Signal<uint32_t, const ControlList &> metadataReady;
+
 
 private:
 	void recvMessage(const IPCMessage &data);
@@ -74,14 +78,18 @@ private:
         	const IPASettings &settings,
         	const SharedFD &fdStats,
         	const SharedFD &fdParams,
-        	const ControlInfoMap &sensorCtrlInfoMap,
-        	ControlInfoMap *ipaControls);
+        	const IPACameraSensorInfo &sensorInfo,
+        	const ControlInfoMap &sensorControls,
+        	ControlInfoMap *ipaControls,
+        	bool *ccmEnabled);
         int32_t initIPC(
         	const IPASettings &settings,
         	const SharedFD &fdStats,
         	const SharedFD &fdParams,
-        	const ControlInfoMap &sensorCtrlInfoMap,
-        	ControlInfoMap *ipaControls);
+        	const IPACameraSensorInfo &sensorInfo,
+        	const ControlInfoMap &sensorControls,
+        	ControlInfoMap *ipaControls,
+        	bool *ccmEnabled);
 
         int32_t startThread();
         int32_t startIPC();
@@ -125,6 +133,14 @@ private:
 
         void setIspParamsThread();
 	void setIspParamsIPC(
+		std::vector<uint8_t>::const_iterator data,
+		size_t dataSize,
+		const std::vector<SharedFD> &fds);
+
+        void metadataReadyThread(
+        	const uint32_t frame,
+        	const ControlList &metadata);
+	void metadataReadyIPC(
 		std::vector<uint8_t>::const_iterator data,
 		size_t dataSize,
 		const std::vector<SharedFD> &fds);
