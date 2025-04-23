@@ -20,9 +20,9 @@
 #include <libcamera/ipa/core_ipa_interface.h>
 
 #include "libcamera/internal/matrix.h"
+#include "libcamera/internal/vector.h"
 
 #include <libipa/fc_queue.h>
-#include <libipa/vector.h>
 
 #include "nxp/cam_helper/camera_helper.h"
 

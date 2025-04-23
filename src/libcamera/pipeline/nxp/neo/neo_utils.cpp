@@ -829,13 +829,15 @@ int PipelineConfig::parseCameras(const YamlObject &cameras)
 		properties.formatSize = fmtObj["size"].get<Size>();
 
 		const YamlObject &orientationObj = cameraObj["orientation"];
-		uint32_t orientation = orientationObj.get<uint32_t>().value_or(0);
-		if (orientation >= static_cast<uint32_t>(Orientation::Rotate0) &&
-		    orientation <= static_cast<uint32_t>(Orientation::Rotate180Mirror))
-			properties.orientation = static_cast<Orientation>(orientation);
-		else
-			LOG(NxpNeoPipe, Warning)
-				<< "Invalid orientation value " << orientation;
+		if (orientationObj.isValue()) {
+			uint32_t orientation = orientationObj.get<uint32_t>().value_or(0);
+			if (orientation >= static_cast<uint32_t>(Orientation::Rotate0) &&
+			    orientation <= static_cast<uint32_t>(Orientation::Rotate180Mirror))
+				properties.orientation = static_cast<Orientation>(orientation);
+			else
+				LOG(NxpNeoPipe, Warning)
+					<< "Invalid orientation value " << orientation;
+		}
 
 		LOG(NxpNeoPipe, Debug)
 			<< "Camera entry model [" << model

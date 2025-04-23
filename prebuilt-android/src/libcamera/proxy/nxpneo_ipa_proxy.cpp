@@ -274,7 +274,7 @@ void IPAProxyNxpNeo::stopThread()
 	thread_.exit();
 	thread_.wait();
 
-	Thread::current()->dispatchMessages(Message::Type::InvokeMessage);
+	Thread::current()->dispatchMessages(Message::Type::InvokeMessage, this);
 
 	state_ = ProxyStopped;
 }

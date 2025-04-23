@@ -83,6 +83,7 @@ IPAProxySoft::IPAProxySoft(IPAModule *ipam, bool isolate)
 
 	ipa_->setSensorControls.connect(this, &IPAProxySoft::setSensorControlsThread);
 	ipa_->setIspParams.connect(this, &IPAProxySoft::setIspParamsThread);
+	ipa_->metadataReady.connect(this, &IPAProxySoft::metadataReadyThread);
 
 	valid_ = true;
 }
@@ -112,6 +113,10 @@ void IPAProxySoft::recvMessage(const IPCMessage &data)
 		setIspParamsIPC(data.data().cbegin(), dataSize, data.fds());
 		break;
 	}
+	case _SoftEventCmd::MetadataReady: {
+		metadataReadyIPC(data.data().cbegin(), dataSize, data.fds());
+		break;
+	}
 	default:
 		LOG(IPAProxy, Error) << "Unknown command " << static_cast<uint32_t>(_cmd);
 	}
@@ -122,23 +127,27 @@ int32_t IPAProxySoft::init(
 	const IPASettings &settings,
 	const SharedFD &fdStats,
 	const SharedFD &fdParams,
-	const ControlInfoMap &sensorCtrlInfoMap,
-	ControlInfoMap *ipaControls)
+	const IPACameraSensorInfo &sensorInfo,
+	const ControlInfoMap &sensorControls,
+	ControlInfoMap *ipaControls,
+	bool *ccmEnabled)
 {
 	if (isolate_)
-		return initIPC(settings, fdStats, fdParams, sensorCtrlInfoMap, ipaControls);
+		return initIPC(settings, fdStats, fdParams, sensorInfo, sensorControls, ipaControls, ccmEnabled);
 	else
-		return initThread(settings, fdStats, fdParams, sensorCtrlInfoMap, ipaControls);
+		return initThread(settings, fdStats, fdParams, sensorInfo, sensorControls, ipaControls, ccmEnabled);
 }
 
 int32_t IPAProxySoft::initThread(
 	const IPASettings &settings,
 	const SharedFD &fdStats,
 	const SharedFD &fdParams,
-	const ControlInfoMap &sensorCtrlInfoMap,
-	ControlInfoMap *ipaControls)
+	const IPACameraSensorInfo &sensorInfo,
+	const ControlInfoMap &sensorControls,
+	ControlInfoMap *ipaControls,
+	bool *ccmEnabled)
 {
-	int32_t _ret = ipa_->init(settings, fdStats, fdParams, sensorCtrlInfoMap, ipaControls);
+	int32_t _ret = ipa_->init(settings, fdStats, fdParams, sensorInfo, sensorControls, ipaControls, ccmEnabled);
 
 	proxy_.moveToThread(&thread_);
 
@@ -149,8 +158,10 @@ int32_t IPAProxySoft::initIPC(
 	const IPASettings &settings,
 	const SharedFD &fdStats,
 	const SharedFD &fdParams,
-	const ControlInfoMap &sensorCtrlInfoMap,
-	ControlInfoMap *ipaControls)
+	const IPACameraSensorInfo &sensorInfo,
+	const ControlInfoMap &sensorControls,
+	ControlInfoMap *ipaControls,
+	bool *ccmEnabled)
 {
 	IPCMessage::Header _header = { static_cast<uint32_t>(_SoftCmd::Init), seq_++ };
 	IPCMessage _ipcInputBuf(_header);
@@ -171,20 +182,26 @@ int32_t IPAProxySoft::initIPC(
 	std::tie(fdParamsBuf, fdParamsFds) =
 		IPADataSerializer<SharedFD>::serialize(fdParams
 );
-	std::vector<uint8_t> sensorCtrlInfoMapBuf;
-	std::tie(sensorCtrlInfoMapBuf, std::ignore) =
-		IPADataSerializer<ControlInfoMap>::serialize(sensorCtrlInfoMap
+	std::vector<uint8_t> sensorInfoBuf;
+	std::tie(sensorInfoBuf, std::ignore) =
+		IPADataSerializer<IPACameraSensorInfo>::serialize(sensorInfo
+);
+	std::vector<uint8_t> sensorControlsBuf;
+	std::tie(sensorControlsBuf, std::ignore) =
+		IPADataSerializer<ControlInfoMap>::serialize(sensorControls
 , &controlSerializer_);
 	appendPOD<uint32_t>(_ipcInputBuf.data(), settingsBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), fdStatsBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), fdStatsFds.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), fdParamsBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), fdParamsFds.size());
-	appendPOD<uint32_t>(_ipcInputBuf.data(), sensorCtrlInfoMapBuf.size());
+	appendPOD<uint32_t>(_ipcInputBuf.data(), sensorInfoBuf.size());
+	appendPOD<uint32_t>(_ipcInputBuf.data(), sensorControlsBuf.size());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), settingsBuf.begin(), settingsBuf.end());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), fdStatsBuf.begin(), fdStatsBuf.end());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), fdParamsBuf.begin(), fdParamsBuf.end());
-	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), sensorCtrlInfoMapBuf.begin(), sensorCtrlInfoMapBuf.end());
+	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), sensorInfoBuf.begin(), sensorInfoBuf.end());
+	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), sensorControlsBuf.begin(), sensorControlsBuf.end());
 	_ipcInputBuf.fds().insert(_ipcInputBuf.fds().end(), fdStatsFds.begin(), fdStatsFds.end());
 	_ipcInputBuf.fds().insert(_ipcInputBuf.fds().end(), fdParamsFds.begin(), fdParamsFds.end());
 
@@ -198,16 +215,26 @@ int32_t IPAProxySoft::initIPC(
 	int32_t _retValue = IPADataSerializer<int32_t>::deserialize(_ipcOutputBuf.data(), 0);
 
 
+	[[maybe_unused]] const size_t ipaControlsBufSize = readPOD<uint32_t>(_ipcOutputBuf.data(), 4);
+	[[maybe_unused]] const size_t ccmEnabledBufSize = readPOD<uint32_t>(_ipcOutputBuf.data(), 8);
 
-	const size_t ipaControlsStart = 4;
+	const size_t ipaControlsStart = 12;
+	const size_t ccmEnabledStart = ipaControlsStart + ipaControlsBufSize;
 
 
 	if (ipaControls) {
                 *ipaControls =
                 IPADataSerializer<ControlInfoMap>::deserialize(
                 	_ipcOutputBuf.data().cbegin() + ipaControlsStart,
-                	_ipcOutputBuf.data().cend(),
+                	_ipcOutputBuf.data().cbegin() + ipaControlsStart + ipaControlsBufSize,
                 	&controlSerializer_);
+	}
+
+	if (ccmEnabled) {
+                *ccmEnabled =
+                IPADataSerializer<bool>::deserialize(
+                	_ipcOutputBuf.data().cbegin() + ccmEnabledStart,
+                	_ipcOutputBuf.data().cend());
 	}
 
 
@@ -280,7 +307,7 @@ void IPAProxySoft::stopThread()
 	thread_.exit();
 	thread_.wait();
 
-	Thread::current()->dispatchMessages(Message::Type::InvokeMessage);
+	Thread::current()->dispatchMessages(Message::Type::InvokeMessage, this);
 
 	state_ = ProxyStopped;
 }
@@ -539,6 +566,43 @@ void IPAProxySoft::setIspParamsIPC(
 
 
 	setIspParams.emit();
+}
+
+void IPAProxySoft::metadataReadyThread(
+	const uint32_t frame,
+	const ControlList &metadata)
+{
+	ASSERT(state_ != ProxyStopped);
+	metadataReady.emit(frame, metadata);
+}
+
+void IPAProxySoft::metadataReadyIPC(
+	[[maybe_unused]] std::vector<uint8_t>::const_iterator data,
+	[[maybe_unused]] size_t dataSize,
+	[[maybe_unused]] const std::vector<SharedFD> &fds)
+{
+	uint32_t frame;
+	ControlList metadata;
+
+	[[maybe_unused]] const size_t frameBufSize = readPOD<uint32_t>(data, 0, data + dataSize);
+	[[maybe_unused]] const size_t metadataBufSize = readPOD<uint32_t>(data, 4, data + dataSize);
+
+	const size_t frameStart = 8;
+	const size_t metadataStart = frameStart + frameBufSize;
+
+
+	frame =
+        IPADataSerializer<uint32_t>::deserialize(
+        	data + frameStart,
+        	data + frameStart + frameBufSize);
+
+	metadata =
+        IPADataSerializer<ControlList>::deserialize(
+        	data + metadataStart,
+        	data + metadataStart + metadataBufSize,
+        	&controlSerializer_);
+
+	metadataReady.emit(frame, metadata);
 }
 
 

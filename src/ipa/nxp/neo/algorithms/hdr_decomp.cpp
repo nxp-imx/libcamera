@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * hdr_decomp.cpp - NXP NEO HDR Decompression configuration
- * Copyright 2024 NXP
+ * Copyright 2025 NXP
  */
 
 #include "hdr_decomp.h"
@@ -28,8 +28,28 @@ namespace ipa::nxpneo::algorithms {
  * \brief HDR Decompression configuration
  *
  * This Algorithm configures the HDR Decompression unit.
- * It scales the input pixels to 20-bit precision, with a non-linear transfer
- * function when compression is used by the sensor.
+ * The block can be used to apply a non-linear decompression of the pixel
+ * values when the sensor uses compression. It may also be used for simple
+ * linear rescaling of the pixel values.
+ * The target output pixel format is:
+ * - 20-bit on line path 0 (input0)
+ * - 16-bit on line path 1 (input1)
+ * Input format is either the sensor output bpp or a MSB-aligned shifted version
+ * of it - see PIPECONF block LPALIGN0 and LPALIGN1 configurations.
+ * HDR DECOMP operation is configured by a number of parameters defined in the
+ * sensor calibration file.
+ * Using points[] evaluated in increasing order, the conversion logic is:
+ * if (pv < points[N])
+ *   opv = (pv - offsets[N-1]) * ratios[N-1] + newpoints[N-1]
+ * with:
+ * - pv: input pixel value
+ * - opv: output pixel value
+ * - points: KNEE_POINT[1-4] (u16)
+ * - offsets: KNEE_NPOINT[0-4] (u16)
+ * - newpoints: KNEE_NPOINT[0-4] (u20 for input0 - u16 for input1)
+ * - ratios: KNEE_RATIO[0-4] (u7.5)
+ * Last entry in the offsets/newpoints/ratios arrays is used as the default case
+ * when no value from points[] array matched the condition (pv < points[N]).
  */
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoHdrDecomp)

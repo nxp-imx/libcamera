@@ -265,9 +265,7 @@ std::optional<int> CameraSensorRaw::init()
 	if (ret)
 		return { ret };
 
-	/*
-	 * Active all routes to query pads formats
-	 */
+	/* Activate all routes to query pads formats */
 	V4L2Subdevice::Routing routingActive = routing;
 	for (V4L2Subdevice::Route &route : routingActive) {
 		if (route.source.pad != sourcePad) {
@@ -379,9 +377,7 @@ std::optional<int> CameraSensorRaw::init()
 			<< "Found auxiliary stream " << streams_.auxiliary->sink
 			<< " -> " << streams_.auxiliary->source;
 
-	/*
-	 * Restore all routes to default state
-	 */
+	/* Restore the routes to their initial state */
 	ret = subdev_->setRouting(&routing);
 	if (ret) {
 		LOG(CameraSensor, Error) << "Could not restore routes state";

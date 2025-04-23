@@ -77,12 +77,14 @@ public:
                 	[[maybe_unused]] const size_t fdStatsFdsSize = readPOD<uint32_t>(_ipcMessage.data(), 8);
                 	[[maybe_unused]] const size_t fdParamsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 12);
                 	[[maybe_unused]] const size_t fdParamsFdsSize = readPOD<uint32_t>(_ipcMessage.data(), 16);
-                	[[maybe_unused]] const size_t sensorCtrlInfoMapBufSize = readPOD<uint32_t>(_ipcMessage.data(), 20);
+                	[[maybe_unused]] const size_t sensorInfoBufSize = readPOD<uint32_t>(_ipcMessage.data(), 20);
+                	[[maybe_unused]] const size_t sensorControlsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 24);
 
-                	const size_t settingsStart = 24;
+                	const size_t settingsStart = 28;
                 	const size_t fdStatsStart = settingsStart + settingsBufSize;
                 	const size_t fdParamsStart = fdStatsStart + fdStatsBufSize;
-                	const size_t sensorCtrlInfoMapStart = fdParamsStart + fdParamsBufSize;
+                	const size_t sensorInfoStart = fdParamsStart + fdParamsBufSize;
+                	const size_t sensorControlsStart = sensorInfoStart + sensorInfoBufSize;
 
                 	const size_t fdStatsFdStart = 0;
                 	const size_t fdParamsFdStart = fdStatsFdStart + fdStatsFdsSize;
@@ -106,16 +108,23 @@ public:
                         	_ipcMessage.fds().cbegin() + fdParamsFdStart,
                         	_ipcMessage.fds().cbegin() + fdParamsFdStart + fdParamsFdsSize);
 
-                	ControlInfoMap sensorCtrlInfoMap =
+                	IPACameraSensorInfo sensorInfo =
+                        IPADataSerializer<IPACameraSensorInfo>::deserialize(
+                        	_ipcMessage.data().cbegin() + sensorInfoStart,
+                        	_ipcMessage.data().cbegin() + sensorInfoStart + sensorInfoBufSize);
+
+                	ControlInfoMap sensorControls =
                         IPADataSerializer<ControlInfoMap>::deserialize(
-                        	_ipcMessage.data().cbegin() + sensorCtrlInfoMapStart,
+                        	_ipcMessage.data().cbegin() + sensorControlsStart,
                         	_ipcMessage.data().cend(),
                         	&controlSerializer_);
 
 
 			ControlInfoMap ipaControls;
 
-			int32_t _callRet =ipa_->init(settings, fdStats, fdParams, sensorCtrlInfoMap, &ipaControls);
+			bool ccmEnabled;
+
+			int32_t _callRet =ipa_->init(settings, fdStats, fdParams, sensorInfo, sensorControls, &ipaControls, &ccmEnabled);
 
 			IPCMessage::Header header = { _ipcMessage.header().cmd, _ipcMessage.header().cookie };
 			IPCMessage _response(header);
@@ -128,7 +137,14 @@ public:
                 	std::tie(ipaControlsBuf, std::ignore) =
                 		IPADataSerializer<ControlInfoMap>::serialize(ipaControls
                 , &controlSerializer_);
+                	std::vector<uint8_t> ccmEnabledBuf;
+                	std::tie(ccmEnabledBuf, std::ignore) =
+                		IPADataSerializer<bool>::serialize(ccmEnabled
+                );
+                	appendPOD<uint32_t>(_response.data(), ipaControlsBuf.size());
+                	appendPOD<uint32_t>(_response.data(), ccmEnabledBuf.size());
                 	_response.data().insert(_response.data().end(), ipaControlsBuf.begin(), ipaControlsBuf.end());
+                	_response.data().insert(_response.data().end(), ccmEnabledBuf.begin(), ccmEnabledBuf.end());
 			int _ret = socket_.send(_response.payload());
 			if (_ret < 0) {
 				LOG(IPAProxySoftWorker, Error)
@@ -309,6 +325,7 @@ ipa_->processStats(frame, bufferId, sensorControls);
 
 		ipa_->setSensorControls.connect(this, &IPAProxySoftWorker::setSensorControls);
 		ipa_->setIspParams.connect(this, &IPAProxySoftWorker::setIspParams);
+		ipa_->metadataReady.connect(this, &IPAProxySoftWorker::metadataReady);
 		return 0;
 	}
 
@@ -368,6 +385,38 @@ private:
 				<< "Sending event setIspParams() failed: " << _ret;
 
 		LOG(IPAProxySoftWorker, Debug) << "setIspParams done";
+	}
+
+        void metadataReady(
+        	const uint32_t frame,
+        	const ControlList &metadata)
+	{
+		IPCMessage::Header header = {
+			static_cast<uint32_t>(_SoftEventCmd::MetadataReady),
+			0
+		};
+		IPCMessage _message(header);
+
+		
+	std::vector<uint8_t> frameBuf;
+	std::tie(frameBuf, std::ignore) =
+		IPADataSerializer<uint32_t>::serialize(frame
+);
+	std::vector<uint8_t> metadataBuf;
+	std::tie(metadataBuf, std::ignore) =
+		IPADataSerializer<ControlList>::serialize(metadata
+, &controlSerializer_);
+	appendPOD<uint32_t>(_message.data(), frameBuf.size());
+	appendPOD<uint32_t>(_message.data(), metadataBuf.size());
+	_message.data().insert(_message.data().end(), frameBuf.begin(), frameBuf.end());
+	_message.data().insert(_message.data().end(), metadataBuf.begin(), metadataBuf.end());
+
+		int _ret = socket_.send(_message.payload());
+		if (_ret < 0)
+			LOG(IPAProxySoftWorker, Error)
+				<< "Sending event metadataReady() failed: " << _ret;
+
+		LOG(IPAProxySoftWorker, Debug) << "metadataReady done";
 	}
 
 

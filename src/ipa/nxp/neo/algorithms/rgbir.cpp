@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * rgbir.cpp - NXP NEO RGBIR to RGB,IR block configuration
- * Copyright 2024 NXP
+ * Copyright 2025 NXP
  */
 
 #include "rgbir.h"
@@ -53,19 +53,21 @@ namespace ipa::nxpneo::algorithms {
  * IR COMPRESSION Unit:
  * Input is 20 bits and output is either 8 or 16 bits depending on the
  * user-selected stream format.
- * Using points[] evaluated in increasing order, conversion logic is:
+ * IR COMPRESSION operation is configured by a number of parameters defined in
+ * the sensor calibration file.
+ * Using points[] evaluated in increasing order, the conversion logic is:
  * if (pv < points[N])
- *   opv = (pv - offsets[N]) * ratios[N] + newpoints[N]
+ *   opv = (pv - offsets[N-1]) * ratios[N-1] + newpoints[N-1]
  * with:
  * - pv: input pixel value
  * - opv: output pixel value
  * - points: KNEE_POINT[1-4] (u20)
  * - offsets: KNEE_NPOINT[0-4] (u20)
- * - newpoints: KNEE_NPOINT[0-4] u16
- * - ratios: KNEE_RATIO[0-4] u1.15
- * Last entry in the offsets/newpoints/ratios arrays are used as the default
- * case, meaning that no points[] value matched the condition (pv < points[N]).
- * */
+ * - newpoints: KNEE_NPOINT[0-4] (u16)
+ * - ratios: KNEE_RATIO[0-4] (u1.15)
+ * Last entry in the offsets/newpoints/ratios arrays is used as the default case
+ * when no value from points[] array matched the condition (pv < points[N]).
+ */
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoRgbIr)
 

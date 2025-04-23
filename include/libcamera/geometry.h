@@ -109,7 +109,7 @@ public:
 	}
 
 	[[nodiscard]] constexpr Size alignedDownTo(unsigned int hAlignment,
-						 unsigned int vAlignment) const
+						   unsigned int vAlignment) const
 	{
 		return {
 			width / hAlignment * hAlignment,
@@ -118,7 +118,7 @@ public:
 	}
 
 	[[nodiscard]] constexpr Size alignedUpTo(unsigned int hAlignment,
-					       unsigned int vAlignment) const
+						 unsigned int vAlignment) const
 	{
 		return {
 			(width + hAlignment - 1) / hAlignment * hAlignment,
@@ -295,7 +295,7 @@ public:
 	[[nodiscard]] Rectangle boundedTo(const Rectangle &bound) const;
 	[[nodiscard]] Rectangle enclosedIn(const Rectangle &boundary) const;
 	[[nodiscard]] Rectangle scaledBy(const Size &numerator,
-				       const Size &denominator) const;
+					 const Size &denominator) const;
 	[[nodiscard]] Rectangle translatedBy(const Point &point) const;
 
 	Rectangle transformedBetween(const Rectangle &source,
