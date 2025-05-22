@@ -41,9 +41,15 @@ public:
 private:
 private:
 	void generateBlocks(const neoisp_meta_stats_s *stats);
-	void awbGreyWorld(IPAActiveState &activeState, IPAFrameContext &frameContext);
+	void awbGreyWorld(IPAActiveState &activeState, IPAFrameContext &frameContext,
+			  const uint32_t frame);
 	static constexpr uint16_t gainDouble2Param(double gain);
 
+	/*
+	 * Number of frames for which to run the algorithm at full speed,
+	 * before slowing down to prevent flickering effect.
+	 */
+	static constexpr uint32_t kNumStartupFrames = 10;
 	std::vector<RGB<double>> blocks_;
 };
 
