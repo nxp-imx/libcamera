@@ -226,7 +226,8 @@ void Awb::generateBlocks(const neoisp_meta_stats_s *stats)
 	}
 }
 
-void Awb::awbGreyWorld(IPAActiveState &activeState, IPAFrameContext &frameContext)
+void Awb::awbGreyWorld(IPAActiveState &activeState, IPAFrameContext &frameContext,
+		       const uint32_t frame)
 {
 	LOG(NxpNeoAlgoAwb, Debug) << "Grey world AWB";
 	/*
@@ -272,9 +273,9 @@ void Awb::awbGreyWorld(IPAActiveState &activeState, IPAFrameContext &frameContex
 	 * Color temperature is not relevant in Grey world but
 	 * still useful to estimate it :-)
 	 */
-	activeState.awb.temperatureK = estimateCCT({ { sumRed.r(),
-						       sumRed.g(),
-						       sumBlue.b() } });
+	double ct = estimateCCT({ { sumRed.r(),
+				    sumRed.g(),
+				    sumBlue.b() } });
 
 	/*
 	 * Clamp the gain values to the hardware, which expresses gains as Q8.8
@@ -284,6 +285,16 @@ void Awb::awbGreyWorld(IPAActiveState &activeState, IPAFrameContext &frameContex
 	 */
 	gains = gains.max(1.0 / 256).min(65535.0 / 256);
 
+	/*
+	 * Filter the values to avoid oscillations.
+	 * Adapt instantly if we are in startup phase.
+	 */
+	double speed = frame < kNumStartupFrames ? 1.0 : 0.2;
+
+	ct = ct * speed + activeState.awb.temperatureK * (1 - speed);
+	gains = gains * speed + activeState.awb.gains.automatic * (1 - speed);
+
+	activeState.awb.temperatureK = static_cast<unsigned int>(ct);
 	activeState.awb.gains.automatic = gains;
 }
 
@@ -299,7 +310,7 @@ void Awb::process(IPAContext &context,
 	IPAActiveState &activeState = context.activeState;
 
 	generateBlocks(stats);
-	awbGreyWorld(activeState, frameContext);
+	awbGreyWorld(activeState, frameContext, frame);
 
 	frameContext.awb.temperatureK = activeState.awb.temperatureK;
 
