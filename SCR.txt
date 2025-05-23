@@ -2,7 +2,7 @@ NXP Software Content Register
 ===========================================================
 
 Package:                    libcamera.git
-Version:                    next.imx
+Version:                    refer to git commit/tag
 Outgoing License:           LGPL-2.1-or-later
 License File:               LICENSES/LGPL-2.1-or-later.txt
                             + other licenses for various components, including GPL for sample applications
