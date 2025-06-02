@@ -63,12 +63,6 @@ public:
         	const uint32_t bufferId,
         	const ControlList &sensorControls) override;
 
-	Signal<const ControlList &> setSensorControls;
-
-	Signal<> setIspParams;
-
-	Signal<uint32_t, const ControlList &> metadataReady;
-
 
 private:
 	void recvMessage(const IPCMessage &data);
