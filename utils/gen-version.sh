@@ -38,10 +38,7 @@ fi
 
 # Append a '-dirty' suffix if the working tree is dirty. Prevent false
 # positives due to changed timestamps by running git update-index.
-if [ -z "$build_dir" ] || (echo "$build_dir" | grep -q "$src_dir")
-then
-	git update-index --refresh > /dev/null 2>&1
-fi
+git update-index --refresh > /dev/null 2>&1
 git diff-index --quiet HEAD || version="$version-dirty ($(date +%Y-%m-%dT%H:%M:%S%Z))"
 
 # If a project version is provided, use it to replace the version number.
