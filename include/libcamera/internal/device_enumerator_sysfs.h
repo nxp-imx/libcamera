@@ -50,6 +50,13 @@ private:
 		DependencyMap deps_;
 	};
 
+	int addSysfsDevice(const char *devPath);
+	int populateMediaDevice(MediaDevice *media, DependencyMap *deps);
+	std::string lookupDeviceNode(int major, int minor);
+
+	int addV4L2Device(dev_t devum);
+	void sysfsNotify();
+
 	int inotFd_;
 	int inotWd_;
 	EventNotifier *notifier_;
@@ -57,12 +64,6 @@ private:
 	std::set<dev_t> orphans_;
 	std::list<MediaDeviceDeps> pending_;
 	std::map<dev_t, MediaDeviceDeps *> devMap_;
-
-	int addSysfsDevice(const char *devPath);
-	int populateMediaDevice(MediaDevice *media, DependencyMap *deps);
-	std::string lookupDeviceNode(int major, int minor);
-	int addV4L2Device(dev_t devum);
-	void sysfsNotify();
 };
 
 } /* namespace libcamera */

@@ -12,7 +12,6 @@
 #include <fcntl.h>
 #include <list>
 #include <signal.h>
-#include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -264,11 +263,17 @@ int Process::start(const std::string &path,
 		v.push_back(STDERR_FILENO);
 		closeAllFdsExcept(v);
 
-		UniqueFD fd(::open("/dev/null", O_RDWR));
-		if (fd.isValid()) {
-			dup2(fd.get(), STDIN_FILENO);
-			dup2(fd.get(), STDOUT_FILENO);
-		}
+		const auto tryDevNullLowestFd = [](int expected, int oflag) {
+			int fd = open("/dev/null", oflag);
+			if (fd < 0)
+				_exit(EXIT_FAILURE);
+			if (fd != expected)
+				close(fd);
+		};
+
+		tryDevNullLowestFd(STDIN_FILENO, O_RDONLY);
+		tryDevNullLowestFd(STDOUT_FILENO, O_WRONLY);
+		tryDevNullLowestFd(STDERR_FILENO, O_WRONLY);
 
 		const char *file = utils::secure_getenv("LIBCAMERA_LOG_FILE");
 		if (file && strcmp(file, "syslog"))
@@ -283,7 +288,7 @@ int Process::start(const std::string &path,
 
 		execv(path.c_str(), (char **)argv);
 
-		exit(EXIT_FAILURE);
+		_exit(EXIT_FAILURE);
 	}
 }
 

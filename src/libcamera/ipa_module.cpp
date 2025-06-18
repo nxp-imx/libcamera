@@ -387,7 +387,7 @@ const struct IPAModuleInfo &IPAModule::info() const
  *
  * \return The IPA module signature
  */
-const std::vector<uint8_t> IPAModule::signature() const
+const std::vector<uint8_t> &IPAModule::signature() const
 {
 	return signature_;
 }

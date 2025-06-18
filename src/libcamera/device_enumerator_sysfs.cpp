@@ -299,11 +299,10 @@ void DeviceEnumeratorSysfs::sysfsNotify()
 
 		eventPtr += sizeof(struct inotify_event) + inotifyEvent->len;
 
-		if (inotifyEvent->mask & IN_CREATE) {
+		if (inotifyEvent->mask & IN_CREATE)
 			addSysfsDevice(inotifyEvent->name);
-		} else if (inotifyEvent->mask & IN_DELETE) {
+		else if (inotifyEvent->mask & IN_DELETE)
 			removeDevice(inotifyEvent->name);
-		}
 	}
 }
 

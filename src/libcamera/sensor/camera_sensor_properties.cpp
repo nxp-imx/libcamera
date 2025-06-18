@@ -200,7 +200,7 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
 			.testPatternModes = {},
 			.sensorDelays = {
 				.exposureDelay = 2,
-				.gainDelay = 2,
+				.gainDelay = 1,
 				.vblankDelay = 2,
 				.hblankDelay = 2
 			},

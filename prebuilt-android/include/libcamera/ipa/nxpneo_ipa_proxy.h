@@ -69,12 +69,6 @@ public:
         	const std::map<uint32_t, uint32_t> &bufferIds,
         	const ControlList &sensorControls) override;
 
-	Signal<uint32_t> paramsComputed;
-
-	Signal<uint32_t, const ControlList &> setSensorControls;
-
-	Signal<uint32_t, const ControlList &> metadataReady;
-
 
 private:
 	void recvMessage(const IPCMessage &data);

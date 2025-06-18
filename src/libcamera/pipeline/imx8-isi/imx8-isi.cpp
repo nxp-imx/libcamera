@@ -52,8 +52,6 @@ public:
 	PipelineHandlerISI *pipe();
 
 	int init();
-	int setupFormats(V4L2SubdeviceFormat *format,
-			 V4L2Subdevice::Whence whence = V4L2Subdevice::ActiveFormat) const;
 
 	unsigned int pipeIndex(const Stream *stream)
 	{
@@ -75,7 +73,6 @@ public:
 	unsigned int xbarSink_ = 0;
 	unsigned int sensorSourcePadIdx_ = 0;
 	unsigned int pipeOffset_ = 0;
-	Size sensorSizeMax_ = Size(0, 0);
 };
 
 class ISICameraConfiguration : public CameraConfiguration
@@ -177,55 +174,6 @@ int ISICameraData::init()
 	}
 
 	properties_ = sensor_->properties();
-
-	return 0;
-}
-
-/**
- * \brief Apply/Try a format to the pipeline's subdevs
- *
- * Configure pipeline's subdevs before the ISI: sensor, camera port, and
- * optionally formatter. Format is propagated from upstream to downstream,
- * retrieving the source pad format of the upstream device to set it to the
- * sink pad of the downstream device.
- *
- * Finally, the format reported at the end of the loop takes into account
- * all subdevs' constraints.
- *
- * \return 0 in case of success, error code otherwise
- */
-int ISICameraData::setupFormats(V4L2SubdeviceFormat *format,
-				V4L2Subdevice::Whence whence) const
-{
-	V4L2SubdeviceFormat sourceFormat = *format;
-	int ret;
-
-	if (whence == V4L2Subdevice::TryFormat)
-		ret = sensor_->tryFormat(format);
-	else
-		ret = sensor_->setFormat(format);
-
-	if (ret)
-		return ret;
-
-	std::vector<V4L2Subdevice *> subdevs = { csis_.get() };
-
-	if (formatter_)
-		subdevs.push_back(formatter_.get());
-
-	for (V4L2Subdevice *subdev : subdevs) {
-		ret = subdev->setFormat(0, format, whence);
-		if (ret)
-			return ret;
-
-		ret = subdev->getFormat(1, format, whence);
-		if (ret)
-			return ret;
-	}
-
-	if (sourceFormat.size != format->size ||
-	    sourceFormat.code != format->code)
-		return -EINVAL;
 
 	return 0;
 }
@@ -431,7 +379,6 @@ ISICameraConfiguration::validateRaw(std::set<Stream *> &availableStreams,
 	 * Make sure the requested RAW format is supported by the
 	 * pipeline, otherwise adjust it.
 	 */
-	std::vector<unsigned int> mbusCodes = data_->sensor_->mbusCodes();
 	StreamConfiguration &rawConfig = config_[0];
 	PixelFormat rawFormat = rawConfig.pixelFormat;
 
@@ -531,10 +478,6 @@ ISICameraConfiguration::validateYuv(std::set<Stream *> &availableStreams,
 		/* Cap the streams size to the maximum accepted resolution. */
 		Size configSize = cfg.size;
 		cfg.size.boundTo(maxResolution);
-
-		if (data_->sensorSizeMax_ != Size(0, 0))
-			cfg.size.boundTo(data_->sensorSizeMax_);
-
 		if (cfg.size != configSize) {
 			LOG(ISI, Debug)
 				<< "Stream " << i << " adjusted to " << cfg.size;
@@ -717,34 +660,16 @@ StreamConfiguration PipelineHandlerISI::generateYUVConfiguration(Camera *camera,
 	if (!mbusCode)
 		return {};
 
-	/* Adjust the requested size to the pipeline's subdevs capabilities. */
+	/* Adjust the requested size to the sensor's capabilities. */
 	V4L2SubdeviceFormat sensorFmt;
 	sensorFmt.code = mbusCode;
-	std::vector<Size> sizes = data->sensor_->sizes(mbusCode);
+	sensorFmt.size = size;
 
-	const MediaEntity *entity = data->sensor_->entity();
-	if (entity->function() == MEDIA_ENT_F_PROC_VIDEO_ISP)
-		sizes.push_back(data->sensor_->resolution());
-
-	std::sort(sizes.begin(), sizes.end());
-	std::reverse(sizes.begin(), sizes.end());
-
-	int ret = -EINVAL;
-	for (const Size &s : sizes) {
-		if (s > size)
-			continue;
-
-		sensorFmt.size = s;
-		ret = data->setupFormats(&sensorFmt, V4L2Subdevice::TryFormat);
-		if (!ret)
-			break;
-	}
-
-	if (ret)
+	int ret = data->sensor_->tryFormat(&sensorFmt);
+	if (ret) {
+		LOG(ISI, Error) << "Failed to try sensor format.";
 		return {};
-
-	/* Save maximum input size supported */
-	data->sensorSizeMax_ = sensorFmt.size;
+	}
 
 	Size sensorSize = sensorFmt.size;
 
@@ -923,10 +848,21 @@ int PipelineHandlerISI::configure(Camera *camera, CameraConfiguration *c)
 
 	/* Apply format to the sensor and CSIS receiver. */
 	V4L2SubdeviceFormat format = camConfig->sensorFormat_;
-
-	int ret = data->setupFormats(&format);
+	int ret = data->sensor_->setFormat(&format);
 	if (ret)
 		return ret;
+
+	ret = data->csis_->setFormat(0, &format);
+	if (ret)
+		return ret;
+
+	/* Apply format to the formatter if present */
+	if (data->formatter_) {
+		ret = data->formatter_->setFormat(0, &format);
+
+		if (ret)
+			return ret;
+	}
 
 	/*
 	 * Now configure crossbar pads associated to the camera (that
@@ -1188,14 +1124,16 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 			continue;
 		}
 
-		unsigned int sensorSourcePadIx = 0;
+		unsigned int sensorSourcePadIdx = 0;
 		for (MediaPad *sensorPad : sensor->pads()) {
 			if (!(sensorPad->flags() & MEDIA_PAD_FL_SOURCE) || sensorPad->links().empty())
 				/*
 				* Count each sensor pad to enable the one
 				* currently used in the pipeline.
 				*/
-				sensorSourcePadIx++;
+				sensorSourcePadIdx++;
+			else
+				break;
 		}
 
 		/*
@@ -1212,7 +1150,7 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 		data->sensor_ = CameraSensorFactoryBase::create(sensor);
 		data->csis_ = std::make_unique<V4L2Subdevice>(csi);
 		data->xbarSink_ = sink;
-		data->sensorSourcePadIdx_ = sensorSourcePadIx;
+		data->sensorSourcePadIdx_ = sensorSourcePadIdx;
 		data->pipeOffset_ = numCameras * data->streams_.size();
 
 		LOG(ISI, Debug)

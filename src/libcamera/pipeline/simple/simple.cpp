@@ -427,13 +427,14 @@ private:
 		return static_cast<SimpleCameraData *>(camera->_d());
 	}
 
+	bool matchDevice(MediaDevice *media, const SimplePipelineInfo &info,
+			 DeviceEnumerator *enumerator);
+
 	std::vector<MediaEntity *> locateSensors(MediaDevice *media);
 	static int resetRoutingTable(V4L2Subdevice *subdev);
 
 	const MediaPad *acquirePipeline(SimpleCameraData *data);
 	void releasePipeline(SimpleCameraData *data);
-
-	bool matchMedia(DeviceEnumerator *enumerator, const SimplePipelineInfo *info, MediaDevice *media);
 
 	std::map<const MediaEntity *, EntityData> entities_;
 
@@ -1662,11 +1663,13 @@ int SimplePipelineHandler::resetRoutingTable(V4L2Subdevice *subdev)
 	return 0;
 }
 
-bool SimplePipelineHandler::matchMedia(DeviceEnumerator *enumerator, const SimplePipelineInfo *info, MediaDevice *media)
+bool SimplePipelineHandler::matchDevice(MediaDevice *media,
+					const SimplePipelineInfo &info,
+					DeviceEnumerator *enumerator)
 {
 	unsigned int numStreams = 1;
 
-	for (const auto &[name, streams] : info->converters) {
+	for (const auto &[name, streams] : info.converters) {
 		DeviceMatch converterMatch(name);
 		converter_ = acquireMediaDevice(enumerator, converterMatch);
 		if (converter_) {
@@ -1675,7 +1678,7 @@ bool SimplePipelineHandler::matchMedia(DeviceEnumerator *enumerator, const Simpl
 		}
 	}
 
-	swIspEnabled_ = info->swIspEnabled;
+	swIspEnabled_ = info.swIspEnabled;
 
 	/* Locate the sensors. */
 	std::vector<MediaEntity *> sensors = locateSensors(media);
@@ -1797,33 +1800,38 @@ bool SimplePipelineHandler::matchMedia(DeviceEnumerator *enumerator, const Simpl
 bool SimplePipelineHandler::match(DeviceEnumerator *enumerator)
 {
 	MediaDevice *media;
-	std::map<MediaDevice *, const SimplePipelineInfo *> mediaDevices;
 
 	for (const SimplePipelineInfo &inf : supportedDevices) {
-		LOG(SimplePipeline, Debug) << "check simple pipeline " << inf.driver;
 		DeviceMatch dm(inf.driver);
-
-		do {
-			media = acquireMediaDevice(enumerator, dm);
-			if (media) {
-				mediaDevices[media] = &inf;
-				LOG(SimplePipeline, Debug) << "found media " << media->deviceNode();
+		while ((media = acquireMediaDevice(enumerator, dm))) {
+			/*
+			 * If match succeeds, return true to let match() be
+			 * called again on a new instance of the pipeline
+			 * handler. Otherwise keep looping until we do
+			 * successfully match one (or run out).
+			 */
+			if (matchDevice(media, inf, enumerator)) {
+				LOG(SimplePipeline, Debug)
+					<< "Matched on device: "
+					<< media->deviceNode();
+				return true;
 			}
-		} while (media);
+
+			/*
+			 * \todo We need to clear the list of media devices
+			 * that we've already acquired in the event that we
+			 * fail to create a camera. This requires a rework of
+			 * DeviceEnumerator, or even how we create pipelines
+			 * handlers. This is because at the moment acquired
+			 * media devices are only released on pipeline handler
+			 * deconstruction, and if we release them any earlier
+			 * then DeviceEnumerator::search() will keep returning
+			 * the same media devices.
+			 */
+		}
 	}
 
-	bool matched = false;
-
-	for (auto it = mediaDevices.begin(); it != mediaDevices.end(); it++) {
-		media = it->first;
-		const SimplePipelineInfo *info = it->second;
-		LOG(SimplePipeline, Debug)
-			<< "call matchMedia for pipeline "
-			<< info->driver << ", media " << media->deviceNode();
-		matched |= matchMedia(enumerator, info, media);
-	}
-
-	return matched;
+	return false;
 }
 
 V4L2VideoDevice *SimplePipelineHandler::video(const MediaEntity *entity)
