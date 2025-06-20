@@ -110,7 +110,7 @@ std::string CameraMediaStream::toString() const
  */
 const CameraMediaStream *CameraInfo::stream(unsigned int id) const
 {
-	if (id >= STREAM_MAX) {
+	if (id >= StreamTypeMax) {
 		LOG(NxpNeoPipe, Error) << "Invalid stream " << id;
 		return nullptr;
 	}
@@ -330,11 +330,11 @@ int PipelineConfig::loadAutoDetect()
 		/* Copy of the global streams map - revert changes in case of error */
 		std::map<MediaPad *, unsigned int> streamMap(globalStreamMap);
 
-		for (auto stream : CameraInfo::kCameraStreams) {
+		for (unsigned int stream = 0; stream < StreamTypeMax; stream++) {
 			V4L2Subdevice::Stream sensorStream;
-			if (stream == CameraInfo::STREAM_INPUT0) {
+			if (stream == StreamTypeImage0) {
 				sensorStream = sensor->imageStream();
-			} else if (stream == CameraInfo::STREAM_INPUT1) {
+			} else if (stream == StreamTypeImage1) {
 				bool enable = cameraInfo.properties_->hdrStream;
 				if (!enable)
 					continue;
@@ -344,7 +344,7 @@ int PipelineConfig::loadAutoDetect()
 					continue;
 				}
 				sensorStream = sensor->auxiliaryStream().value();
-			} else if (stream == CameraInfo::STREAM_EDATA) {
+			} else if (stream == StreamTypeEData) {
 				bool enable = cameraInfo.properties_->eDataStream;
 				if (!enable)
 					continue;
@@ -748,10 +748,10 @@ int PipelineConfig::loadAutoDetectMultiCamera()
 	std::map<std::string, unsigned int> cameraXbarSink;
 	for (auto &[name, cameraInfo] : cameraMap_) {
 		const CameraMediaStream *cameraStream =
-			cameraInfo.stream(CameraInfo::STREAM_INPUT0);
+			cameraInfo.stream(StreamTypeImage0);
 		if (!cameraStream) {
 			LOG(NxpNeoPipe, Error)
-				<< "No input0 stream for camera " << name;
+				<< "No image0 stream for camera " << name;
 			return -EINVAL;
 		}
 

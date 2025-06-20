@@ -128,8 +128,8 @@ private:
 	void tryCompleteRequest(NxpNeoFrames::Info *info);
 
 	void isiInputBufferReady(NxpNeoFrames::Info *info);
-	void isiInput0BufferReady(FrameBuffer *buffer);
-	void isiInput1BufferReady(FrameBuffer *buffer);
+	void isiImage0BufferReady(FrameBuffer *buffer);
+	void isiImage1BufferReady(FrameBuffer *buffer);
 	void isiEmbeddedDataBufferReady(FrameBuffer *buffer);
 
 	void neoInput0BufferReady(FrameBuffer *buffer);
@@ -981,9 +981,9 @@ int NxpNeoCameraData::configure(CameraConfiguration *c)
 	V4L2DeviceFormat devFormatIr = {};
 
 	V4L2DeviceFormat &devFormatInput0 =
-		pipesDevFormats_[CameraInfo::STREAM_INPUT0];
+		pipesDevFormats_[StreamTypeImage0];
 	V4L2DeviceFormat &devFormatInput1 =
-		pipesDevFormats_[CameraInfo::STREAM_INPUT1];
+		pipesDevFormats_[StreamTypeImage1];
 
 	rawStreamOnly_ = ((config->size() == 1) &&
 			  ((*config)[0].stream() == &streamRaw_));
@@ -1081,7 +1081,7 @@ int NxpNeoCameraData::exportFrameBuffers(Stream *stream,
 	else if (stream == &streamIr_)
 		return neo_->ir_->exportBuffers(count, buffers);
 	else if (stream == &streamRaw_)
-		return pipes_[CameraInfo::STREAM_INPUT0]->exportBuffers(count, buffers);
+		return pipes_[StreamTypeImage0]->exportBuffers(count, buffers);
 
 	return -EINVAL;
 }
@@ -1114,14 +1114,14 @@ int NxpNeoCameraData::start([[maybe_unused]] const ControlList *controls)
 		goto error;
 
 	for (auto [stream, pipe] : pipes_) {
-		if (stream == CameraInfo::STREAM_INPUT0)
+		if (stream == StreamTypeImage0)
 			continue;
 		ret = pipes_[stream]->start();
 		if (ret)
 			goto error;
 	}
 
-	ret = pipes_[CameraInfo::STREAM_INPUT0]->start();
+	ret = pipes_[StreamTypeImage0]->start();
 	if (ret)
 		goto error;
 
@@ -1130,9 +1130,9 @@ int NxpNeoCameraData::start([[maybe_unused]] const ControlList *controls)
 error:
 	neo_->stop();
 
-	pipes_[CameraInfo::STREAM_INPUT0]->stop();
+	pipes_[StreamTypeImage0]->stop();
 	for (auto [stream, pipe] : pipes_) {
-		if (stream == CameraInfo::STREAM_INPUT0)
+		if (stream == StreamTypeImage0)
 			continue;
 		pipes_[stream]->stop();
 	}
@@ -1176,9 +1176,9 @@ void NxpNeoCameraData::stopDevice()
 
 	ipa_->stop();
 
-	ret = pipes_[CameraInfo::STREAM_INPUT0]->stop();
+	ret = pipes_[StreamTypeImage0]->stop();
 	for (auto [stream, pipe] : pipes_) {
-		if (stream == CameraInfo::STREAM_INPUT0)
+		if (stream == StreamTypeImage0)
 			continue;
 		ret |= pipes_[stream]->stop();
 	}
@@ -1211,11 +1211,11 @@ void NxpNeoCameraData::queuePendingRequests()
 		for (auto [stream, pipe] : pipes_) {
 			dev = pipe->output_.get();
 
-			if (stream == CameraInfo::STREAM_INPUT0) {
-				buffer = info->input0Buffer;
-			} else if (stream == CameraInfo::STREAM_INPUT1) {
-				buffer = info->input1Buffer;
-			} else if (stream == CameraInfo::STREAM_EDATA) {
+			if (stream == StreamTypeImage0) {
+				buffer = info->image0Buffer;
+			} else if (stream == StreamTypeImage1) {
+				buffer = info->image1Buffer;
+			} else if (stream == StreamTypeEData) {
 				buffer = info->eDataBuffer;
 			} else {
 				LOG(NxpNeoPipe, Error) << "Invalid stream " << stream;
@@ -1307,20 +1307,20 @@ int NxpNeoCameraData::init()
 	 * returned through the NEO main and IR outputs.
 	 */
 
-	if (!cameraInfo_->stream(CameraInfo::STREAM_INPUT0)) {
+	if (!cameraInfo_->stream(StreamTypeImage0)) {
 		LOG(NxpNeoPipe, Error)
-			<< "Mandatory stream input 0 is missing for " << cameraName();
+			<< "Mandatory stream image0 is missing for " << cameraName();
 		return -ENODEV;
 	}
 
 	const std::map<unsigned int, void (NxpNeoCameraData::*)(FrameBuffer *)> pipeReadyFuncs{
-		{ CameraInfo::STREAM_INPUT0, &NxpNeoCameraData::isiInput0BufferReady },
-		{ CameraInfo::STREAM_INPUT1, &NxpNeoCameraData::isiInput1BufferReady },
-		{ CameraInfo::STREAM_EDATA, &NxpNeoCameraData::isiEmbeddedDataBufferReady },
+		{ StreamTypeImage0, &NxpNeoCameraData::isiImage0BufferReady },
+		{ StreamTypeImage1, &NxpNeoCameraData::isiImage1BufferReady },
+		{ StreamTypeEData, &NxpNeoCameraData::isiEmbeddedDataBufferReady },
 	};
 
 	ISIDevice *isi = pipe()->isiDevice();
-	for (auto stream : CameraInfo::kCameraStreams) {
+	for (unsigned int stream = 0; stream < StreamTypeMax; stream++) {
 		const CameraMediaStream *cameraMediaStream = cameraInfo_->stream(stream);
 		if (!cameraMediaStream)
 			continue;
@@ -1506,7 +1506,7 @@ int NxpNeoCameraData::configureFrontEndFormat(V4L2SubdeviceFormat &sensorFormat,
 
 	/* Configure sensor internal streams (disabling may fail for immutable routes) */
 	if (sensor->auxiliaryStream().has_value()) {
-		bool enable = pipes_.count(CameraInfo::STREAM_INPUT1);
+		bool enable = pipes_.count(StreamTypeImage1);
 		ret = sensor->setAuxiliaryEnabled(enable);
 		if (ret && enable) {
 			LOG(NxpNeoPipe, Warning)
@@ -1517,7 +1517,7 @@ int NxpNeoCameraData::configureFrontEndFormat(V4L2SubdeviceFormat &sensorFormat,
 	}
 
 	if (sensor->embeddedDataStream().has_value()) {
-		bool enable = pipes_.count(CameraInfo::STREAM_EDATA);
+		bool enable = pipes_.count(StreamTypeEData);
 		ret = sensor->setEmbeddedDataEnabled(enable);
 		if (ret && enable) {
 			LOG(NxpNeoPipe, Warning)
@@ -1541,11 +1541,11 @@ int NxpNeoCameraData::configureFrontEndFormat(V4L2SubdeviceFormat &sensorFormat,
 			cameraInfoStream->streamLinks();
 
 		V4L2SubdeviceFormat format;
-		if (stream == CameraInfo::STREAM_INPUT0) {
+		if (stream == StreamTypeImage0) {
 			format = sensorFormat;
-		} else if (stream == CameraInfo::STREAM_INPUT1) {
+		} else if (stream == StreamTypeImage1) {
 			format = sensor->auxiliaryFormat();
-		} else if (stream == CameraInfo::STREAM_EDATA) {
+		} else if (stream == StreamTypeEData) {
 			format = sensor->embeddedDataFormat();
 		} else {
 			LOG(NxpNeoPipe, Error) << "Invalid stream " << stream;
@@ -1727,19 +1727,19 @@ int NxpNeoCameraData::allocateBuffers()
 	std::map<unsigned int, ISIPipe *>::iterator it;
 
 	unsigned int stream;
-	stream = CameraInfo::STREAM_INPUT0;
-	const std::vector<std::unique_ptr<FrameBuffer>> &input0Buffers =
+	stream = StreamTypeImage0;
+	const std::vector<std::unique_ptr<FrameBuffer>> &image0Buffers =
 		pipes_.count(stream) ? pipes_[stream]->buffers() : empty;
 
-	stream = CameraInfo::STREAM_INPUT1;
-	const std::vector<std::unique_ptr<FrameBuffer>> &input1Buffers =
+	stream = StreamTypeImage1;
+	const std::vector<std::unique_ptr<FrameBuffer>> &image1Buffers =
 		pipes_.count(stream) ? pipes_[stream]->buffers() : empty;
 
-	stream = CameraInfo::STREAM_EDATA;
+	stream = StreamTypeEData;
 	const std::vector<std::unique_ptr<FrameBuffer>> &eDataBuffers =
 		pipes_.count(stream) ? pipes_[stream]->buffers() : empty;
 
-	frameInfos_.init(input0Buffers, input1Buffers,
+	frameInfos_.init(image0Buffers, image1Buffers,
 			 eDataBuffers,
 			 neo_->paramsBuffers_, neo_->statsBuffers_,
 			 alternatedRawStream_);
@@ -1855,7 +1855,7 @@ int NxpNeoCameraData::configureFrontEndStream(
  */
 int NxpNeoCameraData::configureFrontEndLinks() const
 {
-	for (auto stream : CameraInfo::kCameraStreams) {
+	for (unsigned int stream = 0; stream < StreamTypeMax; stream++) {
 		const CameraMediaStream *cameraStream = cameraInfo_->stream(stream);
 		if (!cameraStream)
 			continue;
@@ -1977,18 +1977,18 @@ void NxpNeoCameraData::tryCompleteRequest(NxpNeoFrames::Info *info)
  */
 void NxpNeoCameraData::isiInputBufferReady(NxpNeoFrames::Info *info)
 {
-	if (info->input0Pending || info->input1Pending || info->eDataPending)
+	if (info->image0Pending || info->image1Pending || info->eDataPending)
 		return;
 
 	if (!rawStreamOnly_) {
 		std::map<uint32_t, uint32_t> bufferIds = {
 			{ ipa::nxpneo::TypeParams, info->paramsBuffer->cookie() },
-			{ ipa::nxpneo::TypeInput0, info->input0Buffer->cookie() },
+			{ ipa::nxpneo::TypeInput0, info->image0Buffer->cookie() },
 		};
 
-		if (info->input1Buffer) {
+		if (info->image1Buffer) {
 			bufferIds.insert(
-				{ ipa::nxpneo::TypeInput1, info->input1Buffer->cookie() });
+				{ ipa::nxpneo::TypeInput1, info->image1Buffer->cookie() });
 		}
 
 		if (info->eDataBuffer) {
@@ -2003,10 +2003,10 @@ void NxpNeoCameraData::isiInputBufferReady(NxpNeoFrames::Info *info)
 }
 
 /**
- * \brief Handle INPUT0 buffers availability at the ISI output
+ * \brief Handle IMAGE1 buffers availability at the ISI output
  * \param[in] buffer The completed buffer
  */
-void NxpNeoCameraData::isiInput0BufferReady(FrameBuffer *buffer)
+void NxpNeoCameraData::isiImage0BufferReady(FrameBuffer *buffer)
 {
 	NxpNeoFrames::Info *info = frameInfos_.find(buffer);
 	if (!info)
@@ -2022,7 +2022,7 @@ void NxpNeoCameraData::isiInput0BufferReady(FrameBuffer *buffer)
 	unsigned int seq = buffer->metadata().sequence;
 	if (seq != sequence_)
 		LOG(NxpNeoPipe, Warning)
-			<< "Input0 frame loss! expected " << sequence_
+			<< "Image0 frame loss! expected " << sequence_
 			<< " received " << seq;
 	sequence_ = seq + 1;
 
@@ -2038,15 +2038,15 @@ void NxpNeoCameraData::isiInput0BufferReady(FrameBuffer *buffer)
 	if (request->findBuffer(&streamRaw_) == buffer)
 		pipe()->completeBuffer(request, buffer);
 
-	info->input0Pending = false;
+	info->image0Pending = false;
 	isiInputBufferReady(info);
 }
 
 /**
- * \brief Handle INPUT1 buffers availability at the ISI output
+ * \brief Handle IMAGE1 buffers availability at the ISI output
  * \param[in] buffer The completed buffer
  */
-void NxpNeoCameraData::isiInput1BufferReady(FrameBuffer *buffer)
+void NxpNeoCameraData::isiImage1BufferReady(FrameBuffer *buffer)
 {
 	NxpNeoFrames::Info *info = frameInfos_.find(buffer);
 	if (!info)
@@ -2063,10 +2063,10 @@ void NxpNeoCameraData::isiInput1BufferReady(FrameBuffer *buffer)
 	if (request->findBuffer(&streamRaw_) == buffer)
 		pipe()->completeBuffer(request, buffer);
 
-	if (info->input0Pending)
+	if (info->image0Pending)
 		LOG(NxpNeoPipe, Warning) << "Out of order input frame receipt";
 
-	info->input1Pending = false;
+	info->image1Pending = false;
 	isiInputBufferReady(info);
 }
 
@@ -2239,9 +2239,9 @@ void NxpNeoCameraData::ipaParamsComputed(unsigned int id)
 	neo_->stats_->queueBuffer(info->statsBuffer);
 
 	/* Buffers coming from ISI pipes are already part of the request */
-	neo_->input0_->queueBuffer(info->input0Buffer);
-	if (pipes_.count(CameraInfo::STREAM_INPUT1))
-		neo_->input1_->queueBuffer(info->input1Buffer);
+	neo_->input0_->queueBuffer(info->image0Buffer);
+	if (pipes_.count(StreamTypeImage1))
+		neo_->input1_->queueBuffer(info->image1Buffer);
 }
 
 void NxpNeoCameraData::ipaMetadataReady(unsigned int id, const ControlList &metadata)

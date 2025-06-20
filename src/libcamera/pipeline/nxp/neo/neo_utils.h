@@ -61,6 +61,13 @@ struct CameraProperties {
 	std::optional<Orientation> orientation;
 };
 
+enum StreamType {
+	StreamTypeImage0 = 0,
+	StreamTypeImage1,
+	StreamTypeEData,
+	StreamTypeMax,
+};
+
 class CameraInfo
 {
 public:
@@ -71,16 +78,6 @@ public:
 	bool hasStream(unsigned int id) const { return stream(id); }
 
 	const CameraProperties &cameraProperties() const { return *properties_; }
-
-	enum {
-		STREAM_INPUT0 = 0,
-		STREAM_INPUT1,
-		STREAM_EDATA,
-		STREAM_MAX,
-	};
-	static constexpr std::array<unsigned int, STREAM_MAX> kCameraStreams = {
-		STREAM_INPUT0, STREAM_INPUT1, STREAM_EDATA
-	};
 
 private:
 	std::map<unsigned int, CameraMediaStream> streams_;
