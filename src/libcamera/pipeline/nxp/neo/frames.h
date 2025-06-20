@@ -35,16 +35,16 @@ public:
 		unsigned int id;
 		Request *request;
 
-		FrameBuffer *input0Buffer;
-		FrameBuffer *input1Buffer;
+		FrameBuffer *image0Buffer;
+		FrameBuffer *image1Buffer;
 		FrameBuffer *eDataBuffer;
 		FrameBuffer *paramsBuffer;
 		FrameBuffer *statsBuffer;
 
 		FrameBuffer *rawStreamBuffer;
 
-		bool input0Pending;
-		bool input1Pending;
+		bool image0Pending;
+		bool image1Pending;
 		bool eDataPending;
 
 		bool paramDequeued;
@@ -54,8 +54,8 @@ public:
 
 	NxpNeoFrames();
 
-	void init(const std::vector<std::unique_ptr<FrameBuffer>> &input0Buffers,
-		  const std::vector<std::unique_ptr<FrameBuffer>> &input1Buffers,
+	void init(const std::vector<std::unique_ptr<FrameBuffer>> &image0Buffers,
+		  const std::vector<std::unique_ptr<FrameBuffer>> &image1Buffers,
 		  const std::vector<std::unique_ptr<FrameBuffer>> &eDataBuffers,
 		  const std::vector<std::unique_ptr<FrameBuffer>> &paramsBuffers,
 		  const std::vector<std::unique_ptr<FrameBuffer>> &statsBuffers,
@@ -75,15 +75,15 @@ public:
 private:
 	FrameBuffer *allocBuffer(std::queue<FrameBuffer *> *queue);
 
-	std::queue<FrameBuffer *> availableInput0Buffers_;
-	std::queue<FrameBuffer *> availableInput1Buffers_;
+	std::queue<FrameBuffer *> availableImage0Buffers_;
+	std::queue<FrameBuffer *> availableImage1Buffers_;
 	std::queue<FrameBuffer *> availableEmbeddedDataBuffers_;
 	std::queue<FrameBuffer *> availableParamsBuffers_;
 	std::queue<FrameBuffer *> availableStatsBuffers_;
 
 	std::map<unsigned int, std::unique_ptr<Info>> frameInfo_;
 
-	bool hasInput1_ = false;
+	bool hasImage1_ = false;
 	bool hasEmbeddedData_ = false;
 	bool alternatedRawStreams_;
 };

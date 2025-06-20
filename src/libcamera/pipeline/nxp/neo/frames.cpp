@@ -25,20 +25,20 @@ NxpNeoFrames::NxpNeoFrames()
 {
 }
 
-void NxpNeoFrames::init(const std::vector<std::unique_ptr<FrameBuffer>> &input0Buffers,
-			const std::vector<std::unique_ptr<FrameBuffer>> &input1Buffers,
+void NxpNeoFrames::init(const std::vector<std::unique_ptr<FrameBuffer>> &image0Buffers,
+			const std::vector<std::unique_ptr<FrameBuffer>> &image1Buffers,
 			const std::vector<std::unique_ptr<FrameBuffer>> &eDataBuffers,
 			const std::vector<std::unique_ptr<FrameBuffer>> &paramsBuffers,
 			const std::vector<std::unique_ptr<FrameBuffer>> &statsBuffers,
 			bool alternatedRawStreams)
 {
-	for (const std::unique_ptr<FrameBuffer> &buffer : input0Buffers)
-		availableInput0Buffers_.push(buffer.get());
+	for (const std::unique_ptr<FrameBuffer> &buffer : image0Buffers)
+		availableImage0Buffers_.push(buffer.get());
 
-	hasInput1_ = !!input1Buffers.size();
-	if (hasInput1_) {
-		for (const std::unique_ptr<FrameBuffer> &buffer : input1Buffers)
-			availableInput1Buffers_.push(buffer.get());
+	hasImage1_ = !!image1Buffers.size();
+	if (hasImage1_) {
+		for (const std::unique_ptr<FrameBuffer> &buffer : image1Buffers)
+			availableImage1Buffers_.push(buffer.get());
 	}
 
 	hasEmbeddedData_ = !!eDataBuffers.size();
@@ -55,7 +55,7 @@ void NxpNeoFrames::init(const std::vector<std::unique_ptr<FrameBuffer>> &input0B
 
 	frameInfo_.clear();
 
-	alternatedRawStreams_ = hasInput1_ && alternatedRawStreams;
+	alternatedRawStreams_ = hasImage1_ && alternatedRawStreams;
 }
 
 int NxpNeoFrames::destroy(unsigned int id)
@@ -65,10 +65,10 @@ int NxpNeoFrames::destroy(unsigned int id)
 		return -ENOENT;
 
 	/* Return internal buffers for reuse. */
-	if (info->input0Buffer != info->rawStreamBuffer)
-		availableInput0Buffers_.push(info->input0Buffer);
-	if (info->input1Buffer && info->input1Buffer != info->rawStreamBuffer)
-		availableInput1Buffers_.push(info->input1Buffer);
+	if (info->image0Buffer != info->rawStreamBuffer)
+		availableImage0Buffers_.push(info->image0Buffer);
+	if (info->image1Buffer && info->image1Buffer != info->rawStreamBuffer)
+		availableImage1Buffers_.push(info->image1Buffer);
 	if (info->eDataBuffer)
 		availableEmbeddedDataBuffers_.push(info->eDataBuffer);
 	availableParamsBuffers_.push(info->paramsBuffer);
@@ -84,8 +84,8 @@ int NxpNeoFrames::destroy(unsigned int id)
 
 void NxpNeoFrames::clear()
 {
-	availableInput0Buffers_ = {};
-	availableInput1Buffers_ = {};
+	availableImage0Buffers_ = {};
+	availableImage1Buffers_ = {};
 	availableEmbeddedDataBuffers_ = {};
 	availableParamsBuffers_ = {};
 	availableStatsBuffers_ = {};
@@ -96,19 +96,19 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly,
 {
 	unsigned int id = request->sequence();
 
-	FrameBuffer *input0Buffer = nullptr;
-	FrameBuffer *input1Buffer = nullptr;
+	FrameBuffer *image0Buffer = nullptr;
+	FrameBuffer *image1Buffer = nullptr;
 	FrameBuffer *eDataBuffer = nullptr;
 	FrameBuffer *paramsBuffer = nullptr;
 	FrameBuffer *statsBuffer = nullptr;
 
-	if (availableInput0Buffers_.empty()) {
-		LOG(NxpNeoPipe, Warning) << "Input0 buffer underrun";
+	if (availableImage0Buffers_.empty()) {
+		LOG(NxpNeoPipe, Warning) << "Image0 buffer underrun";
 		return nullptr;
 	}
 
-	if (hasInput1_ && availableInput1Buffers_.empty()) {
-		LOG(NxpNeoPipe, Warning) << "Input1 buffer underrun";
+	if (hasImage1_ && availableImage1Buffers_.empty()) {
+		LOG(NxpNeoPipe, Warning) << "Image1 buffer underrun";
 		return nullptr;
 	}
 
@@ -134,14 +134,14 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly,
 		 */
 		bool evenId = (id % 2 == 0);
 		if (!alternatedRawStreams_ || evenId)
-			input0Buffer = rawStreamBuffer;
+			image0Buffer = rawStreamBuffer;
 		else
-			input1Buffer = rawStreamBuffer;
+			image1Buffer = rawStreamBuffer;
 	}
-	if (!input0Buffer)
-		input0Buffer = allocBuffer(&availableInput0Buffers_);
-	if (hasInput1_ && !input1Buffer)
-		input1Buffer = allocBuffer(&availableInput1Buffers_);
+	if (!image0Buffer)
+		image0Buffer = allocBuffer(&availableImage0Buffers_);
+	if (hasImage1_ && !image1Buffer)
+		image1Buffer = allocBuffer(&availableImage1Buffers_);
 	if (hasEmbeddedData_)
 		eDataBuffer = allocBuffer(&availableEmbeddedDataBuffers_);
 
@@ -154,14 +154,14 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly,
 
 	info->id = id;
 	info->request = request;
-	info->input0Buffer = input0Buffer;
-	info->input1Buffer = input1Buffer;
+	info->image0Buffer = image0Buffer;
+	info->image1Buffer = image1Buffer;
 	info->eDataBuffer = eDataBuffer;
 	info->paramsBuffer = paramsBuffer;
 	info->statsBuffer = statsBuffer;
 
-	info->input0Pending = true;
-	info->input1Pending = !!info->input1Buffer;
+	info->image0Pending = true;
+	info->image1Pending = !!info->image1Buffer;
 	info->eDataPending = !!info->eDataBuffer;
 
 	info->isRawOnly = rawOnly;
@@ -198,7 +198,7 @@ NxpNeoFrames::Info *NxpNeoFrames::find(FrameBuffer *buffer)
 			if (itBuffers.second == buffer)
 				return info;
 
-		if (info->input0Buffer == buffer || info->input1Buffer == buffer ||
+		if (info->image0Buffer == buffer || info->image1Buffer == buffer ||
 		    info->eDataBuffer == buffer ||
 		    info->paramsBuffer == buffer || info->statsBuffer == buffer)
 			return info;
