@@ -1102,6 +1102,10 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 		} else {
 			/* jump to next entity */
 			pad = formatter->pads()[0];
+
+			/* No links on pad implies missing CSI. */
+			if (pad->links().empty())
+				continue;
 		}
 
 		/* CSI */
