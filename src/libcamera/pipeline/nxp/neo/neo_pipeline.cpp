@@ -931,7 +931,12 @@ int PipelineHandlerNxpNeo::setupCameraGraphs()
 }
 
 /**
- * \brief Load the pipeline configuration file
+ * \brief Load the pipeline configuration
+ *
+ * Load the pipeline configuration that consists in:
+ *  - The parameters configured in the pipeline handler configuration file
+ *  - The pipeline graphs that are dynamically discovered from the media device
+ *
  * \return 0 on success, or a negative error code otherwise
  */
 int PipelineHandlerNxpNeo::loadPipelineConfig()
