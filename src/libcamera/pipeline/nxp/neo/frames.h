@@ -49,7 +49,6 @@ public:
 
 		bool paramDequeued;
 		bool metadataProcessed;
-		bool isRawOnly;
 	};
 
 	NxpNeoFrames();
@@ -59,12 +58,13 @@ public:
 		  const std::vector<std::unique_ptr<FrameBuffer>> &eDataBuffers,
 		  const std::vector<std::unique_ptr<FrameBuffer>> &paramsBuffers,
 		  const std::vector<std::unique_ptr<FrameBuffer>> &statsBuffers,
+		  bool rawStreamOnly,
 		  bool alternatedRawStreams);
 
 	int destroy(unsigned int id);
 	void clear();
 
-	Info *create(Request *request, bool rawOnly, FrameBuffer *rawStreamBuffer);
+	Info *create(Request *request, FrameBuffer *rawStreamBuffer);
 
 	Info *find(unsigned int id);
 	Info *find(FrameBuffer *buffer);
@@ -85,7 +85,8 @@ private:
 
 	bool hasImage1_ = false;
 	bool hasEmbeddedData_ = false;
-	bool alternatedRawStreams_;
+	bool rawStreamOnly_ = false;
+	bool alternatedRawStreams_ = false;
 };
 
 } /* namespace libcamera */

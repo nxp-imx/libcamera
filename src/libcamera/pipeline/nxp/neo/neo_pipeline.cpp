@@ -977,11 +977,8 @@ int NxpNeoCameraData::configure(CameraConfiguration *c)
 			return ret;
 	}
 
-	/*
-	 * ISP configuration
-	 */
 
-	/* Bypass ISP configuration in raw-only mode of operation */
+	/* ISP configuration - bypassed in raw-only mode of operation */
 	V4L2DeviceFormat devFormatFrame = {};
 	V4L2DeviceFormat devFormatIr = {};
 
@@ -1206,7 +1203,7 @@ void NxpNeoCameraData::queuePendingRequests()
 		Request *request = pendingRequests_.front();
 
 		reqRawBuffer = request->findBuffer(&streamRaw_);
-		info = frameInfos_.create(request, rawStreamOnly_, reqRawBuffer);
+		info = frameInfos_.create(request, reqRawBuffer);
 		if (!info)
 			break;
 
@@ -1747,6 +1744,7 @@ int NxpNeoCameraData::allocateBuffers()
 	frameInfos_.init(image0Buffers, image1Buffers,
 			 eDataBuffers,
 			 neo_->paramsBuffers_, neo_->statsBuffers_,
+			 rawStreamOnly_,
 			 alternatedRawStream_);
 
 	frameInfos_.bufferAvailable.connect(
