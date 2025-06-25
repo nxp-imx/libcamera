@@ -53,7 +53,7 @@ private:
 };
 
 struct CameraProperties {
-	bool hdrStream;
+	bool image1Stream;
 	bool eDataStream;
 	bool multiCamera;
 	std::optional<unsigned int> formatBpp;
