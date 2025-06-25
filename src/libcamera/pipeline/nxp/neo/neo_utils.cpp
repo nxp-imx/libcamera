@@ -31,11 +31,11 @@ namespace nxpneo {
  * \struct CameraProperties
  * \brief Camera properties defined by topology discovery or configuration file
  *
- * \var CameraProperties::hdrStream
- * \brief Camera has a dedicated stream enabled for HDR short capture
+ * \var CameraProperties::image1Stream
+ * \brief Camera has an image1 stream for HDR or RGBIr context switch mode
  *
  * \var CameraProperties::eDataStream
- * \brief Camera has a dedicated stream enabled for embedded data
+ * \brief Camera has a dedicated stream for embedded data
  *
  * \var CameraProperties::formatBpp
  * \brief Format bit-per-pixel filter value (optional)
@@ -335,12 +335,13 @@ int PipelineConfig::loadAutoDetect()
 			if (stream == StreamTypeImage0) {
 				sensorStream = sensor->imageStream();
 			} else if (stream == StreamTypeImage1) {
-				bool enable = cameraInfo.properties_->hdrStream;
+				bool enable = cameraInfo.properties_->image1Stream;
 				if (!enable)
 					continue;
 				if (!sensor->auxiliaryStream().has_value()) {
 					LOG(NxpNeoPipe, Warning)
-						<< "Sensor has no auxiliary stream";
+						<< "Sensor has no auxiliary stream, image1 disabled";
+					cameraInfo.properties_->image1Stream = false;
 					continue;
 				}
 				sensorStream = sensor->auxiliaryStream().value();
@@ -350,7 +351,8 @@ int PipelineConfig::loadAutoDetect()
 					continue;
 				if (!sensor->embeddedDataStream().has_value()) {
 					LOG(NxpNeoPipe, Warning)
-						<< "Sensor has no embedded data stream";
+						<< "Sensor has no embedded data stream, edata disabled";
+					cameraInfo.properties_->eDataStream = false;
 					continue;
 				}
 				sensorStream = sensor->embeddedDataStream().value();
@@ -818,8 +820,8 @@ int PipelineConfig::parseCameras(const YamlObject &cameras)
 		for (const auto &streamObj : streamsObj.asList()) {
 			std::string stream =
 				streamObj.get<std::string>().value_or("");
-			if (stream == "hdr")
-				properties.hdrStream = true;
+			if (stream == "image1")
+				properties.image1Stream = true;
 			else if (stream == "edata")
 				properties.eDataStream = true;
 		}
@@ -842,7 +844,7 @@ int PipelineConfig::parseCameras(const YamlObject &cameras)
 		LOG(NxpNeoPipe, Debug)
 			<< "Camera entry model [" << model
 			<< "] entity [" << entity
-			<< "] streams hdr " << properties.hdrStream
+			<< "] streams image1 " << properties.image1Stream
 			<< " edata " << properties.eDataStream;
 
 		if (!model.length() && !entity.length()) {
