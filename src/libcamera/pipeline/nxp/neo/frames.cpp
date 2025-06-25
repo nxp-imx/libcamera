@@ -30,6 +30,7 @@ void NxpNeoFrames::init(const std::vector<std::unique_ptr<FrameBuffer>> &image0B
 			const std::vector<std::unique_ptr<FrameBuffer>> &eDataBuffers,
 			const std::vector<std::unique_ptr<FrameBuffer>> &paramsBuffers,
 			const std::vector<std::unique_ptr<FrameBuffer>> &statsBuffers,
+			bool rawStreamOnly,
 			bool alternatedRawStreams)
 {
 	for (const std::unique_ptr<FrameBuffer> &buffer : image0Buffers)
@@ -55,6 +56,7 @@ void NxpNeoFrames::init(const std::vector<std::unique_ptr<FrameBuffer>> &image0B
 
 	frameInfo_.clear();
 
+	rawStreamOnly_ = rawStreamOnly;
 	alternatedRawStreams_ = hasImage1_ && alternatedRawStreams;
 }
 
@@ -91,7 +93,7 @@ void NxpNeoFrames::clear()
 	availableStatsBuffers_ = {};
 }
 
-NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly,
+NxpNeoFrames::Info *NxpNeoFrames::create(Request *request,
 					 FrameBuffer *rawStreamBuffer)
 {
 	unsigned int id = request->sequence();
@@ -164,11 +166,10 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request, bool rawOnly,
 	info->image1Pending = !!info->image1Buffer;
 	info->eDataPending = !!info->eDataBuffer;
 
-	info->isRawOnly = rawOnly;
 	info->rawStreamBuffer = rawStreamBuffer;
 
 	/* ISP and IPA are bypassed in raw-only */
-	bool doneStatus = rawOnly ? true : false;
+	bool doneStatus = rawStreamOnly_ ? true : false;
 	info->paramDequeued = doneStatus;
 	info->metadataProcessed = doneStatus;
 
