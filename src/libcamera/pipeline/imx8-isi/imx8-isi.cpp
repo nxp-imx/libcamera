@@ -694,7 +694,7 @@ StreamConfiguration PipelineHandlerISI::generateYUVConfiguration(Camera *camera,
 	StreamConfiguration cfg(formats);
 	cfg.pixelFormat = pixelFormat;
 	cfg.size = sensorSize;
-	cfg.bufferCount = 5;
+	cfg.bufferCount = 8;
 
 	return cfg;
 }
@@ -762,7 +762,7 @@ StreamConfiguration PipelineHandlerISI::generateRawConfiguration(Camera *camera)
 	StreamConfiguration cfg(formats);
 	cfg.size = sensor->resolution();
 	cfg.pixelFormat = pixelFormat;
-	cfg.bufferCount = 5;
+	cfg.bufferCount = 8;
 
 	return cfg;
 }
