@@ -155,7 +155,7 @@ void BlackLevelCorrection::prepare(IPAContext &context,
 	 * When OBWB2 has not been configured by AWB, set some default gains.
 	 * Unitary gain in U8.8 format is configured as default (no AWB).
 	 */
-	if (!frameContext.awb.colorGainsSet) {
+	if (!frameContext.awb.colorGainsSet[NEO_OBWB_MERGE_PATH]) {
 		uint16_t gain = (1 << 8);
 		params->regs.obwb[NEO_OBWB_MERGE_PATH].r_ctrl_gain = gain;
 		params->regs.obwb[NEO_OBWB_MERGE_PATH].gr_ctrl_gain = gain;
