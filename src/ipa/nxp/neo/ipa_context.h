@@ -110,7 +110,8 @@ struct IPAFrameContext : public FrameContext {
 		RGB<double> gains;
 		unsigned int temperatureK;
 		bool autoEnabled;
-		bool colorGainsSet;
+		/* Set of WB enabled flags for the 3 OBWB blocks */
+		std::array<bool, 3> colorGainsSet;
 	} awb;
 
 	struct {

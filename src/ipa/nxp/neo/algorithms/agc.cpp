@@ -385,9 +385,10 @@ void Agc::process(IPAContext &context, [[maybe_unused]] const uint32_t frame,
 
 	Histogram hist = parseStatistics(stats);
 	auto &awb = context.activeState.awb;
+	std::array<bool, 3> &awbEnabled = frameContext.awb.colorGainsSet;
 
 	/* If the AWB algorithm is disabled, use 1.0 for the gains. */
-	if (frameContext.awb.colorGainsSet)
+	if (std::find(awbEnabled.begin(), awbEnabled.end(), true) != awbEnabled.end())
 		gains_ = awb.autoEnabled ? awb.gains.automatic : awb.gains.manual;
 	else
 		gains_ = RGB<double>{ 1.0 };

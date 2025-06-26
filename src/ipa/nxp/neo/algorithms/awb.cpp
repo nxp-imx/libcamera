@@ -38,15 +38,51 @@ namespace ipa::nxpneo::algorithms {
  * Reference: Lam, Edmund & Fung, George. (2008). Automatic White Balancing in
  * Digital Photography. 10.1201/9781420054538.ch10.
  *
- * This algorithm is using the OBWB2 (merge path) unit to program the WB gains.
- * Note that the gains for the OBWB0/1 are set by the ISP driver to adjust
- * the required pixel depth for the input0 and input1 paths of the ISP.
+ * AWB correction is typically applied in the OBWB2 block which is the default
+ * value. However, there is the option to specify in the calibration file that
+ * AWB correction should be moved to OBWB0/1 instead.
+ * AWB may share usage of the OBWB blocks with BLC, AWB configuring the
+ * gains and BLC configuring the offsets. Thus, AWB also configures default offsets
+ * to zero in the OBWB blocks if they were not configured beforehand by BLC.
+ *
+ * Relevant keys in the AWB section of the calibration file:
+ * obwb-blocks: the OBWB blocks where AWB gains should apply - optional
+ *              valid values: { "obwb0/1", "obwb2"}
+ *              default value: "obwb2"
  */
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoAwb)
 
 Awb::Awb()
+	: enabled_(false), obwbs_(kObwbMap.at(kDefaultObwb))
 {
+}
+
+/**
+ * \copydoc libcamera::ipa::Algorithm::init
+ */
+int Awb::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData)
+{
+	/* Get the OBWB block name from tuning file. */
+	const std::string &obwb_name =
+		tuningData["obwb-blocks"].get<std::string>().value_or(kDefaultObwb);
+
+	/* Get the OBWB blocks where AWB gains should apply. */
+	auto it = kObwbMap.find(obwb_name);
+	if (it != kObwbMap.end()) {
+		obwbs_ = it->second;
+		LOG(NxpNeoAlgoAwb, Debug) << "AWB gains apply in " << it->first;
+	} else {
+		LOG(NxpNeoAlgoAwb, Warning)
+			<< "AWB gains are not applied! Invalid \"" << obwb_name
+			<< "\" name from tuning file, should be \"obwb0/1\" or \"obwb2\"";
+		enabled_ = false;
+		return 0;
+	}
+
+	enabled_ = true;
+
+	return 0;
 }
 
 /**
@@ -55,6 +91,9 @@ Awb::Awb()
 int Awb::configure(IPAContext &context,
 		   const IPACameraSensorInfo &configInfo)
 {
+	if (!enabled_)
+		return 0;
+
 	context.activeState.awb.gains.manual = RGB<double>{ 1.0 };
 	context.activeState.awb.gains.automatic = RGB<double>{ 1.0 };
 	context.activeState.awb.autoEnabled = true;
@@ -79,6 +118,9 @@ void Awb::queueRequest(IPAContext &context,
 		       IPAFrameContext &frameContext,
 		       const ControlList &controls)
 {
+	if (!enabled_)
+		return;
+
 	auto &awb = context.activeState.awb;
 
 	const auto &awbEnable = controls.get(controls::AwbEnable);
@@ -125,6 +167,9 @@ constexpr uint16_t Awb::gainDouble2Param(double gain)
 void Awb::prepare(IPAContext &context, const uint32_t frame,
 		  IPAFrameContext &frameContext, neoisp_meta_params_s *params)
 {
+	if (!enabled_)
+		return;
+
 	/*
 	 * This is the latest time we can read the active state. This is the
 	 * most up-to-date automatic values we can read.
@@ -132,31 +177,43 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 	if (frameContext.awb.autoEnabled)
 		frameContext.awb.gains = context.activeState.awb.gains.automatic;
 
-	/* Configure OB_WB */
-	/* size of pixel components: set to default value */
-	params->regs.obwb[NEO_OBWB_MERGE_PATH].ctrl_obpp = NEO_OBWB_OBPP_20BPP;
+	for (const uint8_t &obwb : obwbs_) {
+		int obpp;
+		if (obwb == 0) {
+			params->features_cfg.obwb0_cfg = 1;
+			obpp = NEO_OBWB_OBPP_20BPP;
+		} else if (obwb == 1) {
+			params->features_cfg.obwb1_cfg = 1;
+			obpp = NEO_OBWB_OBPP_16BPP;
+		} else if (obwb == 2) {
+			params->features_cfg.obwb2_cfg = 1;
+			obpp = NEO_OBWB_OBPP_20BPP;
+		} else {
+			LOG(NxpNeoAlgoAwb, Warning) << "Invalid OBWB" << +obwb << " block,";
+			continue;
+		}
+		params->regs.obwb[obwb].ctrl_obpp = obpp;
+		params->regs.obwb[obwb].r_ctrl_gain =
+			gainDouble2Param(frameContext.awb.gains.r());
+		params->regs.obwb[obwb].gr_ctrl_gain =
+			gainDouble2Param(frameContext.awb.gains.g());
+		params->regs.obwb[obwb].gb_ctrl_gain =
+			gainDouble2Param(frameContext.awb.gains.g());
+		params->regs.obwb[obwb].b_ctrl_gain =
+			gainDouble2Param(frameContext.awb.gains.b());
 
-	/* Update the WB gains. */
-	params->features_cfg.obwb2_cfg = 1;
-	params->regs.obwb[NEO_OBWB_MERGE_PATH].r_ctrl_gain =
-		gainDouble2Param(frameContext.awb.gains.r());
-	params->regs.obwb[NEO_OBWB_MERGE_PATH].gr_ctrl_gain =
-		gainDouble2Param(frameContext.awb.gains.g());
-	params->regs.obwb[NEO_OBWB_MERGE_PATH].gb_ctrl_gain =
-		gainDouble2Param(frameContext.awb.gains.g());
-	params->regs.obwb[NEO_OBWB_MERGE_PATH].b_ctrl_gain =
-		gainDouble2Param(frameContext.awb.gains.b());
-	frameContext.awb.colorGainsSet = true;
+		frameContext.awb.colorGainsSet[obwb] = true;
 
-	/*
-	 * When OBWB offsets are not configured by BLC, set some default offsets.
-	 * Zero offset values are configured as default (no BLC).
-	 */
-	if (!frameContext.blc.colorOffsetsSet) {
-		params->regs.obwb[NEO_OBWB_MERGE_PATH].r_ctrl_offset = 0;
-		params->regs.obwb[NEO_OBWB_MERGE_PATH].gr_ctrl_offset = 0;
-		params->regs.obwb[NEO_OBWB_MERGE_PATH].gb_ctrl_offset = 0;
-		params->regs.obwb[NEO_OBWB_MERGE_PATH].b_ctrl_offset = 0;
+		/*
+		 * When OBWB offsets are not configured by BLC, set some default offsets.
+		 * Zero offset values are configured as default (no BLC).
+		 */
+		if (!frameContext.blc.colorOffsetsSet) {
+			params->regs.obwb[obwb].r_ctrl_offset = 0;
+			params->regs.obwb[obwb].gr_ctrl_offset = 0;
+			params->regs.obwb[obwb].gb_ctrl_offset = 0;
+			params->regs.obwb[obwb].b_ctrl_offset = 0;
+		}
 	}
 
 	/* If we have already set the CTEMP measurement parameters, return. */
@@ -307,6 +364,9 @@ void Awb::process(IPAContext &context,
 		  const neoisp_meta_stats_s *stats,
 		  ControlList &metadata)
 {
+	if (!enabled_)
+		return;
+
 	IPAActiveState &activeState = context.activeState;
 
 	generateBlocks(stats);
