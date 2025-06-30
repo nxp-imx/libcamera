@@ -3,7 +3,6 @@
 subdir('data')
 
 libcamera_internal_sources += files([
-    'frames.cpp',
     'isi_device.cpp',
     'neo_device.cpp',
     'neo_pipeline.cpp',
