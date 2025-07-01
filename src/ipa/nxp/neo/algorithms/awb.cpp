@@ -208,7 +208,7 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 		 * When OBWB offsets are not configured by BLC, set some default offsets.
 		 * Zero offset values are configured as default (no BLC).
 		 */
-		if (!frameContext.blc.colorOffsetsSet) {
+		if (!frameContext.blc.colorOffsetsSet[obwb]) {
 			params->regs.obwb[obwb].r_ctrl_offset = 0;
 			params->regs.obwb[obwb].gr_ctrl_offset = 0;
 			params->regs.obwb[obwb].gb_ctrl_offset = 0;
