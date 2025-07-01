@@ -42,14 +42,6 @@ struct IPASessionConfiguration {
 	} awb;
 
 	struct {
-		/* BLC offsets applicable to the current driver mode */
-		uint16_t offsetRed_;
-		uint16_t offsetGreenR_;
-		uint16_t offsetGreenB_;
-		uint16_t offsetBlue_;
-	} blc;
-
-	struct {
 		utils::Duration minExposureTime;
 		utils::Duration maxExposureTime;
 		double minAnalogueGain;
@@ -115,7 +107,8 @@ struct IPAFrameContext : public FrameContext {
 	} awb;
 
 	struct {
-		bool colorOffsetsSet;
+		/* Set of BLC enabled flags for the 3 OBWB blocks */
+		std::array<bool, 3> colorOffsetsSet;
 	} blc;
 
 	struct {
