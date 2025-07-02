@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * Based on rkisp1.mojom
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  */
 
 /*
@@ -37,12 +37,15 @@ struct SensorConfig {
 };
 
 /* Buffer types used as key in buffersId maps */
-enum ISPBufferType {
-	TypeInput0,
-	TypeInput1,
-	TypeEData,
-	TypeParams,
-	TypeStats,
+enum BufferType {
+	BufferTypeImage0,
+	BufferTypeImage1,
+	BufferTypeEData,
+	BufferTypeParams,
+	BufferTypeStats,
+	BufferTypeFrame,
+	BufferTypeIr,
+	BufferTypeMax,
 };
 
 interface IPANxpNeoInterface {
