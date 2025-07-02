@@ -368,7 +368,7 @@ void IPANxpNeo::computeParams(const uint32_t frame,
 	 * Look for metadata availability, either from the camera embedded data
 	 * stream or from the pixel data top lines.
 	 */
-	auto eDataIt = bufferIds.find(TypeEData);
+	auto eDataIt = bufferIds.find(BufferTypeEData);
 	unsigned int eDataBufferId =
 		eDataIt != bufferIds.end() ? eDataIt->second : 0;
 	if (eDataBufferId && mappedBuffers_.count(eDataBufferId)) {
@@ -377,7 +377,7 @@ void IPANxpNeo::computeParams(const uint32_t frame,
 		metaData = plane.data();
 		metaSize = plane.size_bytes();
 	} else {
-		auto input0It = bufferIds.find(TypeInput0);
+		auto input0It = bufferIds.find(BufferTypeImage0);
 		unsigned int rawBufferId =
 			input0It != bufferIds.end() ? input0It->second : 0;
 		if (rawBufferId && mappedBuffers_.count(rawBufferId)) {
@@ -401,7 +401,7 @@ void IPANxpNeo::computeParams(const uint32_t frame,
 	}
 
 	/* Prepare parameters buffer. */
-	auto paramsIter = bufferIds.find(TypeParams);
+	auto paramsIter = bufferIds.find(BufferTypeParams);
 	unsigned int paramsBufferId =
 		paramsIter != bufferIds.end() ? paramsIter->second : 0;
 	ASSERT(mappedBuffers_.count(paramsBufferId));
@@ -426,7 +426,7 @@ void IPANxpNeo::processStats(const uint32_t frame,
 
 	const neoisp_meta_stats_s *stats;
 
-	auto statsIter = bufferIds.find(TypeStats);
+	auto statsIter = bufferIds.find(BufferTypeStats);
 	unsigned int statsBufferId =
 		statsIter != bufferIds.end() ? statsIter->second : 0;
 	ASSERT(mappedBuffers_.count(statsBufferId));
