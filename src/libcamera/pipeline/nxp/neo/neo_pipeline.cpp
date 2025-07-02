@@ -2255,18 +2255,18 @@ void NxpNeoCameraData::isiInputBufferReady(NxpNeoFrames::Info *info)
 
 	if (!rawStreamOnly_) {
 		std::map<uint32_t, uint32_t> bufferIds = {
-			{ ipa::nxpneo::TypeParams, info->paramsBuffer->cookie() },
-			{ ipa::nxpneo::TypeInput0, info->image0Buffer->cookie() },
+			{ ipa::nxpneo::BufferTypeParams, info->paramsBuffer->cookie() },
+			{ ipa::nxpneo::BufferTypeImage0, info->image0Buffer->cookie() },
 		};
 
 		if (info->image1Buffer) {
 			bufferIds.insert(
-				{ ipa::nxpneo::TypeInput1, info->image1Buffer->cookie() });
+				{ ipa::nxpneo::BufferTypeImage1, info->image1Buffer->cookie() });
 		}
 
 		if (info->eDataBuffer) {
 			bufferIds.insert(
-				{ ipa::nxpneo::TypeEData, info->eDataBuffer->cookie() });
+				{ ipa::nxpneo::BufferTypeEData, info->eDataBuffer->cookie() });
 		}
 
 		ipa_->computeParams(info->id, bufferIds);
@@ -2438,7 +2438,7 @@ void NxpNeoCameraData::neoStatsBufferReady(FrameBuffer *buffer)
 	}
 
 	std::map<uint32_t, uint32_t> bufferIds = {
-		{ ipa::nxpneo::TypeStats, info->statsBuffer->cookie() },
+		{ ipa::nxpneo::BufferTypeStats, info->statsBuffer->cookie() },
 	};
 
 	ipa_->processStats(info->id, bufferIds,
