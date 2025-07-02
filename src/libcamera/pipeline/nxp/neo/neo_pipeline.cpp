@@ -199,9 +199,11 @@ private:
 	void neoStatsBufferReady(FrameBuffer *buffer);
 	void frameStart(uint32_t sequence);
 
-	void ipaParamsComputed(unsigned int id);
-	void ipaMetadataReady(unsigned int id, const ControlList &metadata);
-	void ipaSetSensorControls(unsigned int id, const ControlList &sensorControls);
+	void ipaParamsComputed(unsigned int id, ipa::nxpneo::IPAContextType context);
+	void ipaMetadataReady(unsigned int id, ipa::nxpneo::IPAContextType context,
+			      const ControlList &metadata);
+	void ipaSetSensorControls(unsigned int id, ipa::nxpneo::IPAContextType context,
+				  const ControlList &sensorControls);
 
 	std::unique_ptr<CameraSensor> sensor_;
 	std::unique_ptr<NeoDevice> neo_;
@@ -1333,7 +1335,8 @@ int NxpNeoCameraData::configure(CameraConfiguration *c)
 	configInfo.sensorControls = sensor_->controls();
 	configInfo.sensorInfo = sensorInfo;
 
-	ret = ipa_->configure(configInfo, streamConfig, &ipaControls_);
+	ret = ipa_->configure(configInfo, streamConfig,
+			      ipa::nxpneo::IPAModeTypeStandard, &ipaControls_);
 	if (ret) {
 		LOG(NxpNeoPipe, Error) << "Failed to configure IPA: "
 				       << strerror(-ret);
@@ -2255,21 +2258,21 @@ void NxpNeoCameraData::isiInputBufferReady(NxpNeoFrames::Info *info)
 
 	if (!rawStreamOnly_) {
 		std::map<uint32_t, uint32_t> bufferIds = {
-			{ ipa::nxpneo::BufferTypeParams, info->paramsBuffer->cookie() },
-			{ ipa::nxpneo::BufferTypeImage0, info->image0Buffer->cookie() },
+			{ ipa::nxpneo::IPABufferTypeParams, info->paramsBuffer->cookie() },
+			{ ipa::nxpneo::IPABufferTypeImage0, info->image0Buffer->cookie() },
 		};
 
 		if (info->image1Buffer) {
 			bufferIds.insert(
-				{ ipa::nxpneo::BufferTypeImage1, info->image1Buffer->cookie() });
+				{ ipa::nxpneo::IPABufferTypeImage1, info->image1Buffer->cookie() });
 		}
 
 		if (info->eDataBuffer) {
 			bufferIds.insert(
-				{ ipa::nxpneo::BufferTypeEData, info->eDataBuffer->cookie() });
+				{ ipa::nxpneo::IPABufferTypeEData, info->eDataBuffer->cookie() });
 		}
 
-		ipa_->computeParams(info->id, bufferIds);
+		ipa_->computeParams(info->id, ipa::nxpneo::IPAContextTypeRgb, bufferIds);
 	} else {
 		tryCompleteRequest(info);
 	}
@@ -2438,10 +2441,10 @@ void NxpNeoCameraData::neoStatsBufferReady(FrameBuffer *buffer)
 	}
 
 	std::map<uint32_t, uint32_t> bufferIds = {
-		{ ipa::nxpneo::BufferTypeStats, info->statsBuffer->cookie() },
+		{ ipa::nxpneo::IPABufferTypeStats, info->statsBuffer->cookie() },
 	};
 
-	ipa_->processStats(info->id, bufferIds,
+	ipa_->processStats(info->id, ipa::nxpneo::IPAContextTypeRgb, bufferIds,
 			   delayedCtrls_->get(buffer->metadata().sequence));
 
 	tryCompleteRequest(info);
@@ -2489,7 +2492,8 @@ void NxpNeoCameraData::frameStart(uint32_t sequence)
 				*testPatternMode);
 }
 
-void NxpNeoCameraData::ipaParamsComputed(unsigned int id)
+void NxpNeoCameraData::ipaParamsComputed(unsigned int id,
+					 [[maybe_unused]] ipa::nxpneo::IPAContextType context)
 {
 	NxpNeoFrames::Info *info = frameInfos_.find(id);
 	if (!info)
@@ -2517,7 +2521,9 @@ void NxpNeoCameraData::ipaParamsComputed(unsigned int id)
 		neo_->input1_->queueBuffer(info->image1Buffer);
 }
 
-void NxpNeoCameraData::ipaMetadataReady(unsigned int id, const ControlList &metadata)
+void NxpNeoCameraData::ipaMetadataReady(unsigned int id,
+					[[maybe_unused]] ipa::nxpneo::IPAContextType context,
+					const ControlList &metadata)
 {
 	NxpNeoFrames::Info *info = frameInfos_.find(id);
 	if (!info)
@@ -2531,6 +2537,7 @@ void NxpNeoCameraData::ipaMetadataReady(unsigned int id, const ControlList &meta
 }
 
 void NxpNeoCameraData::ipaSetSensorControls([[maybe_unused]] unsigned int id,
+					    [[maybe_unused]] ipa::nxpneo::IPAContextType context,
 					    const ControlList &sensorControls)
 {
 	delayedCtrls_->push(sensorControls);
