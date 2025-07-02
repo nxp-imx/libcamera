@@ -36,16 +36,33 @@ struct SensorConfig {
 	bool rgbIr;
 };
 
+
+/*
+ * Those enums are mirrored in neo pipeline handler definitions in order to keep
+ * both interfaces self-contained though keeping trivial enums conversion.
+ */
+
 /* Buffer types used as key in buffersId maps */
-enum BufferType {
-	BufferTypeImage0,
-	BufferTypeImage1,
-	BufferTypeEData,
-	BufferTypeParams,
-	BufferTypeStats,
-	BufferTypeFrame,
-	BufferTypeIr,
-	BufferTypeMax,
+enum IPABufferType {
+	IPABufferTypeImage0,
+	IPABufferTypeImage1,
+	IPABufferTypeEData,
+	IPABufferTypeParams,
+	IPABufferTypeStats,
+	IPABufferTypeFrame,
+	IPABufferTypeIr,
+};
+
+enum IPAContextType {
+	IPAContextTypeRgb,
+	IPAContextTypeIr,
+};
+
+enum IPAModeType {
+	IPAModeTypeStandard,
+	IPAModeTypeHdrMerge,
+	IPAModeTypeRgbIr,
+	IPAModeTypeRgbIrDual,
 };
 
 interface IPANxpNeoInterface {
@@ -57,20 +74,21 @@ interface IPANxpNeoInterface {
 	stop();
 
 	configure(IPAConfigInfo configInfo,
-		  map<uint32, libcamera.IPAStream> streamConfig)
+		  map<uint32, libcamera.IPAStream> streamConfig,
+		  IPAModeType mode)
 		=> (int32 ret, libcamera.ControlInfoMap ipaControls);
 
 	mapBuffers(array<libcamera.IPABuffer> buffers);
 	unmapBuffers(array<uint32> ids);
 
 	[async] queueRequest(uint32 frame, libcamera.ControlList reqControls);
-	[async] computeParams(uint32 frame, map<uint32_t, uint32_t> bufferIds);
-	[async] processStats(uint32 frame, map<uint32_t, uint32_t> bufferIds,
+	[async] computeParams(uint32 frame, IPAContextType context, map<uint32, uint32> bufferIds);
+	[async] processStats(uint32 frame, IPAContextType context, map<uint32, uint32> bufferIds,
 			     libcamera.ControlList sensorControls);
 };
 
 interface IPANxpNeoEventInterface {
-	paramsComputed(uint32 frame);
-	setSensorControls(uint32 frame, libcamera.ControlList sensorControls);
-	metadataReady(uint32 frame, libcamera.ControlList metadata);
+	paramsComputed(uint32 frame, IPAContextType context);
+	setSensorControls(uint32 frame, IPAContextType context, libcamera.ControlList sensorControls);
+	metadataReady(uint32 frame, IPAContextType context, libcamera.ControlList metadata);
 };
