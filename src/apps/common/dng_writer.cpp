@@ -517,7 +517,161 @@ const std::map<PixelFormat, FormatInfo> formatInfo = {
 	} },
 };
 
+void packScanlineRaw10MsbAligned(void *output, const void *input, unsigned int width)
+{
+	const uint8_t *in = static_cast<const uint8_t *>(input);
+	uint8_t *out = static_cast<uint8_t *>(output);
+
+	for (unsigned int i = 0; i < width; i += 4) {
+		*out++ = in[1];
+		*out++ = (in[0] & 0xc0) | in[3] >> 2;
+		*out++ = in[3] << 6 | (in[2] & 0xc0) >> 2 | in[5] >> 4;
+		*out++ = in[5] << 4 | (in[4] & 0xc0) >> 4 | in[7] >> 6;
+		*out++ = in[7] << 2 | (in[6] & 0xc0) >> 6;
+		in += 8;
+	}
+}
+
+void packScanlineRaw12MsbAligned(void *output, const void *input, unsigned int width)
+{
+	const uint8_t *in = static_cast<const uint8_t *>(input);
+	uint8_t *out = static_cast<uint8_t *>(output);
+
+	for (unsigned int i = 0; i < width; i += 2) {
+		*out++ = in[1];
+		*out++ = (in[0] & 0xf0) | in[3] >> 4;
+		*out++ = in[3] << 4 | (in[2] & 0xf0) >> 4;
+		in += 4;
+	}
+}
+
+/* Thumbnail function for raw data with each pixel aligned to 16bit. */
+void thumbScanlineRawMsbAligned([[maybe_unused]] const FormatInfo &info,
+				void *output, const void *input,
+				unsigned int width, unsigned int stride)
+{
+	const uint16_t *in = static_cast<const uint16_t *>(input);
+	const uint16_t *in2 = static_cast<const uint16_t *>(input) + stride / 2;
+	uint8_t *out = static_cast<uint8_t *>(output);
+
+	/* Shift down to 8. */
+	unsigned int shift = 8;
+
+	/* Simple averaging that produces greyscale RGB values. */
+	for (unsigned int x = 0; x < width; x++) {
+		uint16_t value = (le16toh(in[0]) + le16toh(in[1]) +
+				  le16toh(in2[0]) + le16toh(in2[1])) >> 2;
+		value = value >> shift;
+		*out++ = value;
+		*out++ = value;
+		*out++ = value;
+		in += 16;
+		in2 += 16;
+	}
+}
+
+const std::map<PixelFormat, FormatInfo> formatInfoMsbAligned = {
+	{ formats::SBGGR8, {
+		.bitsPerSample = 8,
+		.pattern = { CFAPatternBlue, CFAPatternGreen, CFAPatternGreen, CFAPatternRed },
+		.packScanline = packScanlineRaw8,
+		.thumbScanline = thumbScanlineRaw_CSI2P,
+	} },
+	{ formats::SGBRG8, {
+		.bitsPerSample = 8,
+		.pattern = { CFAPatternGreen, CFAPatternBlue, CFAPatternRed, CFAPatternGreen },
+		.packScanline = packScanlineRaw8,
+		.thumbScanline = thumbScanlineRaw_CSI2P,
+	} },
+	{ formats::SGRBG8, {
+		.bitsPerSample = 8,
+		.pattern = { CFAPatternGreen, CFAPatternRed, CFAPatternBlue, CFAPatternGreen },
+		.packScanline = packScanlineRaw8,
+		.thumbScanline = thumbScanlineRaw_CSI2P,
+	} },
+	{ formats::SRGGB8, {
+		.bitsPerSample = 8,
+		.pattern = { CFAPatternRed, CFAPatternGreen, CFAPatternGreen, CFAPatternBlue },
+		.packScanline = packScanlineRaw8,
+		.thumbScanline = thumbScanlineRaw_CSI2P,
+	} },
+	{ formats::SBGGR10, {
+		.bitsPerSample = 10,
+		.pattern = { CFAPatternBlue, CFAPatternGreen, CFAPatternGreen, CFAPatternRed },
+		.packScanline = packScanlineRaw10MsbAligned,
+		.thumbScanline = thumbScanlineRawMsbAligned,
+	} },
+	{ formats::SGBRG10, {
+		.bitsPerSample = 10,
+		.pattern = { CFAPatternGreen, CFAPatternBlue, CFAPatternRed, CFAPatternGreen },
+		.packScanline = packScanlineRaw10MsbAligned,
+		.thumbScanline = thumbScanlineRawMsbAligned,
+	} },
+	{ formats::SGRBG10, {
+		.bitsPerSample = 10,
+		.pattern = { CFAPatternGreen, CFAPatternRed, CFAPatternBlue, CFAPatternGreen },
+		.packScanline = packScanlineRaw10MsbAligned,
+		.thumbScanline = thumbScanlineRawMsbAligned,
+	} },
+	{ formats::SRGGB10, {
+		.bitsPerSample = 10,
+		.pattern = { CFAPatternRed, CFAPatternGreen, CFAPatternGreen, CFAPatternBlue },
+		.packScanline = packScanlineRaw10MsbAligned,
+		.thumbScanline = thumbScanlineRawMsbAligned,
+	} },
+	{ formats::SBGGR12, {
+		.bitsPerSample = 12,
+		.pattern = { CFAPatternBlue, CFAPatternGreen, CFAPatternGreen, CFAPatternRed },
+		.packScanline = packScanlineRaw12MsbAligned,
+		.thumbScanline = thumbScanlineRawMsbAligned,
+	} },
+	{ formats::SGBRG12, {
+		.bitsPerSample = 12,
+		.pattern = { CFAPatternGreen, CFAPatternBlue, CFAPatternRed, CFAPatternGreen },
+		.packScanline = packScanlineRaw12MsbAligned,
+		.thumbScanline = thumbScanlineRawMsbAligned,
+	} },
+	{ formats::SGRBG12, {
+		.bitsPerSample = 12,
+		.pattern = { CFAPatternGreen, CFAPatternRed, CFAPatternBlue, CFAPatternGreen },
+		.packScanline = packScanlineRaw12MsbAligned,
+		.thumbScanline = thumbScanlineRawMsbAligned,
+	} },
+	{ formats::SRGGB12, {
+		.bitsPerSample = 12,
+		.pattern = { CFAPatternRed, CFAPatternGreen, CFAPatternGreen, CFAPatternBlue },
+		.packScanline = packScanlineRaw12MsbAligned,
+		.thumbScanline = thumbScanlineRawMsbAligned,
+	} },
+	{ formats::SBGGR16, {
+		.bitsPerSample = 16,
+		.pattern = { CFAPatternBlue, CFAPatternGreen, CFAPatternGreen, CFAPatternRed },
+		.packScanline = packScanlineRaw16,
+		.thumbScanline = thumbScanlineRaw,
+	} },
+	{ formats::SGBRG16, {
+		.bitsPerSample = 16,
+		.pattern = { CFAPatternGreen, CFAPatternBlue, CFAPatternRed, CFAPatternGreen },
+		.packScanline = packScanlineRaw16,
+		.thumbScanline = thumbScanlineRaw,
+	} },
+	{ formats::SGRBG16, {
+		.bitsPerSample = 16,
+		.pattern = { CFAPatternGreen, CFAPatternRed, CFAPatternBlue, CFAPatternGreen },
+		.packScanline = packScanlineRaw16,
+		.thumbScanline = thumbScanlineRaw,
+	} },
+	{ formats::SRGGB16, {
+		.bitsPerSample = 16,
+		.pattern = { CFAPatternRed, CFAPatternGreen, CFAPatternGreen, CFAPatternBlue },
+		.packScanline = packScanlineRaw16,
+		.thumbScanline = thumbScanlineRaw,
+	} },
+};
+
 } /* namespace */
+
+bool DNGWriter::msbAligned_ = false;
 
 int DNGWriter::write(const char *filename, const Camera *camera,
 		     const StreamConfiguration &config,
@@ -527,8 +681,10 @@ int DNGWriter::write(const char *filename, const Camera *camera,
 {
 	const ControlList &cameraProperties = camera->properties();
 
-	const auto it = formatInfo.find(config.pixelFormat);
-	if (it == formatInfo.cend()) {
+	const std::map<PixelFormat, FormatInfo> &formatInfoMap =
+		msbAligned_ ? formatInfoMsbAligned : formatInfo;
+	const auto it = formatInfoMap.find(config.pixelFormat);
+	if (it == formatInfoMap.cend()) {
 		std::cerr << "Unsupported pixel format" << std::endl;
 		return -EINVAL;
 	}
