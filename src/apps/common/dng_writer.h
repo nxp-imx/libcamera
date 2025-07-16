@@ -21,6 +21,8 @@ public:
 			 const libcamera::StreamConfiguration &config,
 			 const libcamera::ControlList &metadata,
 			 const libcamera::FrameBuffer *buffer, const void *data);
+
+	static bool msbAligned_;
 };
 
 #endif /* HAVE_TIFF */
