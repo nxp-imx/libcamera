@@ -99,4 +99,5 @@ algorithms:
               offsets: [ 0, 0, 0 ]
           },
       ]
+  - GammaOutCorrection:
 ...
