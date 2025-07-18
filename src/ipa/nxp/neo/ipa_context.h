@@ -18,6 +18,7 @@
 #include <libcamera/geometry.h>
 
 #include <libcamera/ipa/core_ipa_interface.h>
+#include <libcamera/ipa/nxpneo_ipa_interface.h>
 
 #include "libcamera/internal/matrix.h"
 #include "libcamera/internal/vector.h"
@@ -58,6 +59,8 @@ struct IPASessionConfiguration {
 	} hw;
 
 	std::vector<IPAStream> streams;
+
+	IPAColorSpace colorSpace;
 };
 
 struct IPAActiveState {
