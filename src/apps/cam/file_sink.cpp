@@ -10,6 +10,7 @@
 #include <array>
 #include <assert.h>
 #include <fcntl.h>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -34,6 +35,22 @@ FileSink::FileSink([[maybe_unused]] const libcamera::Camera *camera,
 	  pattern_(kDefaultFilePattern), fileType_(FileType::Binary),
 	  streamNames_(streamNames)
 {
+#ifdef HAVE_TIFF
+	/*
+	 * Hardware bug workaround specific to i.MX95: raw buffers output from
+	 * ISI have pixel data MSB-aligned. Inform the DNG writer so that the
+	 * proper pixel data packing can be done.
+	 */
+	std::string node = "/sys/devices/soc0/soc_id";
+	std::ifstream file(node);
+	if (file.is_open()) {
+		std::string value;
+		std::getline(file, value);
+		if (value == "i.MX95")
+			DNGWriter::msbAligned_ = true;
+		file.close();
+	}
+#endif
 }
 
 FileSink::~FileSink()
