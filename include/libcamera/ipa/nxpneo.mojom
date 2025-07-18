@@ -12,6 +12,42 @@ module ipa.nxpneo;
 
 import "include/libcamera/ipa/core.mojom";
 
+/*
+ * The IPAColorSpace struct and associated enums are mirrored with the
+ * libcamera ColorSpace class definition.
+ */
+enum IPAPrimaries {
+	IPAPrimariesRaw,
+	IPAPrimariesSmpte170m,
+	IPAPrimariesRec709,
+	IPAPrimariesRec2020,
+};
+
+enum IPATransferFunction {
+	IPATransferFunctionLinear,
+	IPATransferFunctionSrgb,
+	IPATransferFunctionRec709,
+};
+
+enum IPAYcbcrEncoding {
+	IPAYcbcrEncodingNone,
+	IPAYcbcrEncodingRec601,
+	IPAYcbcrEncodingRec709,
+	IPAYcbcrEncodingRec2020,
+};
+
+enum IPARange {
+	IPARangeFull,
+	IPARangeLimited,
+};
+
+struct IPAColorSpace {
+	IPAPrimaries primaries;
+	IPATransferFunction transferFunction;
+	IPAYcbcrEncoding ycbcrEncoding;
+	IPARange range;
+};
+
 struct InitParams {
 	uint32 hwRevision;
 	string sensorEntity;
@@ -75,7 +111,8 @@ interface IPANxpNeoInterface {
 
 	configure(IPAConfigInfo configInfo,
 		  map<uint32, libcamera.IPAStream> streamConfig,
-		  IPAModeType mode)
+		  IPAModeType mode,
+		  IPAColorSpace colorSpace)
 		=> (int32 ret, libcamera.ControlInfoMap ipaControls);
 
 	mapBuffers(array<libcamera.IPABuffer> buffers);
