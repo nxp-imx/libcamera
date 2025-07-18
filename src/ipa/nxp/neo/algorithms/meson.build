@@ -6,6 +6,7 @@ neo_ipa_algorithms = files([
     'blc.cpp',
     'ccm.cpp',
     'drc.cpp',
+    'goc.cpp',
     'hdr_decomp.cpp',
     'hdr_merge.cpp',
     'lsc.cpp',

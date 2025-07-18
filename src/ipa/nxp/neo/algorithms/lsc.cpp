@@ -22,7 +22,7 @@
 #include "libcamera/internal/yaml_parser.h"
 
 /**
- * \file lsc.h
+ * \file lsc.cpp
  */
 
 namespace libcamera {
