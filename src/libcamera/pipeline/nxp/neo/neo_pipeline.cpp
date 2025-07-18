@@ -1596,23 +1596,36 @@ int NxpNeoCameraData::configure(CameraConfiguration *c)
 
 	std::map<unsigned int, IPAStream> streamConfig;
 
+	ColorSpace colorSpace = ColorSpace::Raw;
 	for (unsigned int i = 0; i < config->size(); ++i) {
 		StreamConfiguration &cfg = (*config)[i];
 		Stream *stream = cfg.stream();
 
-		if (stream == &streamFrame_)
+		if (stream == &streamFrame_) {
 			streamConfig[0] = IPAStream(cfg.pixelFormat, cfg.size);
-		else if (stream == &streamIr_)
+			/*
+			 * Take color space from the frame if it exists,
+			 * or default to raw (IR only stream case).
+			 */
+			colorSpace = cfg.colorSpace.value_or(ColorSpace::Raw);
+		} else if (stream == &streamIr_) {
 			streamConfig[1] = IPAStream(cfg.pixelFormat, cfg.size);
+		}
 	}
 
 	ipa::nxpneo::IPAConfigInfo configInfo;
 	configInfo.sensorControls = sensor_->controls();
 	configInfo.sensorInfo = sensorInfo;
 
+	ipa::nxpneo::IPAColorSpace IPAcolorSpace = ipa::nxpneo::IPAColorSpace(
+		static_cast<ipa::nxpneo::IPAPrimaries>(colorSpace.primaries),
+		static_cast<ipa::nxpneo::IPATransferFunction>(colorSpace.transferFunction),
+		static_cast<ipa::nxpneo::IPAYcbcrEncoding>(colorSpace.ycbcrEncoding),
+		static_cast<ipa::nxpneo::IPARange>(colorSpace.range));
+
 	ret = ipa_->configure(configInfo, streamConfig,
 			      static_cast<ipa::nxpneo::IPAModeType>(mode_),
-			      &ipaControls_);
+			      IPAcolorSpace, &ipaControls_);
 	if (ret) {
 		LOG(NxpNeoPipe, Error) << "Failed to configure IPA: "
 				       << strerror(-ret);
