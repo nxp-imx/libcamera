@@ -1419,9 +1419,9 @@ int PipelineHandlerNxpNeo::setupRouting() const
  *   active
  * With such multi-camera case, these limitations prevent from configuring the
  * camera graph at configure() time, because an other camera may already be
- * streaming. Thus, a defaut graph configuration is necessary for each camera of
- * the set before streaming operation is started on another camera. This is done
- * when the frontend media device is locked.
+ * streaming. Thus, a default graph configuration is necessary for each camera
+ * of the set before streaming operation is started on another camera. This is
+ * done when the frontend media device is locked.
  * Configuration of the ISP device will still be done at configure() time as
  * there is one ISP media instance per camera. These ISP instances can be
  * reconfigured independently from each other.
@@ -2118,7 +2118,7 @@ int NxpNeoCameraData::configureFrontEndFormat(V4L2SubdeviceFormat &sensorFormat,
  * \brief Update the camera controls
  *
  * Compute the camera controls by calculating controls which the pipeline
- * is reponsible for and merge them with the controls computed by the IPA.
+ * is responsible for and merge them with the controls computed by the IPA.
  *
  * This function needs data->ipaControls_ to be refreshed when a new
  * configuration is applied to the camera by the IPA configure() function.
