@@ -65,8 +65,10 @@ enum StreamType {
 	StreamTypeImage0 = 0,
 	StreamTypeImage1,
 	StreamTypeEData,
-	StreamTypeMax,
 };
+
+constexpr std::array<StreamType, 3>
+	kStreamTypes = { StreamTypeImage0, StreamTypeImage1, StreamTypeEData };
 
 class CameraInfo
 {
@@ -74,13 +76,13 @@ public:
 	CameraInfo() {}
 	virtual ~CameraInfo() {}
 
-	const CameraMediaStream *stream(unsigned int id) const;
-	bool hasStream(unsigned int id) const { return stream(id); }
+	const CameraMediaStream *stream(StreamType streamType) const;
+	bool hasStream(StreamType streamType) const { return stream(streamType); }
 
 	const CameraProperties &cameraProperties() const { return *properties_; }
 
 private:
-	std::map<unsigned int, CameraMediaStream> streams_;
+	std::map<StreamType, CameraMediaStream> streams_;
 	CameraProperties *properties_ = nullptr;
 
 	friend PipelineConfig;
