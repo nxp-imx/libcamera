@@ -324,8 +324,8 @@ private:
 	std::map<unsigned int, std::vector<Size>> rawFormatsCodeToSizes_;
 
 	/* Front end pipes and video formats - maps per stream */
-	std::map<unsigned int, ISIPipe *> pipes_;
-	std::map<unsigned int, V4L2DeviceFormat> pipesDevFormats_;
+	std::map<StreamType, ISIPipe *> pipes_;
+	std::map<StreamType, V4L2DeviceFormat> pipesDevFormats_;
 
 	NxpNeoFrames frameInfos_;
 	bool alternatedRawStream_ = false;
@@ -417,7 +417,7 @@ private:
 
 namespace {
 
-const std::map<unsigned int, BufferType> streamToBufferType = {
+const std::map<StreamType, BufferType> streamToBufferType = {
 	{ StreamTypeImage0, BufferTypeImage0 },
 	{ StreamTypeImage1, BufferTypeImage1 },
 	{ StreamTypeEData, BufferTypeEData },
@@ -1861,14 +1861,14 @@ int NxpNeoCameraData::init()
 		return -ENODEV;
 	}
 
-	const std::map<unsigned int, void (NxpNeoCameraData::*)(FrameBuffer *)> pipeReadyFuncs{
+	const std::map<StreamType, void (NxpNeoCameraData::*)(FrameBuffer *)> pipeReadyFuncs{
 		{ StreamTypeImage0, &NxpNeoCameraData::isiImage0BufferReady },
 		{ StreamTypeImage1, &NxpNeoCameraData::isiImage1BufferReady },
 		{ StreamTypeEData, &NxpNeoCameraData::isiEmbeddedDataBufferReady },
 	};
 
 	ISIDevice *isi = pipe()->isiDevice();
-	for (unsigned int stream = 0; stream < StreamTypeMax; stream++) {
+	for (StreamType stream : kStreamTypes) {
 		const CameraMediaStream *cameraMediaStream = cameraInfo_->stream(stream);
 		if (!cameraMediaStream)
 			continue;
@@ -2430,7 +2430,7 @@ int NxpNeoCameraData::configureFrontEndStream(
  */
 int NxpNeoCameraData::configureFrontEndLinks() const
 {
-	for (unsigned int stream = 0; stream < StreamTypeMax; stream++) {
+	for (StreamType stream : kStreamTypes) {
 		const CameraMediaStream *cameraStream = cameraInfo_->stream(stream);
 		if (!cameraStream)
 			continue;

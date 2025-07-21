@@ -105,17 +105,12 @@ std::string CameraMediaStream::toString() const
 
 /**
  * \brief Return an optional CameraMediaStream for the camera
- * \param[in] streamId The CameraInfo stream identifier STREAM_<XYZ>
+ * \param[in] streamType The CameraInfo stream identifier
  * \return The CameraMediaStream if it exists, nullptr otherwise
  */
-const CameraMediaStream *CameraInfo::stream(unsigned int id) const
+const CameraMediaStream *CameraInfo::stream(StreamType streamType) const
 {
-	if (id >= StreamTypeMax) {
-		LOG(NxpNeoPipe, Error) << "Invalid stream " << id;
-		return nullptr;
-	}
-
-	auto it = streams_.find(id);
+	auto it = streams_.find(streamType);
 	if (it != streams_.end())
 		return &it->second;
 	else
@@ -324,13 +319,13 @@ int PipelineConfig::loadAutoDetect()
 		Size size = sensor->resolution();
 
 		/* Map for each stream the pipe index and per-entity routing */
-		std::map<unsigned int, unsigned int> pipeIndex;
-		std::map<unsigned int, RoutingMap> routingMaps;
+		std::map<StreamType, unsigned int> pipeIndex;
+		std::map<StreamType, RoutingMap> routingMaps;
 
 		/* Copy of the global streams map - revert changes in case of error */
 		std::map<MediaPad *, unsigned int> streamMap(globalStreamMap);
 
-		for (unsigned int stream = 0; stream < StreamTypeMax; stream++) {
+		for (StreamType stream : kStreamTypes) {
 			V4L2Subdevice::Stream sensorStream;
 			if (stream == StreamTypeImage0) {
 				sensorStream = sensor->imageStream();
