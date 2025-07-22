@@ -10,6 +10,8 @@ algorithms:
       # scale = totalBins * 2^16 / inputBitRange
       hist-scale: [ 128, 128, 128, 128 ]
   - GammaOutCorrection:
+      # gamma value used for gamma correction:
+      gamma: 2.0
   - PipeConf:
       # LPALIGN0=0 to enable 16 to 20-bit non-linear decompression
       lpalign0: 0
