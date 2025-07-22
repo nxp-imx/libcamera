@@ -24,7 +24,21 @@ algorithms:
         # KNEE_RATIO[0-4] u12
         ratios: [ 32, 64, 256, 3584, 3584 ]
   - Drc:
+      # Global DRC control mode. Select among the following options:
+      # 0 - copy. Data is copied from input to output of the DRC block,
+      #     no dynamic range compression is done (default)
+      # 1 - pre-configured. LUT with 416 entries needs to be specified in this config file
+      #     under 'gbl-lut'. If not configured, falls back to mode 0.
+      # 2 - dynamic. LUT determined per frame according to input data.
+      gbl-mode: 2
+      # Global DRC alpha. Selects between histogram equalization (=0) and histogram stretching (=256)
+      gdrc-alpha: 128
+      # Global DRC gamma. Controls the strength of dynamic range compression with histogram stretching
+      gdrc-gamma: 180
+      # Global DRC fixed gamma. Controls the default compression curve which GDRC works with
+      fixed-gamma: 180
       # DRC Global gain - u16 (8.8 format)
+      # Below are the settings to be applied for gbl-mode: 1
       # This gain value adjusts the dark scene of the ox03c10 sensor
       gbl-gain: 4096
       # DRC Global Tonemap[1-416] u16 (8.8 format)
@@ -57,7 +71,7 @@ algorithms:
                  322, 320, 319, 317, 316, 314, 313, 312, 310, 309, 308, 306, 305, 304, 303, 302,
                  301, 298, 296, 294, 292, 291, 289, 287, 285, 284, 282, 281, 279, 278, 276, 275,
                  273, 272, 271, 269, 268, 267, 266, 265, 264, 263, 261, 260, 259, 258, 257, 256,
-	       ]
+              ]
   - Ccm:
       ccms: [
           {
