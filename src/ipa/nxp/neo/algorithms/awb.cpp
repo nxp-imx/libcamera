@@ -241,7 +241,7 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 	params->regs.ctemp.stat_blk_size0_xsize =
 		params->regs.ctemp.roi.width / NEO_CTEMP_BLOCK_NB_X;
 	params->regs.ctemp.stat_blk_size0_ysize =
-		params->regs.ctemp.roi.height / NEO_CTEMP_BLOCK_NB_X;
+		params->regs.ctemp.roi.height / NEO_CTEMP_BLOCK_NB_Y;
 
 	/* Enable the CTEMP unit parameter update */
 	params->features_cfg.ctemp_cfg = 1;
