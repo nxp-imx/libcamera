@@ -362,8 +362,8 @@ void LensShadingCorrection::prepare(IPAContext &context,
 		params->regs.vignetting_ctrl.blk_conf_rows = blockCountY_;
 		params->regs.vignetting_ctrl.blk_size_xsize = blockWidth_;
 		params->regs.vignetting_ctrl.blk_size_ysize = blockHeight_;
-		params->regs.vignetting_ctrl.blk_stepy_step = blockStepX_;
-		params->regs.vignetting_ctrl.blk_stepx_step = blockStepY_;
+		params->regs.vignetting_ctrl.blk_stepx_step = blockStepX_;
+		params->regs.vignetting_ctrl.blk_stepy_step = blockStepY_;
 
 		LOG(NxpNeoAlgoLsc, Debug) << "Lsc is enabled";
 		status_ = ENABLED;
