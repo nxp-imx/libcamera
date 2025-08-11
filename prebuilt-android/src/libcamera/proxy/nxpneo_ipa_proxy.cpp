@@ -175,7 +175,7 @@ int32_t IPAProxyNxpNeo::initIPC(
 
 	int _ret = ipc_->sendSync(_ipcInputBuf, &_ipcOutputBuf);
 	if (_ret < 0) {
-		LOG(IPAProxy, Error) << "Failed to call init";
+		LOG(IPAProxy, Error) << "Failed to call init: " << _ret;
 		return static_cast<int32_t>(_ret);
 	}
 
@@ -237,7 +237,7 @@ int32_t IPAProxyNxpNeo::startIPC()
 
 	int _ret = ipc_->sendSync(_ipcInputBuf, &_ipcOutputBuf);
 	if (_ret < 0) {
-		LOG(IPAProxy, Error) << "Failed to call start";
+		LOG(IPAProxy, Error) << "Failed to call start: " << _ret;
 		return static_cast<int32_t>(_ret);
 	}
 
@@ -256,9 +256,9 @@ int32_t IPAProxyNxpNeo::startIPC()
 void IPAProxyNxpNeo::stop()
 {
 	if (isolate_)
-		stopIPC();
+		return stopIPC();
 	else
-		stopThread();
+		return stopThread();
 }
 
 void IPAProxyNxpNeo::stopThread()
@@ -289,7 +289,7 @@ void IPAProxyNxpNeo::stopIPC()
 
 	int _ret = ipc_->sendSync(_ipcInputBuf);
 	if (_ret < 0) {
-		LOG(IPAProxy, Error) << "Failed to call stop";
+		LOG(IPAProxy, Error) << "Failed to call stop: " << _ret;
 		return;
 	}
 }
@@ -298,26 +298,32 @@ void IPAProxyNxpNeo::stopIPC()
 int32_t IPAProxyNxpNeo::configure(
 	const IPAConfigInfo &configInfo,
 	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
+	const IPAModeType mode,
+	const IPAColorSpace &colorSpace,
 	ControlInfoMap *ipaControls)
 {
 	if (isolate_)
-		return configureIPC(configInfo, streamConfig, ipaControls);
+		return configureIPC(configInfo, streamConfig, mode, colorSpace, ipaControls);
 	else
-		return configureThread(configInfo, streamConfig, ipaControls);
+		return configureThread(configInfo, streamConfig, mode, colorSpace, ipaControls);
 }
 
 int32_t IPAProxyNxpNeo::configureThread(
 	const IPAConfigInfo &configInfo,
 	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
+	const IPAModeType mode,
+	const IPAColorSpace &colorSpace,
 	ControlInfoMap *ipaControls)
 {
-	return ipa_->configure(configInfo, streamConfig, ipaControls);
+	return ipa_->configure(configInfo, streamConfig, mode, colorSpace, ipaControls);
 
 }
 
 int32_t IPAProxyNxpNeo::configureIPC(
 	const IPAConfigInfo &configInfo,
 	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
+	const IPAModeType mode,
+	const IPAColorSpace &colorSpace,
 	ControlInfoMap *ipaControls)
 {
 	controlSerializer_.reset();
@@ -334,15 +340,27 @@ int32_t IPAProxyNxpNeo::configureIPC(
 	std::tie(streamConfigBuf, std::ignore) =
 		IPADataSerializer<std::map<uint32_t, libcamera::IPAStream>>::serialize(streamConfig
 );
+	static_assert(sizeof(ipa::nxpneo::IPAModeType) <= 4);
+	std::vector<uint8_t> modeBuf;
+	std::tie(modeBuf, std::ignore) =
+		IPADataSerializer<uint32_t>::serialize(static_cast<uint32_t>(mode));
+	std::vector<uint8_t> colorSpaceBuf;
+	std::tie(colorSpaceBuf, std::ignore) =
+		IPADataSerializer<IPAColorSpace>::serialize(colorSpace
+);
 	appendPOD<uint32_t>(_ipcInputBuf.data(), configInfoBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), streamConfigBuf.size());
+	appendPOD<uint32_t>(_ipcInputBuf.data(), modeBuf.size());
+	appendPOD<uint32_t>(_ipcInputBuf.data(), colorSpaceBuf.size());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), configInfoBuf.begin(), configInfoBuf.end());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), streamConfigBuf.begin(), streamConfigBuf.end());
+	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), modeBuf.begin(), modeBuf.end());
+	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), colorSpaceBuf.begin(), colorSpaceBuf.end());
 
 
 	int _ret = ipc_->sendSync(_ipcInputBuf, &_ipcOutputBuf);
 	if (_ret < 0) {
-		LOG(IPAProxy, Error) << "Failed to call configure";
+		LOG(IPAProxy, Error) << "Failed to call configure: " << _ret;
 		return static_cast<int32_t>(_ret);
 	}
 
@@ -371,15 +389,15 @@ void IPAProxyNxpNeo::mapBuffers(
 	const std::vector<libcamera::IPABuffer> &buffers)
 {
 	if (isolate_)
-		mapBuffersIPC(buffers);
+		return mapBuffersIPC(buffers);
 	else
-		mapBuffersThread(buffers);
+		return mapBuffersThread(buffers);
 }
 
 void IPAProxyNxpNeo::mapBuffersThread(
 	const std::vector<libcamera::IPABuffer> &buffers)
 {
-	ipa_->mapBuffers(buffers);
+	return ipa_->mapBuffers(buffers);
 
 }
 
@@ -401,7 +419,7 @@ void IPAProxyNxpNeo::mapBuffersIPC(
 
 	int _ret = ipc_->sendSync(_ipcInputBuf);
 	if (_ret < 0) {
-		LOG(IPAProxy, Error) << "Failed to call mapBuffers";
+		LOG(IPAProxy, Error) << "Failed to call mapBuffers: " << _ret;
 		return;
 	}
 }
@@ -411,15 +429,15 @@ void IPAProxyNxpNeo::unmapBuffers(
 	const std::vector<uint32_t> &ids)
 {
 	if (isolate_)
-		unmapBuffersIPC(ids);
+		return unmapBuffersIPC(ids);
 	else
-		unmapBuffersThread(ids);
+		return unmapBuffersThread(ids);
 }
 
 void IPAProxyNxpNeo::unmapBuffersThread(
 	const std::vector<uint32_t> &ids)
 {
-	ipa_->unmapBuffers(ids);
+	return ipa_->unmapBuffers(ids);
 
 }
 
@@ -439,7 +457,7 @@ void IPAProxyNxpNeo::unmapBuffersIPC(
 
 	int _ret = ipc_->sendSync(_ipcInputBuf);
 	if (_ret < 0) {
-		LOG(IPAProxy, Error) << "Failed to call unmapBuffers";
+		LOG(IPAProxy, Error) << "Failed to call unmapBuffers: " << _ret;
 		return;
 	}
 }
@@ -450,9 +468,9 @@ void IPAProxyNxpNeo::queueRequest(
 	const ControlList &reqControls)
 {
 	if (isolate_)
-		queueRequestIPC(frame, reqControls);
+		return queueRequestIPC(frame, reqControls);
 	else
-		queueRequestThread(frame, reqControls);
+		return queueRequestThread(frame, reqControls);
 }
 
 void IPAProxyNxpNeo::queueRequestThread(
@@ -487,7 +505,7 @@ void IPAProxyNxpNeo::queueRequestIPC(
 
 	int _ret = ipc_->sendAsync(_ipcInputBuf);
 	if (_ret < 0) {
-		LOG(IPAProxy, Error) << "Failed to call queueRequest";
+		LOG(IPAProxy, Error) << "Failed to call queueRequest: " << _ret;
 		return;
 	}
 }
@@ -495,24 +513,27 @@ void IPAProxyNxpNeo::queueRequestIPC(
 
 void IPAProxyNxpNeo::computeParams(
 	const uint32_t frame,
+	const IPAContextType context,
 	const std::map<uint32_t, uint32_t> &bufferIds)
 {
 	if (isolate_)
-		computeParamsIPC(frame, bufferIds);
+		return computeParamsIPC(frame, context, bufferIds);
 	else
-		computeParamsThread(frame, bufferIds);
+		return computeParamsThread(frame, context, bufferIds);
 }
 
 void IPAProxyNxpNeo::computeParamsThread(
 	const uint32_t frame,
+	const IPAContextType context,
 	const std::map<uint32_t, uint32_t> &bufferIds)
 {
 	ASSERT(state_ == ProxyRunning);
-	proxy_.invokeMethod(&ThreadProxy::computeParams, ConnectionTypeQueued, frame, bufferIds);
+	proxy_.invokeMethod(&ThreadProxy::computeParams, ConnectionTypeQueued, frame, context, bufferIds);
 }
 
 void IPAProxyNxpNeo::computeParamsIPC(
 	const uint32_t frame,
+	const IPAContextType context,
 	const std::map<uint32_t, uint32_t> &bufferIds)
 {
 	IPCMessage::Header _header = { static_cast<uint32_t>(_NxpNeoCmd::ComputeParams), seq_++ };
@@ -523,19 +544,25 @@ void IPAProxyNxpNeo::computeParamsIPC(
 	std::tie(frameBuf, std::ignore) =
 		IPADataSerializer<uint32_t>::serialize(frame
 );
+	static_assert(sizeof(ipa::nxpneo::IPAContextType) <= 4);
+	std::vector<uint8_t> contextBuf;
+	std::tie(contextBuf, std::ignore) =
+		IPADataSerializer<uint32_t>::serialize(static_cast<uint32_t>(context));
 	std::vector<uint8_t> bufferIdsBuf;
 	std::tie(bufferIdsBuf, std::ignore) =
 		IPADataSerializer<std::map<uint32_t, uint32_t>>::serialize(bufferIds
 );
 	appendPOD<uint32_t>(_ipcInputBuf.data(), frameBuf.size());
+	appendPOD<uint32_t>(_ipcInputBuf.data(), contextBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), bufferIdsBuf.size());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), frameBuf.begin(), frameBuf.end());
+	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), contextBuf.begin(), contextBuf.end());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), bufferIdsBuf.begin(), bufferIdsBuf.end());
 
 
 	int _ret = ipc_->sendAsync(_ipcInputBuf);
 	if (_ret < 0) {
-		LOG(IPAProxy, Error) << "Failed to call computeParams";
+		LOG(IPAProxy, Error) << "Failed to call computeParams: " << _ret;
 		return;
 	}
 }
@@ -543,26 +570,29 @@ void IPAProxyNxpNeo::computeParamsIPC(
 
 void IPAProxyNxpNeo::processStats(
 	const uint32_t frame,
+	const IPAContextType context,
 	const std::map<uint32_t, uint32_t> &bufferIds,
 	const ControlList &sensorControls)
 {
 	if (isolate_)
-		processStatsIPC(frame, bufferIds, sensorControls);
+		return processStatsIPC(frame, context, bufferIds, sensorControls);
 	else
-		processStatsThread(frame, bufferIds, sensorControls);
+		return processStatsThread(frame, context, bufferIds, sensorControls);
 }
 
 void IPAProxyNxpNeo::processStatsThread(
 	const uint32_t frame,
+	const IPAContextType context,
 	const std::map<uint32_t, uint32_t> &bufferIds,
 	const ControlList &sensorControls)
 {
 	ASSERT(state_ == ProxyRunning);
-	proxy_.invokeMethod(&ThreadProxy::processStats, ConnectionTypeQueued, frame, bufferIds, sensorControls);
+	proxy_.invokeMethod(&ThreadProxy::processStats, ConnectionTypeQueued, frame, context, bufferIds, sensorControls);
 }
 
 void IPAProxyNxpNeo::processStatsIPC(
 	const uint32_t frame,
+	const IPAContextType context,
 	const std::map<uint32_t, uint32_t> &bufferIds,
 	const ControlList &sensorControls)
 {
@@ -574,6 +604,10 @@ void IPAProxyNxpNeo::processStatsIPC(
 	std::tie(frameBuf, std::ignore) =
 		IPADataSerializer<uint32_t>::serialize(frame
 );
+	static_assert(sizeof(ipa::nxpneo::IPAContextType) <= 4);
+	std::vector<uint8_t> contextBuf;
+	std::tie(contextBuf, std::ignore) =
+		IPADataSerializer<uint32_t>::serialize(static_cast<uint32_t>(context));
 	std::vector<uint8_t> bufferIdsBuf;
 	std::tie(bufferIdsBuf, std::ignore) =
 		IPADataSerializer<std::map<uint32_t, uint32_t>>::serialize(bufferIds
@@ -583,16 +617,18 @@ void IPAProxyNxpNeo::processStatsIPC(
 		IPADataSerializer<ControlList>::serialize(sensorControls
 , &controlSerializer_);
 	appendPOD<uint32_t>(_ipcInputBuf.data(), frameBuf.size());
+	appendPOD<uint32_t>(_ipcInputBuf.data(), contextBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), bufferIdsBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), sensorControlsBuf.size());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), frameBuf.begin(), frameBuf.end());
+	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), contextBuf.begin(), contextBuf.end());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), bufferIdsBuf.begin(), bufferIdsBuf.end());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), sensorControlsBuf.begin(), sensorControlsBuf.end());
 
 
 	int _ret = ipc_->sendAsync(_ipcInputBuf);
 	if (_ret < 0) {
-		LOG(IPAProxy, Error) << "Failed to call processStats";
+		LOG(IPAProxy, Error) << "Failed to call processStats: " << _ret;
 		return;
 	}
 }
@@ -601,10 +637,11 @@ void IPAProxyNxpNeo::processStatsIPC(
 
 
 void IPAProxyNxpNeo::paramsComputedThread(
-	const uint32_t frame)
+	const uint32_t frame,
+	const IPAContextType context)
 {
 	ASSERT(state_ != ProxyStopped);
-	paramsComputed.emit(frame);
+	paramsComputed.emit(frame, context);
 }
 
 void IPAProxyNxpNeo::paramsComputedIPC(
@@ -612,26 +649,34 @@ void IPAProxyNxpNeo::paramsComputedIPC(
 	[[maybe_unused]] size_t dataSize,
 	[[maybe_unused]] const std::vector<SharedFD> &fds)
 {
-	uint32_t frame;
+
+	[[maybe_unused]] const size_t frameBufSize = readPOD<uint32_t>(data, 0, data + dataSize);
+	[[maybe_unused]] const size_t contextBufSize = readPOD<uint32_t>(data, 4, data + dataSize);
+
+	const size_t frameStart = 8;
+	const size_t contextStart = frameStart + frameBufSize;
 
 
-	const size_t frameStart = 0;
-
-
-	frame =
+	uint32_t frame =
         IPADataSerializer<uint32_t>::deserialize(
         	data + frameStart,
-        	data + dataSize);
+        	data + frameStart + frameBufSize);
 
-	paramsComputed.emit(frame);
+	IPAContextType context =
+        static_cast<ipa::nxpneo::IPAContextType>(IPADataSerializer<uint32_t>::deserialize(
+        	data + contextStart,
+        	data + contextStart + contextBufSize));
+
+	paramsComputed.emit(frame, context);
 }
 
 void IPAProxyNxpNeo::setSensorControlsThread(
 	const uint32_t frame,
+	const IPAContextType context,
 	const ControlList &sensorControls)
 {
 	ASSERT(state_ != ProxyStopped);
-	setSensorControls.emit(frame, sensorControls);
+	setSensorControls.emit(frame, context, sensorControls);
 }
 
 void IPAProxyNxpNeo::setSensorControlsIPC(
@@ -639,36 +684,42 @@ void IPAProxyNxpNeo::setSensorControlsIPC(
 	[[maybe_unused]] size_t dataSize,
 	[[maybe_unused]] const std::vector<SharedFD> &fds)
 {
-	uint32_t frame;
-	ControlList sensorControls;
 
 	[[maybe_unused]] const size_t frameBufSize = readPOD<uint32_t>(data, 0, data + dataSize);
-	[[maybe_unused]] const size_t sensorControlsBufSize = readPOD<uint32_t>(data, 4, data + dataSize);
+	[[maybe_unused]] const size_t contextBufSize = readPOD<uint32_t>(data, 4, data + dataSize);
+	[[maybe_unused]] const size_t sensorControlsBufSize = readPOD<uint32_t>(data, 8, data + dataSize);
 
-	const size_t frameStart = 8;
-	const size_t sensorControlsStart = frameStart + frameBufSize;
+	const size_t frameStart = 12;
+	const size_t contextStart = frameStart + frameBufSize;
+	const size_t sensorControlsStart = contextStart + contextBufSize;
 
 
-	frame =
+	uint32_t frame =
         IPADataSerializer<uint32_t>::deserialize(
         	data + frameStart,
         	data + frameStart + frameBufSize);
 
-	sensorControls =
+	IPAContextType context =
+        static_cast<ipa::nxpneo::IPAContextType>(IPADataSerializer<uint32_t>::deserialize(
+        	data + contextStart,
+        	data + contextStart + contextBufSize));
+
+	ControlList sensorControls =
         IPADataSerializer<ControlList>::deserialize(
         	data + sensorControlsStart,
         	data + sensorControlsStart + sensorControlsBufSize,
         	&controlSerializer_);
 
-	setSensorControls.emit(frame, sensorControls);
+	setSensorControls.emit(frame, context, sensorControls);
 }
 
 void IPAProxyNxpNeo::metadataReadyThread(
 	const uint32_t frame,
+	const IPAContextType context,
 	const ControlList &metadata)
 {
 	ASSERT(state_ != ProxyStopped);
-	metadataReady.emit(frame, metadata);
+	metadataReady.emit(frame, context, metadata);
 }
 
 void IPAProxyNxpNeo::metadataReadyIPC(
@@ -676,28 +727,33 @@ void IPAProxyNxpNeo::metadataReadyIPC(
 	[[maybe_unused]] size_t dataSize,
 	[[maybe_unused]] const std::vector<SharedFD> &fds)
 {
-	uint32_t frame;
-	ControlList metadata;
 
 	[[maybe_unused]] const size_t frameBufSize = readPOD<uint32_t>(data, 0, data + dataSize);
-	[[maybe_unused]] const size_t metadataBufSize = readPOD<uint32_t>(data, 4, data + dataSize);
+	[[maybe_unused]] const size_t contextBufSize = readPOD<uint32_t>(data, 4, data + dataSize);
+	[[maybe_unused]] const size_t metadataBufSize = readPOD<uint32_t>(data, 8, data + dataSize);
 
-	const size_t frameStart = 8;
-	const size_t metadataStart = frameStart + frameBufSize;
+	const size_t frameStart = 12;
+	const size_t contextStart = frameStart + frameBufSize;
+	const size_t metadataStart = contextStart + contextBufSize;
 
 
-	frame =
+	uint32_t frame =
         IPADataSerializer<uint32_t>::deserialize(
         	data + frameStart,
         	data + frameStart + frameBufSize);
 
-	metadata =
+	IPAContextType context =
+        static_cast<ipa::nxpneo::IPAContextType>(IPADataSerializer<uint32_t>::deserialize(
+        	data + contextStart,
+        	data + contextStart + contextBufSize));
+
+	ControlList metadata =
         IPADataSerializer<ControlList>::deserialize(
         	data + metadataStart,
         	data + metadataStart + metadataBufSize,
         	&controlSerializer_);
 
-	metadataReady.emit(frame, metadata);
+	metadataReady.emit(frame, context, metadata);
 }
 
 

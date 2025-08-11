@@ -208,7 +208,7 @@ int32_t IPAProxySoft::initIPC(
 
 	int _ret = ipc_->sendSync(_ipcInputBuf, &_ipcOutputBuf);
 	if (_ret < 0) {
-		LOG(IPAProxy, Error) << "Failed to call init";
+		LOG(IPAProxy, Error) << "Failed to call init: " << _ret;
 		return static_cast<int32_t>(_ret);
 	}
 
@@ -270,7 +270,7 @@ int32_t IPAProxySoft::startIPC()
 
 	int _ret = ipc_->sendSync(_ipcInputBuf, &_ipcOutputBuf);
 	if (_ret < 0) {
-		LOG(IPAProxy, Error) << "Failed to call start";
+		LOG(IPAProxy, Error) << "Failed to call start: " << _ret;
 		return static_cast<int32_t>(_ret);
 	}
 
@@ -289,9 +289,9 @@ int32_t IPAProxySoft::startIPC()
 void IPAProxySoft::stop()
 {
 	if (isolate_)
-		stopIPC();
+		return stopIPC();
 	else
-		stopThread();
+		return stopThread();
 }
 
 void IPAProxySoft::stopThread()
@@ -322,7 +322,7 @@ void IPAProxySoft::stopIPC()
 
 	int _ret = ipc_->sendSync(_ipcInputBuf);
 	if (_ret < 0) {
-		LOG(IPAProxy, Error) << "Failed to call stop";
+		LOG(IPAProxy, Error) << "Failed to call stop: " << _ret;
 		return;
 	}
 }
@@ -362,7 +362,7 @@ int32_t IPAProxySoft::configureIPC(
 
 	int _ret = ipc_->sendSync(_ipcInputBuf, &_ipcOutputBuf);
 	if (_ret < 0) {
-		LOG(IPAProxy, Error) << "Failed to call configure";
+		LOG(IPAProxy, Error) << "Failed to call configure: " << _ret;
 		return static_cast<int32_t>(_ret);
 	}
 
@@ -383,9 +383,9 @@ void IPAProxySoft::queueRequest(
 	const ControlList &sensorControls)
 {
 	if (isolate_)
-		queueRequestIPC(frame, sensorControls);
+		return queueRequestIPC(frame, sensorControls);
 	else
-		queueRequestThread(frame, sensorControls);
+		return queueRequestThread(frame, sensorControls);
 }
 
 void IPAProxySoft::queueRequestThread(
@@ -420,7 +420,7 @@ void IPAProxySoft::queueRequestIPC(
 
 	int _ret = ipc_->sendAsync(_ipcInputBuf);
 	if (_ret < 0) {
-		LOG(IPAProxy, Error) << "Failed to call queueRequest";
+		LOG(IPAProxy, Error) << "Failed to call queueRequest: " << _ret;
 		return;
 	}
 }
@@ -430,9 +430,9 @@ void IPAProxySoft::computeParams(
 	const uint32_t frame)
 {
 	if (isolate_)
-		computeParamsIPC(frame);
+		return computeParamsIPC(frame);
 	else
-		computeParamsThread(frame);
+		return computeParamsThread(frame);
 }
 
 void IPAProxySoft::computeParamsThread(
@@ -458,7 +458,7 @@ void IPAProxySoft::computeParamsIPC(
 
 	int _ret = ipc_->sendAsync(_ipcInputBuf);
 	if (_ret < 0) {
-		LOG(IPAProxy, Error) << "Failed to call computeParams";
+		LOG(IPAProxy, Error) << "Failed to call computeParams: " << _ret;
 		return;
 	}
 }
@@ -470,9 +470,9 @@ void IPAProxySoft::processStats(
 	const ControlList &sensorControls)
 {
 	if (isolate_)
-		processStatsIPC(frame, bufferId, sensorControls);
+		return processStatsIPC(frame, bufferId, sensorControls);
 	else
-		processStatsThread(frame, bufferId, sensorControls);
+		return processStatsThread(frame, bufferId, sensorControls);
 }
 
 void IPAProxySoft::processStatsThread(
@@ -515,7 +515,7 @@ void IPAProxySoft::processStatsIPC(
 
 	int _ret = ipc_->sendAsync(_ipcInputBuf);
 	if (_ret < 0) {
-		LOG(IPAProxy, Error) << "Failed to call processStats";
+		LOG(IPAProxy, Error) << "Failed to call processStats: " << _ret;
 		return;
 	}
 }
@@ -535,13 +535,12 @@ void IPAProxySoft::setSensorControlsIPC(
 	[[maybe_unused]] size_t dataSize,
 	[[maybe_unused]] const std::vector<SharedFD> &fds)
 {
-	ControlList sensorControls;
 
 
 	const size_t sensorControlsStart = 0;
 
 
-	sensorControls =
+	ControlList sensorControls =
         IPADataSerializer<ControlList>::deserialize(
         	data + sensorControlsStart,
         	data + dataSize,
@@ -581,8 +580,6 @@ void IPAProxySoft::metadataReadyIPC(
 	[[maybe_unused]] size_t dataSize,
 	[[maybe_unused]] const std::vector<SharedFD> &fds)
 {
-	uint32_t frame;
-	ControlList metadata;
 
 	[[maybe_unused]] const size_t frameBufSize = readPOD<uint32_t>(data, 0, data + dataSize);
 	[[maybe_unused]] const size_t metadataBufSize = readPOD<uint32_t>(data, 4, data + dataSize);
@@ -591,12 +588,12 @@ void IPAProxySoft::metadataReadyIPC(
 	const size_t metadataStart = frameStart + frameBufSize;
 
 
-	frame =
+	uint32_t frame =
         IPADataSerializer<uint32_t>::deserialize(
         	data + frameStart,
         	data + frameStart + frameBufSize);
 
-	metadata =
+	ControlList metadata =
         IPADataSerializer<ControlList>::deserialize(
         	data + metadataStart,
         	data + metadataStart + metadataBufSize,
