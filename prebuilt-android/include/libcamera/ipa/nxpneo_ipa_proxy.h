@@ -48,6 +48,8 @@ public:
         int32_t configure(
         	const IPAConfigInfo &configInfo,
         	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
+        	const IPAModeType mode,
+        	const IPAColorSpace &colorSpace,
         	ControlInfoMap *ipaControls) override;
 
         void mapBuffers(
@@ -62,10 +64,12 @@ public:
 
         void computeParams(
         	const uint32_t frame,
+        	const IPAContextType context,
         	const std::map<uint32_t, uint32_t> &bufferIds) override;
 
         void processStats(
         	const uint32_t frame,
+        	const IPAContextType context,
         	const std::map<uint32_t, uint32_t> &bufferIds,
         	const ControlList &sensorControls) override;
 
@@ -94,10 +98,14 @@ private:
         int32_t configureThread(
         	const IPAConfigInfo &configInfo,
         	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
+        	const IPAModeType mode,
+        	const IPAColorSpace &colorSpace,
         	ControlInfoMap *ipaControls);
         int32_t configureIPC(
         	const IPAConfigInfo &configInfo,
         	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
+        	const IPAModeType mode,
+        	const IPAColorSpace &colorSpace,
         	ControlInfoMap *ipaControls);
 
         void mapBuffersThread(
@@ -119,23 +127,28 @@ private:
 
         void computeParamsThread(
         	const uint32_t frame,
+        	const IPAContextType context,
         	const std::map<uint32_t, uint32_t> &bufferIds);
         void computeParamsIPC(
         	const uint32_t frame,
+        	const IPAContextType context,
         	const std::map<uint32_t, uint32_t> &bufferIds);
 
         void processStatsThread(
         	const uint32_t frame,
+        	const IPAContextType context,
         	const std::map<uint32_t, uint32_t> &bufferIds,
         	const ControlList &sensorControls);
         void processStatsIPC(
         	const uint32_t frame,
+        	const IPAContextType context,
         	const std::map<uint32_t, uint32_t> &bufferIds,
         	const ControlList &sensorControls);
 
 
         void paramsComputedThread(
-        	const uint32_t frame);
+        	const uint32_t frame,
+        	const IPAContextType context);
 	void paramsComputedIPC(
 		std::vector<uint8_t>::const_iterator data,
 		size_t dataSize,
@@ -143,6 +156,7 @@ private:
 
         void setSensorControlsThread(
         	const uint32_t frame,
+        	const IPAContextType context,
         	const ControlList &sensorControls);
 	void setSensorControlsIPC(
 		std::vector<uint8_t>::const_iterator data,
@@ -151,6 +165,7 @@ private:
 
         void metadataReadyThread(
         	const uint32_t frame,
+        	const IPAContextType context,
         	const ControlList &metadata);
 	void metadataReadyIPC(
 		std::vector<uint8_t>::const_iterator data,
@@ -189,16 +204,18 @@ private:
 		}
 		void computeParams(
                 	const uint32_t frame,
+                	const IPAContextType context,
                 	const std::map<uint32_t, uint32_t> &bufferIds)
 		{
-			ipa_->computeParams(frame, bufferIds);
+			ipa_->computeParams(frame, context, bufferIds);
 		}
 		void processStats(
                 	const uint32_t frame,
+                	const IPAContextType context,
                 	const std::map<uint32_t, uint32_t> &bufferIds,
                 	const ControlList &sensorControls)
 		{
-			ipa_->processStats(frame, bufferIds, sensorControls);
+			ipa_->processStats(frame, context, bufferIds, sensorControls);
 		}
 
 	private:

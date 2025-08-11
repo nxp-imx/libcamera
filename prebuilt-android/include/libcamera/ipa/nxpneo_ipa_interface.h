@@ -52,12 +52,73 @@ enum class _NxpNeoEventCmd {
 };
 
 
-enum ISPBufferType {
-	TypeInput0 = 0,
-	TypeInput1 = 1,
-	TypeEData = 2,
-	TypeParams = 3,
-	TypeStats = 4,
+enum IPAPrimaries {
+	IPAPrimariesRaw = 0,
+	IPAPrimariesSmpte170m = 1,
+	IPAPrimariesRec709 = 2,
+	IPAPrimariesRec2020 = 3,
+};
+
+enum IPATransferFunction {
+	IPATransferFunctionLinear = 0,
+	IPATransferFunctionSrgb = 1,
+	IPATransferFunctionRec709 = 2,
+};
+
+enum IPAYcbcrEncoding {
+	IPAYcbcrEncodingNone = 0,
+	IPAYcbcrEncodingRec601 = 1,
+	IPAYcbcrEncodingRec709 = 2,
+	IPAYcbcrEncodingRec2020 = 3,
+};
+
+enum IPARange {
+	IPARangeFull = 0,
+	IPARangeLimited = 1,
+};
+
+enum IPABufferType {
+	IPABufferTypeImage0 = 0,
+	IPABufferTypeImage1 = 1,
+	IPABufferTypeEData = 2,
+	IPABufferTypeParams = 3,
+	IPABufferTypeStats = 4,
+	IPABufferTypeFrame = 5,
+	IPABufferTypeIr = 6,
+};
+
+enum IPAContextType {
+	IPAContextTypeRgb = 0,
+	IPAContextTypeIr = 1,
+};
+
+enum IPAModeType {
+	IPAModeTypeStandard = 0,
+	IPAModeTypeHdrMerge = 1,
+	IPAModeTypeRgbIr = 2,
+	IPAModeTypeRgbIrDual = 3,
+};
+
+struct IPAColorSpace
+{
+public:
+#ifndef __DOXYGEN__
+	IPAColorSpace()
+		: primaries(static_cast<IPAPrimaries>(0)), transferFunction(static_cast<IPATransferFunction>(0)), ycbcrEncoding(static_cast<IPAYcbcrEncoding>(0)), range(static_cast<IPARange>(0))
+	{
+	}
+
+	IPAColorSpace(const IPAPrimaries &_primaries, const IPATransferFunction &_transferFunction, const IPAYcbcrEncoding &_ycbcrEncoding, const IPARange &_range)
+		: primaries(_primaries), transferFunction(_transferFunction), ycbcrEncoding(_ycbcrEncoding), range(_range)
+	{
+	}
+#endif
+
+
+	IPAPrimaries primaries;
+	IPATransferFunction transferFunction;
+	IPAYcbcrEncoding ycbcrEncoding;
+	IPARange range;
 };
 
 struct InitParams
@@ -160,6 +221,8 @@ public:
 	virtual int32_t configure(
 		const IPAConfigInfo &configInfo,
 		const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
+		const IPAModeType mode,
+		const IPAColorSpace &colorSpace,
 		ControlInfoMap *ipaControls) = 0;
 
 	virtual void mapBuffers(
@@ -174,18 +237,20 @@ public:
 
 	virtual void computeParams(
 		const uint32_t frame,
+		const IPAContextType context,
 		const std::map<uint32_t, uint32_t> &bufferIds) = 0;
 
 	virtual void processStats(
 		const uint32_t frame,
+		const IPAContextType context,
 		const std::map<uint32_t, uint32_t> &bufferIds,
 		const ControlList &sensorControls) = 0;
 
-	Signal<uint32_t> paramsComputed;
+	Signal<uint32_t, const IPAContextType> paramsComputed;
 
-	Signal<uint32_t, const ControlList &> setSensorControls;
+	Signal<uint32_t, const IPAContextType, const ControlList &> setSensorControls;
 
-	Signal<uint32_t, const ControlList &> metadataReady;
+	Signal<uint32_t, const IPAContextType, const ControlList &> metadataReady;
 };
 
 } /* namespace nxpneo */

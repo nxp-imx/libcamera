@@ -23,6 +23,124 @@ namespace libcamera {
 LOG_DECLARE_CATEGORY(IPADataSerializer)
 
 template<>
+class IPADataSerializer<ipa::nxpneo::IPAColorSpace>
+{
+public:
+	static std::tuple<std::vector<uint8_t>, std::vector<SharedFD>>
+	serialize(const ipa::nxpneo::IPAColorSpace &data,
+		  [[maybe_unused]] ControlSerializer *cs = nullptr)
+	{
+		std::vector<uint8_t> retData;
+
+		std::vector<uint8_t> primaries;
+		std::tie(primaries, std::ignore) =
+			IPADataSerializer<uint32_t>::serialize(data.primaries);
+		retData.insert(retData.end(), primaries.begin(), primaries.end());
+
+		std::vector<uint8_t> transferFunction;
+		std::tie(transferFunction, std::ignore) =
+			IPADataSerializer<uint32_t>::serialize(data.transferFunction);
+		retData.insert(retData.end(), transferFunction.begin(), transferFunction.end());
+
+		std::vector<uint8_t> ycbcrEncoding;
+		std::tie(ycbcrEncoding, std::ignore) =
+			IPADataSerializer<uint32_t>::serialize(data.ycbcrEncoding);
+		retData.insert(retData.end(), ycbcrEncoding.begin(), ycbcrEncoding.end());
+
+		std::vector<uint8_t> range;
+		std::tie(range, std::ignore) =
+			IPADataSerializer<uint32_t>::serialize(data.range);
+		retData.insert(retData.end(), range.begin(), range.end());
+
+		return {retData, {}};
+	}
+
+	static ipa::nxpneo::IPAColorSpace
+	deserialize(std::vector<uint8_t> &data,
+		    ControlSerializer *cs = nullptr)
+	{
+		return IPADataSerializer<ipa::nxpneo::IPAColorSpace>::deserialize(data.cbegin(), data.cend(), cs);
+	}
+
+
+	static ipa::nxpneo::IPAColorSpace
+	deserialize(std::vector<uint8_t>::const_iterator dataBegin,
+		    std::vector<uint8_t>::const_iterator dataEnd,
+		    [[maybe_unused]] ControlSerializer *cs = nullptr)
+	{
+		ipa::nxpneo::IPAColorSpace ret;
+		std::vector<uint8_t>::const_iterator m = dataBegin;
+
+		size_t dataSize = std::distance(dataBegin, dataEnd);
+
+		if (dataSize < 4) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "primaries"
+				<< ": not enough data, expected "
+				<< (4) << ", got " << (dataSize);
+			return ret;
+		}
+		ret.primaries = static_cast<ipa::nxpneo::IPAPrimaries>(IPADataSerializer<uint32_t>::deserialize(m, m + 4));
+		m += 4;
+		dataSize -= 4;
+
+
+		if (dataSize < 4) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "transferFunction"
+				<< ": not enough data, expected "
+				<< (4) << ", got " << (dataSize);
+			return ret;
+		}
+		ret.transferFunction = static_cast<ipa::nxpneo::IPATransferFunction>(IPADataSerializer<uint32_t>::deserialize(m, m + 4));
+		m += 4;
+		dataSize -= 4;
+
+
+		if (dataSize < 4) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "ycbcrEncoding"
+				<< ": not enough data, expected "
+				<< (4) << ", got " << (dataSize);
+			return ret;
+		}
+		ret.ycbcrEncoding = static_cast<ipa::nxpneo::IPAYcbcrEncoding>(IPADataSerializer<uint32_t>::deserialize(m, m + 4));
+		m += 4;
+		dataSize -= 4;
+
+
+		if (dataSize < 4) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "range"
+				<< ": not enough data, expected "
+				<< (4) << ", got " << (dataSize);
+			return ret;
+		}
+		ret.range = static_cast<ipa::nxpneo::IPARange>(IPADataSerializer<uint32_t>::deserialize(m, m + 4));
+
+		return ret;
+	}
+
+	static ipa::nxpneo::IPAColorSpace
+	deserialize(std::vector<uint8_t> &data,
+		    [[maybe_unused]] std::vector<SharedFD> &fds,
+		    ControlSerializer *cs = nullptr)
+	{
+		return IPADataSerializer<ipa::nxpneo::IPAColorSpace>::deserialize(data.cbegin(), data.cend(), cs);
+	}
+
+	static ipa::nxpneo::IPAColorSpace
+	deserialize(std::vector<uint8_t>::const_iterator dataBegin,
+		    std::vector<uint8_t>::const_iterator dataEnd,
+		    [[maybe_unused]] std::vector<SharedFD>::const_iterator fdsBegin,
+		    [[maybe_unused]] std::vector<SharedFD>::const_iterator fdsEnd,
+		    ControlSerializer *cs = nullptr)
+	{
+		return IPADataSerializer<ipa::nxpneo::IPAColorSpace>::deserialize(dataBegin, dataEnd, cs);
+	}
+};
+
+template<>
 class IPADataSerializer<ipa::nxpneo::InitParams>
 {
 public:
