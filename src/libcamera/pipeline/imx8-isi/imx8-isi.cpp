@@ -694,7 +694,7 @@ StreamConfiguration PipelineHandlerISI::generateYUVConfiguration(Camera *camera,
 	StreamConfiguration cfg(formats);
 	cfg.pixelFormat = pixelFormat;
 	cfg.size = sensorSize;
-	cfg.bufferCount = 5;
+	cfg.bufferCount = 8;
 
 	return cfg;
 }
@@ -762,7 +762,7 @@ StreamConfiguration PipelineHandlerISI::generateRawConfiguration(Camera *camera)
 	StreamConfiguration cfg(formats);
 	cfg.size = sensor->resolution();
 	cfg.pixelFormat = pixelFormat;
-	cfg.bufferCount = 5;
+	cfg.bufferCount = 8;
 
 	return cfg;
 }
@@ -1102,6 +1102,10 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 		} else {
 			/* jump to next entity */
 			pad = formatter->pads()[0];
+
+			/* No links on pad implies missing CSI. */
+			if (pad->links().empty())
+				continue;
 		}
 
 		/* CSI */

@@ -53,7 +53,7 @@ private:
 };
 
 struct CameraProperties {
-	bool hdrStream;
+	bool image1Stream;
 	bool eDataStream;
 	bool multiCamera;
 	std::optional<unsigned int> formatBpp;
@@ -61,29 +61,28 @@ struct CameraProperties {
 	std::optional<Orientation> orientation;
 };
 
+enum StreamType {
+	StreamTypeImage0 = 0,
+	StreamTypeImage1,
+	StreamTypeEData,
+};
+
+constexpr std::array<StreamType, 3>
+	kStreamTypes = { StreamTypeImage0, StreamTypeImage1, StreamTypeEData };
+
 class CameraInfo
 {
 public:
 	CameraInfo() {}
 	virtual ~CameraInfo() {}
 
-	const CameraMediaStream *stream(unsigned int id) const;
-	bool hasStream(unsigned int id) const { return stream(id); }
+	const CameraMediaStream *stream(StreamType streamType) const;
+	bool hasStream(StreamType streamType) const { return stream(streamType); }
 
 	const CameraProperties &cameraProperties() const { return *properties_; }
 
-	enum {
-		STREAM_INPUT0 = 0,
-		STREAM_INPUT1,
-		STREAM_EDATA,
-		STREAM_MAX,
-	};
-	static constexpr std::array<unsigned int, STREAM_MAX> kCameraStreams = {
-		STREAM_INPUT0, STREAM_INPUT1, STREAM_EDATA
-	};
-
 private:
-	std::map<unsigned int, CameraMediaStream> streams_;
+	std::map<StreamType, CameraMediaStream> streams_;
 	CameraProperties *properties_ = nullptr;
 
 	friend PipelineConfig;

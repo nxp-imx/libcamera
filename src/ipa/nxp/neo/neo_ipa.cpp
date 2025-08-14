@@ -64,14 +64,16 @@ public:
 
 	int configure(const IPAConfigInfo &ipaConfig,
 		      const std::map<uint32_t, IPAStream> &streamConfig,
+		      const IPAModeType mode,
+		      const IPAColorSpace &colorSpace,
 		      ControlInfoMap *ipaControls) override;
 	void mapBuffers(const std::vector<IPABuffer> &buffers) override;
 	void unmapBuffers(const std::vector<unsigned int> &ids) override;
 
 	void queueRequest(const uint32_t frame, const ControlList &controls) override;
-	void computeParams(const uint32_t frame,
+	void computeParams(const uint32_t frame, const IPAContextType context,
 			   const std::map<uint32_t, uint32_t> &bufferIds) override;
-	void processStats(const uint32_t frame,
+	void processStats(const uint32_t frame, const IPAContextType context,
 			  const std::map<uint32_t, uint32_t> &bufferIds,
 			  const ControlList &sensorControls) override;
 
@@ -82,7 +84,7 @@ private:
 	void updateControls(const IPACameraSensorInfo &sensorInfo,
 			    const ControlInfoMap &sensorControls,
 			    ControlInfoMap *ipaControls);
-	void setControls(unsigned int frame);
+	void setControls(unsigned int frame, IPAContextType context);
 	std::string controlListToString(const ControlList *ctrls) const;
 	std::string logSensorParams(const unsigned int frame,
 				    const ControlList *ctrlsApplied,
@@ -107,6 +109,7 @@ const ControlInfoMap::Map nxpneoControls{
 	{ &controls::AeEnable, ControlInfo(false, true) },
 	{ &controls::AwbEnable, ControlInfo(false, true) },
 	{ &controls::ColourGains, ControlInfo(0.0f, 32.0f) },
+	{ &controls::Gamma, ControlInfo(0.5f, 10.0f, 2.2f) },
 };
 
 } /* namespace */
@@ -205,7 +208,7 @@ int IPANxpNeo::init(const IPASettings &settings, const InitParams &params,
 
 int IPANxpNeo::start()
 {
-	setControls(0);
+	setControls(0, IPAContextTypeRgb);
 
 	return 0;
 }
@@ -216,18 +219,20 @@ void IPANxpNeo::stop()
 }
 
 int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
-			 [[maybe_unused]] const std::map<uint32_t, IPAStream> &streamConfig,
+			 const std::map<uint32_t, IPAStream> &streamConfig,
+			 [[maybe_unused]] const IPAModeType mode,
+			 const IPAColorSpace &colorSpace,
 			 ControlInfoMap *ipaControls)
 {
 	const IPACameraSensorInfo *sensorInfo = &ipaConfig.sensorInfo;
 
-	CameraMode mode;
-	mode.pixelRate = sensorInfo->pixelRate;
-	mode.minLineLength = sensorInfo->minLineLength;
-	mode.maxLineLength = sensorInfo->maxLineLength;
-	mode.minFrameLength = sensorInfo->minFrameLength;
-	mode.maxFrameLength = sensorInfo->maxFrameLength;
-	context_.camHelper->setCameraMode(mode);
+	CameraMode cameraMode;
+	cameraMode.pixelRate = sensorInfo->pixelRate;
+	cameraMode.minLineLength = sensorInfo->minLineLength;
+	cameraMode.maxLineLength = sensorInfo->maxLineLength;
+	cameraMode.minFrameLength = sensorInfo->minFrameLength;
+	cameraMode.maxFrameLength = sensorInfo->maxFrameLength;
+	context_.camHelper->setCameraMode(cameraMode);
 
 	sensorControls_ = ipaConfig.sensorControls;
 	std::vector<double> vMinExposure, vMaxExposure, vDefExposure;
@@ -281,6 +286,8 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	std::vector<IPAStream> &streams = context_.configuration.streams;
 	for (auto it = streamConfig.begin(); it != streamConfig.end(); it++)
 		streams.push_back(it->second);
+
+	context_.configuration.colorSpace = colorSpace;
 
 	for (auto const &a : algorithms()) {
 		Algorithm *algo = static_cast<Algorithm *>(a.get());
@@ -338,7 +345,7 @@ void IPANxpNeo::queueRequest(const uint32_t frame, const ControlList &controls)
 	}
 }
 
-void IPANxpNeo::computeParams(const uint32_t frame,
+void IPANxpNeo::computeParams(const uint32_t frame, const IPAContextType context,
 			      const std::map<uint32_t, uint32_t> &bufferIds)
 {
 	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
@@ -368,7 +375,7 @@ void IPANxpNeo::computeParams(const uint32_t frame,
 	 * Look for metadata availability, either from the camera embedded data
 	 * stream or from the pixel data top lines.
 	 */
-	auto eDataIt = bufferIds.find(TypeEData);
+	auto eDataIt = bufferIds.find(IPABufferTypeEData);
 	unsigned int eDataBufferId =
 		eDataIt != bufferIds.end() ? eDataIt->second : 0;
 	if (eDataBufferId && mappedBuffers_.count(eDataBufferId)) {
@@ -377,7 +384,7 @@ void IPANxpNeo::computeParams(const uint32_t frame,
 		metaData = plane.data();
 		metaSize = plane.size_bytes();
 	} else {
-		auto input0It = bufferIds.find(TypeInput0);
+		auto input0It = bufferIds.find(IPABufferTypeImage0);
 		unsigned int rawBufferId =
 			input0It != bufferIds.end() ? input0It->second : 0;
 		if (rawBufferId && mappedBuffers_.count(rawBufferId)) {
@@ -401,7 +408,7 @@ void IPANxpNeo::computeParams(const uint32_t frame,
 	}
 
 	/* Prepare parameters buffer. */
-	auto paramsIter = bufferIds.find(TypeParams);
+	auto paramsIter = bufferIds.find(IPABufferTypeParams);
 	unsigned int paramsBufferId =
 		paramsIter != bufferIds.end() ? paramsIter->second : 0;
 	ASSERT(mappedBuffers_.count(paramsBufferId));
@@ -415,10 +422,10 @@ void IPANxpNeo::computeParams(const uint32_t frame,
 	for (auto const &algo : algorithms())
 		algo->prepare(context_, frame, frameContext, params);
 
-	paramsComputed.emit(frame);
+	paramsComputed.emit(frame, context);
 }
 
-void IPANxpNeo::processStats(const uint32_t frame,
+void IPANxpNeo::processStats(const uint32_t frame, const IPAContextType context,
 			     const std::map<uint32_t, uint32_t> &bufferIds,
 			     const ControlList &sensorControls)
 {
@@ -426,7 +433,7 @@ void IPANxpNeo::processStats(const uint32_t frame,
 
 	const neoisp_meta_stats_s *stats;
 
-	auto statsIter = bufferIds.find(TypeStats);
+	auto statsIter = bufferIds.find(IPABufferTypeStats);
 	unsigned int statsBufferId =
 		statsIter != bufferIds.end() ? statsIter->second : 0;
 	ASSERT(mappedBuffers_.count(statsBufferId));
@@ -489,9 +496,17 @@ void IPANxpNeo::processStats(const uint32_t frame,
 		algo->process(context_, frame, frameContext, stats, metadata);
 	}
 
-	setControls(frame);
+	/*
+	 * \todo Create IR-specific controls and have relevant algorithms to
+	 *       use them during RGBIr context processing. For now just clear
+	 *       the RGBIr context metadata to avoid merge conflict of the 2
+	 *       contexts metadata being populated with the same controls.
+	 */
+	if (context == IPAContextTypeIr)
+		metadata.clear();
 
-	metadataReady.emit(frame, metadata);
+	setControls(frame, context);
+	metadataReady.emit(frame, context, metadata);
 }
 
 void IPANxpNeo::updateControls(const IPACameraSensorInfo &sensorInfo,
@@ -558,7 +573,7 @@ void IPANxpNeo::updateControls(const IPACameraSensorInfo &sensorInfo,
 	*ipaControls = ControlInfoMap(std::move(ctrlMap), controls::controls);
 }
 
-void IPANxpNeo::setControls(unsigned int frame)
+void IPANxpNeo::setControls(unsigned int frame, IPAContextType context)
 {
 	/*
 	 * \todo The frame number is most likely wrong here, we need to take
@@ -587,7 +602,7 @@ void IPANxpNeo::setControls(unsigned int frame)
 	LOG(NxpNeoControlList, Debug)
 		<< logSensorParams(frame, &frameContext.sensor.mdControls, &ctrls);
 
-	setSensorControls.emit(frame, ctrls);
+	setSensorControls.emit(frame, context, ctrls);
 }
 
 std::string IPANxpNeo::controlListToString(const ControlList *ctrls) const

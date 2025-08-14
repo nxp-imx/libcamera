@@ -18,6 +18,7 @@
 #include <libcamera/geometry.h>
 
 #include <libcamera/ipa/core_ipa_interface.h>
+#include <libcamera/ipa/nxpneo_ipa_interface.h>
 
 #include "libcamera/internal/matrix.h"
 #include "libcamera/internal/vector.h"
@@ -42,14 +43,6 @@ struct IPASessionConfiguration {
 	} awb;
 
 	struct {
-		/* BLC offsets applicable to the current driver mode */
-		uint16_t offsetRed_;
-		uint16_t offsetGreenR_;
-		uint16_t offsetGreenB_;
-		uint16_t offsetBlue_;
-	} blc;
-
-	struct {
 		utils::Duration minExposureTime;
 		utils::Duration maxExposureTime;
 		double minAnalogueGain;
@@ -65,7 +58,13 @@ struct IPASessionConfiguration {
 		uint32_t revision;
 	} hw;
 
+	struct {
+		struct neoisp_roi_cfg_s roi;
+	} drc;
+
 	std::vector<IPAStream> streams;
+
+	IPAColorSpace colorSpace;
 };
 
 struct IPAActiveState {
@@ -97,6 +96,10 @@ struct IPAActiveState {
 	struct {
 		Matrix<float, 3, 3> ccm;
 	} ccm;
+
+	struct {
+		float gamma;
+	} goc;
 };
 
 struct IPAFrameContext : public FrameContext {
@@ -110,11 +113,13 @@ struct IPAFrameContext : public FrameContext {
 		RGB<double> gains;
 		unsigned int temperatureK;
 		bool autoEnabled;
-		bool colorGainsSet;
+		/* Set of WB enabled flags for the 3 OBWB blocks */
+		std::array<bool, 3> colorGainsSet;
 	} awb;
 
 	struct {
-		bool colorOffsetsSet;
+		/* Set of BLC enabled flags for the 3 OBWB blocks */
+		std::array<bool, 3> colorOffsetsSet;
 	} blc;
 
 	struct {
@@ -127,6 +132,11 @@ struct IPAFrameContext : public FrameContext {
 	struct {
 		Matrix<float, 3, 3> ccm;
 	} ccm;
+
+	struct {
+		float gamma;
+		bool update;
+	} goc;
 };
 
 struct IPAContext {

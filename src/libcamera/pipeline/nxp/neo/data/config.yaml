@@ -29,9 +29,14 @@
 #                     optional if entity is defined
 #   entity          = camera entity name
 #                     optional, if model is defined
-#   streams         = sequence of streams to be enabled for that camera
-#                     stream values belong to [hdr, edata]
+#   streams         = sequence of extra streams to be enabled for that camera
+#                     stream values belong to [image1, edata]
+#                     - image1 stream is used for ISP-based HDR merge and RGBIr
+#                       context switch
+#                     - edata means that there is a dedicated stream available
+#                       for embedded data
 #                     optional - no extra streams by default
+#                     Support of streams configuration is experimental.
 #   format          = mapping of {bpp, size}
 #                     filter applied to the formats exposed by the camera driver
 #                     optional - no format filtering by default
@@ -55,7 +60,7 @@
 #
 # cameras:
 #   - model: os08a20
-#     streams: [hdr]
+#     streams: [image1]
 #     format: {bpp: 10, size: [1920, 1080]}
 #
 

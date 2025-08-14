@@ -173,9 +173,13 @@ ipa_->stop();
 		                
                 	[[maybe_unused]] const size_t configInfoBufSize = readPOD<uint32_t>(_ipcMessage.data(), 0);
                 	[[maybe_unused]] const size_t streamConfigBufSize = readPOD<uint32_t>(_ipcMessage.data(), 4);
+                	[[maybe_unused]] const size_t modeBufSize = readPOD<uint32_t>(_ipcMessage.data(), 8);
+                	[[maybe_unused]] const size_t colorSpaceBufSize = readPOD<uint32_t>(_ipcMessage.data(), 12);
 
-                	const size_t configInfoStart = 8;
+                	const size_t configInfoStart = 16;
                 	const size_t streamConfigStart = configInfoStart + configInfoBufSize;
+                	const size_t modeStart = streamConfigStart + streamConfigBufSize;
+                	const size_t colorSpaceStart = modeStart + modeBufSize;
 
 
                 	IPAConfigInfo configInfo =
@@ -187,12 +191,22 @@ ipa_->stop();
                 	std::map<uint32_t, libcamera::IPAStream> streamConfig =
                         IPADataSerializer<std::map<uint32_t, libcamera::IPAStream>>::deserialize(
                         	_ipcMessage.data().cbegin() + streamConfigStart,
+                        	_ipcMessage.data().cbegin() + streamConfigStart + streamConfigBufSize);
+
+                	IPAModeType mode =
+                        static_cast<ipa::nxpneo::IPAModeType>(IPADataSerializer<uint32_t>::deserialize(
+                        	_ipcMessage.data().cbegin() + modeStart,
+                        	_ipcMessage.data().cbegin() + modeStart + modeBufSize));
+
+                	IPAColorSpace colorSpace =
+                        IPADataSerializer<IPAColorSpace>::deserialize(
+                        	_ipcMessage.data().cbegin() + colorSpaceStart,
                         	_ipcMessage.data().cend());
 
 
 			ControlInfoMap ipaControls;
 
-			int32_t _callRet =ipa_->configure(configInfo, streamConfig, &ipaControls);
+			int32_t _callRet =ipa_->configure(configInfo, streamConfig, mode, colorSpace, &ipaControls);
 
 			IPCMessage::Header header = { _ipcMessage.header().cmd, _ipcMessage.header().cookie };
 			IPCMessage _response(header);
@@ -296,10 +310,12 @@ ipa_->queueRequest(frame, reqControls);
 		case _NxpNeoCmd::ComputeParams: {
 		                
                 	[[maybe_unused]] const size_t frameBufSize = readPOD<uint32_t>(_ipcMessage.data(), 0);
-                	[[maybe_unused]] const size_t bufferIdsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 4);
+                	[[maybe_unused]] const size_t contextBufSize = readPOD<uint32_t>(_ipcMessage.data(), 4);
+                	[[maybe_unused]] const size_t bufferIdsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 8);
 
-                	const size_t frameStart = 8;
-                	const size_t bufferIdsStart = frameStart + frameBufSize;
+                	const size_t frameStart = 12;
+                	const size_t contextStart = frameStart + frameBufSize;
+                	const size_t bufferIdsStart = contextStart + contextBufSize;
 
 
                 	uint32_t frame =
@@ -307,12 +323,17 @@ ipa_->queueRequest(frame, reqControls);
                         	_ipcMessage.data().cbegin() + frameStart,
                         	_ipcMessage.data().cbegin() + frameStart + frameBufSize);
 
+                	IPAContextType context =
+                        static_cast<ipa::nxpneo::IPAContextType>(IPADataSerializer<uint32_t>::deserialize(
+                        	_ipcMessage.data().cbegin() + contextStart,
+                        	_ipcMessage.data().cbegin() + contextStart + contextBufSize));
+
                 	std::map<uint32_t, uint32_t> bufferIds =
                         IPADataSerializer<std::map<uint32_t, uint32_t>>::deserialize(
                         	_ipcMessage.data().cbegin() + bufferIdsStart,
                         	_ipcMessage.data().cend());
 
-ipa_->computeParams(frame, bufferIds);
+ipa_->computeParams(frame, context, bufferIds);
 
 			break;
 		}
@@ -320,11 +341,13 @@ ipa_->computeParams(frame, bufferIds);
 		case _NxpNeoCmd::ProcessStats: {
 		                
                 	[[maybe_unused]] const size_t frameBufSize = readPOD<uint32_t>(_ipcMessage.data(), 0);
-                	[[maybe_unused]] const size_t bufferIdsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 4);
-                	[[maybe_unused]] const size_t sensorControlsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 8);
+                	[[maybe_unused]] const size_t contextBufSize = readPOD<uint32_t>(_ipcMessage.data(), 4);
+                	[[maybe_unused]] const size_t bufferIdsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 8);
+                	[[maybe_unused]] const size_t sensorControlsBufSize = readPOD<uint32_t>(_ipcMessage.data(), 12);
 
-                	const size_t frameStart = 12;
-                	const size_t bufferIdsStart = frameStart + frameBufSize;
+                	const size_t frameStart = 16;
+                	const size_t contextStart = frameStart + frameBufSize;
+                	const size_t bufferIdsStart = contextStart + contextBufSize;
                 	const size_t sensorControlsStart = bufferIdsStart + bufferIdsBufSize;
 
 
@@ -332,6 +355,11 @@ ipa_->computeParams(frame, bufferIds);
                         IPADataSerializer<uint32_t>::deserialize(
                         	_ipcMessage.data().cbegin() + frameStart,
                         	_ipcMessage.data().cbegin() + frameStart + frameBufSize);
+
+                	IPAContextType context =
+                        static_cast<ipa::nxpneo::IPAContextType>(IPADataSerializer<uint32_t>::deserialize(
+                        	_ipcMessage.data().cbegin() + contextStart,
+                        	_ipcMessage.data().cbegin() + contextStart + contextBufSize));
 
                 	std::map<uint32_t, uint32_t> bufferIds =
                         IPADataSerializer<std::map<uint32_t, uint32_t>>::deserialize(
@@ -344,7 +372,7 @@ ipa_->computeParams(frame, bufferIds);
                         	_ipcMessage.data().cend(),
                         	&controlSerializer_);
 
-ipa_->processStats(frame, bufferIds, sensorControls);
+ipa_->processStats(frame, context, bufferIds, sensorControls);
 
 			break;
 		}
@@ -393,7 +421,8 @@ private:
 
 
         void paramsComputed(
-        	const uint32_t frame)
+        	const uint32_t frame,
+        	const IPAContextType context)
 	{
 		IPCMessage::Header header = {
 			static_cast<uint32_t>(_NxpNeoEventCmd::ParamsComputed),
@@ -406,7 +435,14 @@ private:
 	std::tie(frameBuf, std::ignore) =
 		IPADataSerializer<uint32_t>::serialize(frame
 );
+	static_assert(sizeof(ipa::nxpneo::IPAContextType) <= 4);
+	std::vector<uint8_t> contextBuf;
+	std::tie(contextBuf, std::ignore) =
+		IPADataSerializer<uint32_t>::serialize(static_cast<uint32_t>(context));
+	appendPOD<uint32_t>(_message.data(), frameBuf.size());
+	appendPOD<uint32_t>(_message.data(), contextBuf.size());
 	_message.data().insert(_message.data().end(), frameBuf.begin(), frameBuf.end());
+	_message.data().insert(_message.data().end(), contextBuf.begin(), contextBuf.end());
 
 		int _ret = socket_.send(_message.payload());
 		if (_ret < 0)
@@ -418,6 +454,7 @@ private:
 
         void setSensorControls(
         	const uint32_t frame,
+        	const IPAContextType context,
         	const ControlList &sensorControls)
 	{
 		IPCMessage::Header header = {
@@ -431,13 +468,19 @@ private:
 	std::tie(frameBuf, std::ignore) =
 		IPADataSerializer<uint32_t>::serialize(frame
 );
+	static_assert(sizeof(ipa::nxpneo::IPAContextType) <= 4);
+	std::vector<uint8_t> contextBuf;
+	std::tie(contextBuf, std::ignore) =
+		IPADataSerializer<uint32_t>::serialize(static_cast<uint32_t>(context));
 	std::vector<uint8_t> sensorControlsBuf;
 	std::tie(sensorControlsBuf, std::ignore) =
 		IPADataSerializer<ControlList>::serialize(sensorControls
 , &controlSerializer_);
 	appendPOD<uint32_t>(_message.data(), frameBuf.size());
+	appendPOD<uint32_t>(_message.data(), contextBuf.size());
 	appendPOD<uint32_t>(_message.data(), sensorControlsBuf.size());
 	_message.data().insert(_message.data().end(), frameBuf.begin(), frameBuf.end());
+	_message.data().insert(_message.data().end(), contextBuf.begin(), contextBuf.end());
 	_message.data().insert(_message.data().end(), sensorControlsBuf.begin(), sensorControlsBuf.end());
 
 		int _ret = socket_.send(_message.payload());
@@ -450,6 +493,7 @@ private:
 
         void metadataReady(
         	const uint32_t frame,
+        	const IPAContextType context,
         	const ControlList &metadata)
 	{
 		IPCMessage::Header header = {
@@ -463,13 +507,19 @@ private:
 	std::tie(frameBuf, std::ignore) =
 		IPADataSerializer<uint32_t>::serialize(frame
 );
+	static_assert(sizeof(ipa::nxpneo::IPAContextType) <= 4);
+	std::vector<uint8_t> contextBuf;
+	std::tie(contextBuf, std::ignore) =
+		IPADataSerializer<uint32_t>::serialize(static_cast<uint32_t>(context));
 	std::vector<uint8_t> metadataBuf;
 	std::tie(metadataBuf, std::ignore) =
 		IPADataSerializer<ControlList>::serialize(metadata
 , &controlSerializer_);
 	appendPOD<uint32_t>(_message.data(), frameBuf.size());
+	appendPOD<uint32_t>(_message.data(), contextBuf.size());
 	appendPOD<uint32_t>(_message.data(), metadataBuf.size());
 	_message.data().insert(_message.data().end(), frameBuf.begin(), frameBuf.end());
+	_message.data().insert(_message.data().end(), contextBuf.begin(), contextBuf.end());
 	_message.data().insert(_message.data().end(), metadataBuf.begin(), metadataBuf.end());
 
 		int _ret = socket_.send(_message.payload());

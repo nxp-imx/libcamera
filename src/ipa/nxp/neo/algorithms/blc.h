@@ -19,7 +19,7 @@ namespace ipa::nxpneo::algorithms {
 class BlackLevelCorrection : public Algorithm
 {
 public:
-	BlackLevelCorrection(){};
+	BlackLevelCorrection();
 	~BlackLevelCorrection() = default;
 
 	int init(IPAContext &context, const YamlObject &tuningData) override;
@@ -33,18 +33,41 @@ public:
 		     const neoisp_meta_stats_s *stats,
 		     ControlList &metadata) override;
 
-private:
-	uint16_t offsetToObwb(int16_t offset);
-	uint16_t adjustOffsetToBpp(uint16_t offset, uint32_t bpp);
+	struct Offsets {
+		uint16_t red;
+		uint16_t greenR;
+		uint16_t greenB;
+		uint16_t blue;
+	};
+	/* Offset values in supported obwb format: 16-bit and 20-bit formats */
+	struct OffsetsObwbFormat {
+		Offsets format16b;
+		Offsets format20b;
+	};
+	const Offsets &offsets(uint16_t obwb) const;
 
-	/* Offset values in 16-bit format for a reference bit-depth */
-	uint16_t offsetRed_ = 0;
-	uint16_t offsetGreenR_ = 0;
-	uint16_t offsetGreenB_ = 0;
-	uint16_t offsetBlue_ = 0;
+private:
+	uint16_t offsetToObwb(int16_t offset, uint16_t bpp) const;
+	uint16_t adjustOffsetToBpp(uint16_t offset, uint32_t bpp) const;
+
+	static const std::string kDefaultObwb;
+	static const std::map<const std::string, std::vector<uint8_t>> kObwbMap;
+
+	bool enabled_;
+	/* Offset values associated to the reference bit-depth */
+	OffsetsObwbFormat refOffsets_;
+	/* Offsets values applicable to the current driver mode */
+	OffsetsObwbFormat modeOffsets_;
+	std::vector<uint8_t> obwbs_;
 
 	/* Offset reference bit-depth */
 	std::optional<uint32_t> referenceBitDepth_;
+};
+
+const std::string BlackLevelCorrection::kDefaultObwb{ "obwb0/1" };
+const std::map<const std::string, std::vector<uint8_t>> BlackLevelCorrection::kObwbMap = {
+	{ "obwb0/1", { 0, 1 } },
+	{ "obwb2", { 2 } },
 };
 
 } /* namespace ipa::nxpneo::algorithms */
