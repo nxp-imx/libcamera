@@ -14,7 +14,11 @@
 /*
  * Check Documentation/admin-guide/media/nxp-neoisp.rst for control details.
  */
+#define V4L2_CID_NEOISP_QUERYCAP (V4L2_CID_USER_NEOISP_BASE + 0)
 #define V4L2_CID_NEOISP_META_API_VERSION (V4L2_CID_USER_NEOISP_BASE + 1)
+
+/* Values for Neoisp 'capabilities' in custom QUERYCAP */
+#define NEO_CAP_ALIGNMENT_MSB 0x00000001
 
 /* Local memories sizes (words size) */
 
@@ -42,9 +46,9 @@
 /**
  * enum neoisp_version_e - NXP NEO ISP variants
  *
- * @NEOISP_HW_V1:	First Neoisp hardware variant used in i.MX95 A0/A1 boards
- * @NEOISP_HW_V2:	Neoisp hardware variant used in i.MX95 B0 boards
- * @NEOISP_HW_MAX:	Neoisp maximum variant index
+ * @NEOISP_HW_V1:		Initial Neo-B version (i.MX95 revision A0/A1)
+ * @NEOISP_HW_V2:		Second Neo-B version (i.MX95 revision B0 and i.MX952)
+ * @NEOISP_HW_MAX:		Neoisp maximum variant index
  */
 enum neoisp_version_e {
 	NEOISP_HW_V1 = 1,
