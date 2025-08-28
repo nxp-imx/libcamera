@@ -2193,7 +2193,7 @@ int NxpNeoCameraData::loadIPA()
 	if (ipaTuningFile.empty())
 		ipaTuningFile = ipa_->configurationFile("uncalibrated.yaml");
 
-	uint32_t hwRevision = 0;
+	uint32_t hwRevision = neo_->media()->hwRevision();
 	ipa::nxpneo::SensorConfig sensorConfig;
 	const MediaEntity *entity = sensor->entity();
 	std::vector<uint32_t> ids = utils::map_keys(sensor_->controls().idmap());
