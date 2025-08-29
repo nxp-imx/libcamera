@@ -54,15 +54,16 @@ IPAProxySoft::IPAProxySoft(IPAModule *ipam, bool isolate)
 			return;
 		}
 
-		ipc_ = std::make_unique<IPCPipeUnixSocket>(ipam->path().c_str(),
-							   proxyWorkerPath.c_str());
-		if (!ipc_->isConnected()) {
+		auto ipc = std::make_unique<IPCPipeUnixSocket>(ipam->path().c_str(),
+							       proxyWorkerPath.c_str());
+		if (!ipc->isConnected()) {
 			LOG(IPAProxy, Error) << "Failed to create IPCPipe";
 			return;
 		}
 
-		ipc_->recv.connect(this, &IPAProxySoft::recvMessage);
+		ipc->recv.connect(this, &IPAProxySoft::recvMessage);
 
+		ipc_ = std::move(ipc);
 		valid_ = true;
 		return;
 	}
@@ -90,7 +91,7 @@ IPAProxySoft::IPAProxySoft(IPAModule *ipam, bool isolate)
 
 IPAProxySoft::~IPAProxySoft()
 {
-	if (isolate_) {
+	if (ipc_) {
 		IPCMessage::Header header =
 			{ static_cast<uint32_t>(_SoftCmd::Exit), seq_++ };
 		IPCMessage msg(header);

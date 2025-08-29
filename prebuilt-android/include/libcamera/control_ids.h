@@ -70,10 +70,12 @@ enum {
 	HDR_CHANNEL = 44,
 	GAMMA = 45,
 	DEBUG_METADATA_ENABLE = 46,
+	FRAME_WALL_CLOCK = 47,
 };
 
 
 extern const Control<bool> AeEnable;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AE_ENABLE
 enum AeStateEnum {
 	AeStateIdle = 0,
 	AeStateSearching = 1,
@@ -82,6 +84,7 @@ enum AeStateEnum {
 extern const std::array<const ControlValue, 3> AeStateValues;
 extern const std::map<std::string, int32_t> AeStateNameValueMap;
 extern const Control<int32_t> AeState;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AE_STATE
 enum AeMeteringModeEnum {
 	MeteringCentreWeighted = 0,
 	MeteringSpot = 1,
@@ -91,6 +94,7 @@ enum AeMeteringModeEnum {
 extern const std::array<const ControlValue, 4> AeMeteringModeValues;
 extern const std::map<std::string, int32_t> AeMeteringModeNameValueMap;
 extern const Control<int32_t> AeMeteringMode;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AE_METERING_MODE
 enum AeConstraintModeEnum {
 	ConstraintNormal = 0,
 	ConstraintHighlight = 1,
@@ -100,6 +104,7 @@ enum AeConstraintModeEnum {
 extern const std::array<const ControlValue, 4> AeConstraintModeValues;
 extern const std::map<std::string, int32_t> AeConstraintModeNameValueMap;
 extern const Control<int32_t> AeConstraintMode;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AE_CONSTRAINT_MODE
 enum AeExposureModeEnum {
 	ExposureNormal = 0,
 	ExposureShort = 1,
@@ -109,8 +114,11 @@ enum AeExposureModeEnum {
 extern const std::array<const ControlValue, 4> AeExposureModeValues;
 extern const std::map<std::string, int32_t> AeExposureModeNameValueMap;
 extern const Control<int32_t> AeExposureMode;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AE_EXPOSURE_MODE
 extern const Control<float> ExposureValue;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_EXPOSURE_VALUE
 extern const Control<int32_t> ExposureTime;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_EXPOSURE_TIME
 enum ExposureTimeModeEnum {
 	ExposureTimeModeAuto = 0,
 	ExposureTimeModeManual = 1,
@@ -118,7 +126,9 @@ enum ExposureTimeModeEnum {
 extern const std::array<const ControlValue, 2> ExposureTimeModeValues;
 extern const std::map<std::string, int32_t> ExposureTimeModeNameValueMap;
 extern const Control<int32_t> ExposureTimeMode;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_EXPOSURE_TIME_MODE
 extern const Control<float> AnalogueGain;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_ANALOGUE_GAIN
 enum AnalogueGainModeEnum {
 	AnalogueGainModeAuto = 0,
 	AnalogueGainModeManual = 1,
@@ -126,6 +136,7 @@ enum AnalogueGainModeEnum {
 extern const std::array<const ControlValue, 2> AnalogueGainModeValues;
 extern const std::map<std::string, int32_t> AnalogueGainModeNameValueMap;
 extern const Control<int32_t> AnalogueGainMode;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_ANALOGUE_GAIN_MODE
 enum AeFlickerModeEnum {
 	FlickerOff = 0,
 	FlickerManual = 1,
@@ -134,12 +145,19 @@ enum AeFlickerModeEnum {
 extern const std::array<const ControlValue, 3> AeFlickerModeValues;
 extern const std::map<std::string, int32_t> AeFlickerModeNameValueMap;
 extern const Control<int32_t> AeFlickerMode;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AE_FLICKER_MODE
 extern const Control<int32_t> AeFlickerPeriod;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AE_FLICKER_PERIOD
 extern const Control<int32_t> AeFlickerDetected;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AE_FLICKER_DETECTED
 extern const Control<float> Brightness;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_BRIGHTNESS
 extern const Control<float> Contrast;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_CONTRAST
 extern const Control<float> Lux;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_LUX
 extern const Control<bool> AwbEnable;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AWB_ENABLE
 enum AwbModeEnum {
 	AwbAuto = 0,
 	AwbIncandescent = 1,
@@ -153,20 +171,35 @@ enum AwbModeEnum {
 extern const std::array<const ControlValue, 8> AwbModeValues;
 extern const std::map<std::string, int32_t> AwbModeNameValueMap;
 extern const Control<int32_t> AwbMode;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AWB_MODE
 extern const Control<bool> AwbLocked;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AWB_LOCKED
 extern const Control<Span<const float, 2>> ColourGains;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_COLOUR_GAINS
 extern const Control<int32_t> ColourTemperature;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_COLOUR_TEMPERATURE
 extern const Control<float> Saturation;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_SATURATION
 extern const Control<Span<const int32_t, 4>> SensorBlackLevels;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_SENSOR_BLACK_LEVELS
 extern const Control<float> Sharpness;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_SHARPNESS
 extern const Control<int32_t> FocusFoM;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_FOCUS_FO_M
 extern const Control<Span<const float, 9>> ColourCorrectionMatrix;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_COLOUR_CORRECTION_MATRIX
 extern const Control<Rectangle> ScalerCrop;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_SCALER_CROP
 extern const Control<float> DigitalGain;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_DIGITAL_GAIN
 extern const Control<int64_t> FrameDuration;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_FRAME_DURATION
 extern const Control<Span<const int64_t, 2>> FrameDurationLimits;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_FRAME_DURATION_LIMITS
 extern const Control<float> SensorTemperature;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_SENSOR_TEMPERATURE
 extern const Control<int64_t> SensorTimestamp;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_SENSOR_TIMESTAMP
 enum AfModeEnum {
 	AfModeManual = 0,
 	AfModeAuto = 1,
@@ -175,6 +208,7 @@ enum AfModeEnum {
 extern const std::array<const ControlValue, 3> AfModeValues;
 extern const std::map<std::string, int32_t> AfModeNameValueMap;
 extern const Control<int32_t> AfMode;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AF_MODE
 enum AfRangeEnum {
 	AfRangeNormal = 0,
 	AfRangeMacro = 1,
@@ -183,6 +217,7 @@ enum AfRangeEnum {
 extern const std::array<const ControlValue, 3> AfRangeValues;
 extern const std::map<std::string, int32_t> AfRangeNameValueMap;
 extern const Control<int32_t> AfRange;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AF_RANGE
 enum AfSpeedEnum {
 	AfSpeedNormal = 0,
 	AfSpeedFast = 1,
@@ -190,6 +225,7 @@ enum AfSpeedEnum {
 extern const std::array<const ControlValue, 2> AfSpeedValues;
 extern const std::map<std::string, int32_t> AfSpeedNameValueMap;
 extern const Control<int32_t> AfSpeed;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AF_SPEED
 enum AfMeteringEnum {
 	AfMeteringAuto = 0,
 	AfMeteringWindows = 1,
@@ -197,7 +233,9 @@ enum AfMeteringEnum {
 extern const std::array<const ControlValue, 2> AfMeteringValues;
 extern const std::map<std::string, int32_t> AfMeteringNameValueMap;
 extern const Control<int32_t> AfMetering;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AF_METERING
 extern const Control<Span<const Rectangle>> AfWindows;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AF_WINDOWS
 enum AfTriggerEnum {
 	AfTriggerStart = 0,
 	AfTriggerCancel = 1,
@@ -205,6 +243,7 @@ enum AfTriggerEnum {
 extern const std::array<const ControlValue, 2> AfTriggerValues;
 extern const std::map<std::string, int32_t> AfTriggerNameValueMap;
 extern const Control<int32_t> AfTrigger;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AF_TRIGGER
 enum AfPauseEnum {
 	AfPauseImmediate = 0,
 	AfPauseDeferred = 1,
@@ -213,7 +252,9 @@ enum AfPauseEnum {
 extern const std::array<const ControlValue, 3> AfPauseValues;
 extern const std::map<std::string, int32_t> AfPauseNameValueMap;
 extern const Control<int32_t> AfPause;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AF_PAUSE
 extern const Control<float> LensPosition;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_LENS_POSITION
 enum AfStateEnum {
 	AfStateIdle = 0,
 	AfStateScanning = 1,
@@ -223,6 +264,7 @@ enum AfStateEnum {
 extern const std::array<const ControlValue, 4> AfStateValues;
 extern const std::map<std::string, int32_t> AfStateNameValueMap;
 extern const Control<int32_t> AfState;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AF_STATE
 enum AfPauseStateEnum {
 	AfPauseStateRunning = 0,
 	AfPauseStatePausing = 1,
@@ -231,6 +273,7 @@ enum AfPauseStateEnum {
 extern const std::array<const ControlValue, 3> AfPauseStateValues;
 extern const std::map<std::string, int32_t> AfPauseStateNameValueMap;
 extern const Control<int32_t> AfPauseState;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_AF_PAUSE_STATE
 enum HdrModeEnum {
 	HdrModeOff = 0,
 	HdrModeMultiExposureUnmerged = 1,
@@ -241,6 +284,7 @@ enum HdrModeEnum {
 extern const std::array<const ControlValue, 5> HdrModeValues;
 extern const std::map<std::string, int32_t> HdrModeNameValueMap;
 extern const Control<int32_t> HdrMode;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_HDR_MODE
 enum HdrChannelEnum {
 	HdrChannelNone = 0,
 	HdrChannelShort = 1,
@@ -250,8 +294,13 @@ enum HdrChannelEnum {
 extern const std::array<const ControlValue, 4> HdrChannelValues;
 extern const std::map<std::string, int32_t> HdrChannelNameValueMap;
 extern const Control<int32_t> HdrChannel;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_HDR_CHANNEL
 extern const Control<float> Gamma;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_GAMMA
 extern const Control<bool> DebugMetadataEnable;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_DEBUG_METADATA_ENABLE
+extern const Control<int64_t> FrameWallClock;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_FRAME_WALL_CLOCK
 
 namespace draft {
 
@@ -284,6 +333,7 @@ enum AePrecaptureTriggerEnum {
 extern const std::array<const ControlValue, 3> AePrecaptureTriggerValues;
 extern const std::map<std::string, int32_t> AePrecaptureTriggerNameValueMap;
 extern const Control<int32_t> AePrecaptureTrigger;
+#define LIBCAMERA_HAS_DRAFT_VENDOR_CONTROLS_AE_PRECAPTURE_TRIGGER
 enum NoiseReductionModeEnum {
 	NoiseReductionModeOff = 0,
 	NoiseReductionModeFast = 1,
@@ -294,6 +344,7 @@ enum NoiseReductionModeEnum {
 extern const std::array<const ControlValue, 5> NoiseReductionModeValues;
 extern const std::map<std::string, int32_t> NoiseReductionModeNameValueMap;
 extern const Control<int32_t> NoiseReductionMode;
+#define LIBCAMERA_HAS_DRAFT_VENDOR_CONTROLS_NOISE_REDUCTION_MODE
 enum ColorCorrectionAberrationModeEnum {
 	ColorCorrectionAberrationOff = 0,
 	ColorCorrectionAberrationFast = 1,
@@ -302,6 +353,7 @@ enum ColorCorrectionAberrationModeEnum {
 extern const std::array<const ControlValue, 3> ColorCorrectionAberrationModeValues;
 extern const std::map<std::string, int32_t> ColorCorrectionAberrationModeNameValueMap;
 extern const Control<int32_t> ColorCorrectionAberrationMode;
+#define LIBCAMERA_HAS_DRAFT_VENDOR_CONTROLS_COLOR_CORRECTION_ABERRATION_MODE
 enum AwbStateEnum {
 	AwbStateInactive = 0,
 	AwbStateSearching = 1,
@@ -311,7 +363,9 @@ enum AwbStateEnum {
 extern const std::array<const ControlValue, 4> AwbStateValues;
 extern const std::map<std::string, int32_t> AwbStateNameValueMap;
 extern const Control<int32_t> AwbState;
+#define LIBCAMERA_HAS_DRAFT_VENDOR_CONTROLS_AWB_STATE
 extern const Control<int64_t> SensorRollingShutterSkew;
+#define LIBCAMERA_HAS_DRAFT_VENDOR_CONTROLS_SENSOR_ROLLING_SHUTTER_SKEW
 enum LensShadingMapModeEnum {
 	LensShadingMapModeOff = 0,
 	LensShadingMapModeOn = 1,
@@ -319,8 +373,11 @@ enum LensShadingMapModeEnum {
 extern const std::array<const ControlValue, 2> LensShadingMapModeValues;
 extern const std::map<std::string, int32_t> LensShadingMapModeNameValueMap;
 extern const Control<int32_t> LensShadingMapMode;
+#define LIBCAMERA_HAS_DRAFT_VENDOR_CONTROLS_LENS_SHADING_MAP_MODE
 extern const Control<int32_t> PipelineDepth;
+#define LIBCAMERA_HAS_DRAFT_VENDOR_CONTROLS_PIPELINE_DEPTH
 extern const Control<int32_t> MaxLatency;
+#define LIBCAMERA_HAS_DRAFT_VENDOR_CONTROLS_MAX_LATENCY
 enum TestPatternModeEnum {
 	TestPatternModeOff = 0,
 	TestPatternModeSolidColor = 1,
@@ -332,6 +389,7 @@ enum TestPatternModeEnum {
 extern const std::array<const ControlValue, 6> TestPatternModeValues;
 extern const std::map<std::string, int32_t> TestPatternModeNameValueMap;
 extern const Control<int32_t> TestPatternMode;
+#define LIBCAMERA_HAS_DRAFT_VENDOR_CONTROLS_TEST_PATTERN_MODE
 enum FaceDetectModeEnum {
 	FaceDetectModeOff = 0,
 	FaceDetectModeSimple = 1,
@@ -340,10 +398,15 @@ enum FaceDetectModeEnum {
 extern const std::array<const ControlValue, 3> FaceDetectModeValues;
 extern const std::map<std::string, int32_t> FaceDetectModeNameValueMap;
 extern const Control<int32_t> FaceDetectMode;
+#define LIBCAMERA_HAS_DRAFT_VENDOR_CONTROLS_FACE_DETECT_MODE
 extern const Control<Span<const Rectangle>> FaceDetectFaceRectangles;
+#define LIBCAMERA_HAS_DRAFT_VENDOR_CONTROLS_FACE_DETECT_FACE_RECTANGLES
 extern const Control<Span<const uint8_t>> FaceDetectFaceScores;
+#define LIBCAMERA_HAS_DRAFT_VENDOR_CONTROLS_FACE_DETECT_FACE_SCORES
 extern const Control<Span<const Point>> FaceDetectFaceLandmarks;
+#define LIBCAMERA_HAS_DRAFT_VENDOR_CONTROLS_FACE_DETECT_FACE_LANDMARKS
 extern const Control<Span<const int32_t>> FaceDetectFaceIds;
+#define LIBCAMERA_HAS_DRAFT_VENDOR_CONTROLS_FACE_DETECT_FACE_IDS
 
 } /* namespace draft */
 

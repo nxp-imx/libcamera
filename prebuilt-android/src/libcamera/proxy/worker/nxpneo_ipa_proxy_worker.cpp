@@ -422,7 +422,8 @@ private:
 
         void paramsComputed(
         	const uint32_t frame,
-        	const IPAContextType context)
+        	const IPAContextType context,
+        	const uint32_t bytesused)
 	{
 		IPCMessage::Header header = {
 			static_cast<uint32_t>(_NxpNeoEventCmd::ParamsComputed),
@@ -439,10 +440,16 @@ private:
 	std::vector<uint8_t> contextBuf;
 	std::tie(contextBuf, std::ignore) =
 		IPADataSerializer<uint32_t>::serialize(static_cast<uint32_t>(context));
+	std::vector<uint8_t> bytesusedBuf;
+	std::tie(bytesusedBuf, std::ignore) =
+		IPADataSerializer<uint32_t>::serialize(bytesused
+);
 	appendPOD<uint32_t>(_message.data(), frameBuf.size());
 	appendPOD<uint32_t>(_message.data(), contextBuf.size());
+	appendPOD<uint32_t>(_message.data(), bytesusedBuf.size());
 	_message.data().insert(_message.data().end(), frameBuf.begin(), frameBuf.end());
 	_message.data().insert(_message.data().end(), contextBuf.begin(), contextBuf.end());
+	_message.data().insert(_message.data().end(), bytesusedBuf.begin(), bytesusedBuf.end());
 
 		int _ret = socket_.send(_message.payload());
 		if (_ret < 0)

@@ -54,15 +54,16 @@ IPAProxyNxpNeo::IPAProxyNxpNeo(IPAModule *ipam, bool isolate)
 			return;
 		}
 
-		ipc_ = std::make_unique<IPCPipeUnixSocket>(ipam->path().c_str(),
-							   proxyWorkerPath.c_str());
-		if (!ipc_->isConnected()) {
+		auto ipc = std::make_unique<IPCPipeUnixSocket>(ipam->path().c_str(),
+							       proxyWorkerPath.c_str());
+		if (!ipc->isConnected()) {
 			LOG(IPAProxy, Error) << "Failed to create IPCPipe";
 			return;
 		}
 
-		ipc_->recv.connect(this, &IPAProxyNxpNeo::recvMessage);
+		ipc->recv.connect(this, &IPAProxyNxpNeo::recvMessage);
 
+		ipc_ = std::move(ipc);
 		valid_ = true;
 		return;
 	}
@@ -90,7 +91,7 @@ IPAProxyNxpNeo::IPAProxyNxpNeo(IPAModule *ipam, bool isolate)
 
 IPAProxyNxpNeo::~IPAProxyNxpNeo()
 {
-	if (isolate_) {
+	if (ipc_) {
 		IPCMessage::Header header =
 			{ static_cast<uint32_t>(_NxpNeoCmd::Exit), seq_++ };
 		IPCMessage msg(header);
@@ -638,10 +639,11 @@ void IPAProxyNxpNeo::processStatsIPC(
 
 void IPAProxyNxpNeo::paramsComputedThread(
 	const uint32_t frame,
-	const IPAContextType context)
+	const IPAContextType context,
+	const uint32_t bytesused)
 {
 	ASSERT(state_ != ProxyStopped);
-	paramsComputed.emit(frame, context);
+	paramsComputed.emit(frame, context, bytesused);
 }
 
 void IPAProxyNxpNeo::paramsComputedIPC(
@@ -652,9 +654,11 @@ void IPAProxyNxpNeo::paramsComputedIPC(
 
 	[[maybe_unused]] const size_t frameBufSize = readPOD<uint32_t>(data, 0, data + dataSize);
 	[[maybe_unused]] const size_t contextBufSize = readPOD<uint32_t>(data, 4, data + dataSize);
+	[[maybe_unused]] const size_t bytesusedBufSize = readPOD<uint32_t>(data, 8, data + dataSize);
 
-	const size_t frameStart = 8;
+	const size_t frameStart = 12;
 	const size_t contextStart = frameStart + frameBufSize;
+	const size_t bytesusedStart = contextStart + contextBufSize;
 
 
 	uint32_t frame =
@@ -667,7 +671,12 @@ void IPAProxyNxpNeo::paramsComputedIPC(
         	data + contextStart,
         	data + contextStart + contextBufSize));
 
-	paramsComputed.emit(frame, context);
+	uint32_t bytesused =
+        IPADataSerializer<uint32_t>::deserialize(
+        	data + bytesusedStart,
+        	data + bytesusedStart + bytesusedBufSize);
+
+	paramsComputed.emit(frame, context, bytesused);
 }
 
 void IPAProxyNxpNeo::setSensorControlsThread(
