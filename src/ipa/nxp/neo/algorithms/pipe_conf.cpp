@@ -132,8 +132,8 @@ namespace ipa::nxpneo::algorithms {
 LOG_DEFINE_CATEGORY(NxpNeoAlgoPipeConf)
 
 PipeConf::PipeConf()
-	: inAlign0_(kInAlignDefault), lpAlign0_(kLpAlignDefault),
-	  inAlign1_(kInAlignDefault), lpAlign1_(kLpAlignDefault)
+	: inAlign0_(0), lpAlign0_(kLpAlignDefault),
+	  inAlign1_(0), lpAlign1_(kLpAlignDefault)
 {
 }
 
@@ -148,9 +148,11 @@ int PipeConf::init([[maybe_unused]] IPAContext &context,
 	const YamlObject &lpAlign1Obj = tuningData["lpalign1"];
 	lpAlign1_ = lpAlign1Obj.get<uint8_t>();
 
-	/* \todo make INALIGN default value SoC-dependent */
-	inAlign0_ = kInAlignDefault;
-	inAlign1_ = kInAlignDefault;
+	uint8_t inAlignAuto = (context.hw.hwCapabilities & NEO_CAP_ALIGNMENT_MSB) ? 1 : 0;
+	const YamlObject &inAlign0Obj = tuningData["inalign0"];
+	inAlign0_ = inAlign0Obj.get<uint8_t>().value_or(inAlignAuto);
+	const YamlObject &inAlign1Obj = tuningData["inalign1"];
+	inAlign1_ = inAlign1Obj.get<uint8_t>().value_or(inAlignAuto);
 
 	return 0;
 }
@@ -175,8 +177,8 @@ void PipeConf::prepare(IPAContext &context, const uint32_t frame,
 	uint8_t lpAlign1 = lpAlign1_.value_or(lpAlignAuto);
 
 	LOG(NxpNeoAlgoPipeConf, Debug)
-		<< "inalign0/1 " << inAlign0_ << "/" << inAlign1_
-		<< "lpalign0/1 " << lpAlign0 << "/" << lpAlign1;
+		<< "inalign0/1 " << +inAlign0_ << "/" << +inAlign1_
+		<< " lpalign0/1 " << +lpAlign0 << "/" << +lpAlign1;
 
 	config->img_conf_inalign0 = inAlign0_;
 	config->img_conf_lpalign0 = lpAlign0;
