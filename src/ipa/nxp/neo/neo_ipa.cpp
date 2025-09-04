@@ -98,12 +98,6 @@ private:
 
 	ControlInfoMap sensorControls_;
 
-	/* revision-specific data */
-	uint32_t hwRevision_;
-
-	/* API version */
-	uint32_t apiVersion_;
-
 	/* Local parameter storage */
 	struct IPAContext context_;
 };
@@ -140,7 +134,10 @@ int IPANxpNeo::init(const IPASettings &settings, const InitParams &params,
 	LOG(NxpNeoIPA, Debug) << "Sensor entity: " << params.sensorEntity;
 	LOG(NxpNeoIPA, Debug) << "API version is " << params.apiVersion;
 
-	apiVersion_ = params.apiVersion;
+	/* Set the hardware-related block for the algorithms. */
+	context_.hw.apiVersion = params.apiVersion;
+	context_.hw.hwRevision = params.hwRevision;
+
 	context_.camHelper = CameraHelperFactoryBase::create(settings.sensorModel);
 	if (!context_.camHelper) {
 		LOG(NxpNeoIPA, Error)
@@ -240,10 +237,6 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	context_.configuration = {};
 	context_.activeState = {};
 	context_.frameContexts.clear();
-
-	/* Set the hardware revision and the api version for the algorithms. */
-	context_.configuration.hw.revision = hwRevision_;
-	context_.configuration.hw.apiVersion = apiVersion_;
 
 	const IPACameraSensorInfo &info = ipaConfig.sensorInfo;
 	/* Update the IPA context using the new sensor settings. */
@@ -386,7 +379,7 @@ void IPANxpNeo::computeParams(const uint32_t frame, const IPAContextType context
 		paramsIter != bufferIds.end() ? paramsIter->second : 0;
 	ASSERT(mappedBuffers_.count(paramsBufferId));
 
-	NxpNeoParams params(context_.configuration.hw.apiVersion,
+	NxpNeoParams params(context_.hw.apiVersion,
 			    mappedBuffers_.at(paramsBufferId).planes()[0]);
 
 	for (auto const &algo : algorithms())
@@ -405,7 +398,7 @@ void IPANxpNeo::processStats(const uint32_t frame, const IPAContextType context,
 	unsigned int statsBufferId =
 		statsIter != bufferIds.end() ? statsIter->second : 0;
 	ASSERT(mappedBuffers_.count(statsBufferId));
-	const NxpNeoStats stats(context_.configuration.hw.apiVersion,
+	const NxpNeoStats stats(context_.hw.apiVersion,
 				mappedBuffers_.at(statsBufferId).planes()[0]);
 
 	ControlList &mdControls = frameContext.sensor.mdControls;

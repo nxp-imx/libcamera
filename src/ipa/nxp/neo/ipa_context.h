@@ -31,6 +31,11 @@ namespace libcamera {
 
 namespace ipa::nxpneo {
 
+struct IPAHwSettings {
+	uint32_t hwRevision;
+	uint32_t apiVersion;
+};
+
 struct IPASessionConfiguration {
 	struct {
 		/* ROI for statistics measurements */
@@ -55,11 +60,6 @@ struct IPASessionConfiguration {
 		Size size;
 		uint32_t bpp;
 	} sensor;
-
-	struct {
-		uint32_t revision;
-		uint32_t apiVersion;
-	} hw;
 
 	struct {
 		struct neoisp_roi_cfg_s roi;
@@ -148,6 +148,7 @@ struct IPAContext {
 	{
 	}
 
+	IPAHwSettings hw;
 	IPASessionConfiguration configuration;
 	IPAActiveState activeState;
 
