@@ -82,6 +82,8 @@ protected:
 	std::string logPrefix() const override;
 
 private:
+	void updateSensorConfig(const IPACameraSensorInfo &sensorInfo,
+				const ControlInfoMap &sensorControls);
 	void updateControls(const IPACameraSensorInfo &sensorInfo,
 			    const ControlInfoMap &sensorControls,
 			    ControlInfoMap *ipaControls);
@@ -185,6 +187,8 @@ int IPANxpNeo::init(const IPASettings &settings, const InitParams &params,
 		return ret;
 	}
 
+	/* Initialize the IPA context. */
+	updateSensorConfig(params.sensorInfo, params.sensorControls);
 	/* Initialize controls. */
 	updateControls(params.sensorInfo, params.sensorControls, ipaControls);
 
@@ -230,29 +234,6 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 			 const IPAColorSpace &colorSpace,
 			 ControlInfoMap *ipaControls)
 {
-	const IPACameraSensorInfo *sensorInfo = &ipaConfig.sensorInfo;
-
-	CameraMode cameraMode;
-	cameraMode.pixelRate = sensorInfo->pixelRate;
-	cameraMode.minLineLength = sensorInfo->minLineLength;
-	cameraMode.maxLineLength = sensorInfo->maxLineLength;
-	cameraMode.minFrameLength = sensorInfo->minFrameLength;
-	cameraMode.maxFrameLength = sensorInfo->maxFrameLength;
-	context_.camHelper->setCameraMode(cameraMode);
-
-	sensorControls_ = ipaConfig.sensorControls;
-	std::vector<double> vMinExposure, vMaxExposure, vDefExposure;
-	context_.camHelper->controlInfoMapGetExposureRange(
-		&sensorControls_, &vMinExposure, &vMaxExposure, &vDefExposure);
-
-	std::vector<double> vMinGain, vMaxGain, vDefGain;
-	context_.camHelper->controlInfoMapGetAnalogGainRange(
-		&sensorControls_, &vMinGain, &vMaxGain, &vDefGain);
-
-	LOG(NxpNeoIPA, Debug)
-		<< "Exposure: [" << vMinExposure[0] << ", " << vMaxExposure[0]
-		<< "], gain: [" << vMinGain[0] << ", " << vMaxGain[0] << "]";
-
 	/* Clear the IPA context before the streaming session. */
 	context_.configuration = {};
 	context_.activeState = {};
@@ -263,27 +244,10 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	context_.configuration.hw.apiVersion = apiVersion_;
 
 	const IPACameraSensorInfo &info = ipaConfig.sensorInfo;
-	const ControlInfo vBlank = sensorControls_.find(V4L2_CID_VBLANK)->second;
-	context_.configuration.sensor.defVBlank = vBlank.def().get<int32_t>();
-	context_.configuration.sensor.size = info.outputSize;
-	context_.configuration.sensor.lineDuration = info.minLineLength * 1.0s /
-						     info.pixelRate;
-
+	/* Update the IPA context using the new sensor settings. */
+	updateSensorConfig(info, ipaConfig.sensorControls);
 	/* Update the camera controls using the new sensor settings. */
-	updateControls(info, sensorControls_, ipaControls);
-
-	/*
-	 * When the AGC computes the new exposure values for a frame, it needs
-	 * to know the limits for exposure time and analogue gain.
-	 * As it depends on the sensor, update it with the controls.
-	 *
-	 * \todo take VBLANK into account for maximum exposure time
-	 */
-	context_.configuration.sensor.minExposureTime = vMinExposure[0] * 1.0s;
-	context_.configuration.sensor.maxExposureTime = vMaxExposure[0] * 1.0s;
-
-	context_.configuration.sensor.minAnalogueGain = vMinGain[0];
-	context_.configuration.sensor.maxAnalogueGain = vMaxGain[0];
+	updateControls(info, ipaConfig.sensorControls, ipaControls);
 
 	uint32_t bpp = ipaConfig.sensorInfo.bitsPerPixel;
 
@@ -509,6 +473,58 @@ void IPANxpNeo::processStats(const uint32_t frame, const IPAContextType context,
 
 	setControls(frame, context);
 	metadataReady.emit(frame, context, metadata);
+}
+
+void IPANxpNeo::updateSensorConfig(const IPACameraSensorInfo &sensorInfo,
+				   const ControlInfoMap &sensorControls)
+{
+	CameraMode cameraMode;
+	cameraMode.pixelRate = sensorInfo.pixelRate;
+	cameraMode.minLineLength = sensorInfo.minLineLength;
+	cameraMode.maxLineLength = sensorInfo.maxLineLength;
+	cameraMode.minFrameLength = sensorInfo.minFrameLength;
+	cameraMode.maxFrameLength = sensorInfo.maxFrameLength;
+	context_.camHelper->setCameraMode(cameraMode);
+
+	sensorControls_ = sensorControls;
+
+	/*
+	 * Compute exposure time limits from the exposure control limits and
+	 * the line duration.
+	 */
+	std::vector<double> vMinExposure, vMaxExposure, vDefExposure;
+	context_.camHelper->controlInfoMapGetExposureRange(
+		&sensorControls, &vMinExposure, &vMaxExposure, &vDefExposure);
+
+	/* Compute the analogue gain limits. */
+	std::vector<double> vMinGain, vMaxGain, vDefGain;
+	context_.camHelper->controlInfoMapGetAnalogGainRange(
+		&sensorControls, &vMinGain, &vMaxGain, &vDefGain);
+
+ 	const ControlInfo &v4l2VBlank = sensorControls.find(V4L2_CID_VBLANK)->second;
+
+	LOG(NxpNeoIPA, Debug)
+		<< "Exposure: [" << vMinExposure[0] << ", " << vMaxExposure[0]
+		<< "], gain: [" << vMinGain[0] << ", " << vMaxGain[0] << "]";
+
+	/*
+	 * When the AGC computes the new exposure values for a frame, it needs
+	 * to know the limits for exposure time and analogue gain.
+	 * As it depends on the sensor, update it with the controls.
+	 *
+	 * \todo take VBLANK into account for maximum exposure time
+	 */
+	context_.configuration.sensor.minExposureTime = vMinExposure[0] * 1.0s;
+	context_.configuration.sensor.maxExposureTime = vMaxExposure[0] * 1.0s;
+
+	context_.configuration.sensor.minAnalogueGain = vMinGain[0];
+	context_.configuration.sensor.maxAnalogueGain = vMaxGain[0];
+
+	/* Update IPA context with sensor vblank, output size and line duration. */
+	context_.configuration.sensor.defVBlank = v4l2VBlank.def().get<int32_t>();
+	context_.configuration.sensor.size = sensorInfo.outputSize;
+	context_.configuration.sensor.lineDuration = sensorInfo.minLineLength * 1.0s /
+						     sensorInfo.pixelRate;
 }
 
 void IPANxpNeo::updateControls(const IPACameraSensorInfo &sensorInfo,
