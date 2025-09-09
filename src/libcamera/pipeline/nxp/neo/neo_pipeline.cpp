@@ -332,7 +332,7 @@ private:
 	std::unique_ptr<ipa::nxpneo::IPAProxyNxpNeo> ipa_;
 	ControlInfoMap ipaControls_;
 	std::vector<IPABuffer> ipaBuffers_;
-	std::unique_ptr<DelayedControls> delayedCtrls_;
+	std::map<ContextType, std::unique_ptr<DelayedControls>> delayedCtrls_;
 
 	unsigned int sequence_ = 0;
 	bool sensorIsRgbIr_ = false;
@@ -1677,6 +1677,7 @@ int NxpNeoCameraData::start([[maybe_unused]] const ControlList *controls)
 
 	LOG(NxpNeoPipe, Debug) << "Start " << cameraName();
 	sequence_ = 0;
+	const std::array<ContextType, 2> allContexts = { ContextTypeRgb, ContextTypeIr };
 
 	/* Allocate buffers for internal pipeline usage. */
 	ret = allocateBuffers();
@@ -1687,7 +1688,8 @@ int NxpNeoCameraData::start([[maybe_unused]] const ControlList *controls)
 	if (ret)
 		goto error;
 
-	delayedCtrls_->reset();
+	for (const auto context : allContexts)
+		delayedCtrls_[context]->reset();
 
 	ret = neo_->start();
 	if (ret)
@@ -2215,26 +2217,26 @@ int NxpNeoCameraData::loadIPA()
 	 */
 	std::map<int32_t, ipa::nxpneo::DelayedControlsParams> &ipaDelayParams =
 		sensorConfig.delayedControlsParams;
-	std::unordered_map<uint32_t, DelayedControls::ControlParams>
-		delayedControlsParams;
-	for (const auto &kv : ipaDelayParams) {
-		auto k = kv.first;
-		auto v = kv.second;
-		DelayedControls::ControlParams params = { v.delay, v.priorityWrite };
-		delayedControlsParams.emplace(k, params);
+	std::unordered_map<uint32_t, DelayedControls::ControlParams> delayParams;
+	for (const auto &[k, v] : ipaDelayParams) {
+		DelayedControls::ControlParams controlParams = { v.delay, v.priorityWrite };
+		delayParams.emplace(k, controlParams);
 	}
-	if (!delayedControlsParams.size()) {
+	if (!delayParams.size()) {
 		const CameraSensorProperties::SensorDelays &delays =
 			sensor->sensorDelays();
-		delayedControlsParams = {
+		delayParams = {
 			{ V4L2_CID_ANALOGUE_GAIN, { delays.gainDelay, false } },
 			{ V4L2_CID_EXPOSURE, { delays.exposureDelay, false } },
 		};
 	}
 
-	delayedCtrls_ =
-		std::make_unique<DelayedControls>(sensor->device(),
-						  delayedControlsParams);
+	V4L2Subdevice *device = sensor->device();
+	const std::array<ContextType, 2> allContexts = { ContextTypeRgb, ContextTypeIr };
+	for (const auto &context : allContexts) {
+		delayedCtrls_.emplace(
+			context, std::make_unique<DelayedControls>(device, delayParams));
+	}
 
 	return 0;
 }
@@ -2646,7 +2648,7 @@ void NxpNeoCameraData::isiImage0BufferReady(FrameBuffer *buffer)
 
 	isiInputBufferReady(info, context);
 
-	delayedCtrls_->applyControls(info->id);
+	delayedCtrls_[ContextTypeRgb]->applyControls(info->id);
 }
 
 /**
@@ -2676,6 +2678,9 @@ void NxpNeoCameraData::isiImage1BufferReady(FrameBuffer *buffer)
 		LOG(NxpNeoPipe, Warning) << "Out of order input frame receipt";
 
 	isiInputBufferReady(info, context);
+
+	if (mode_ == ModeTypeRgbIrDual)
+		delayedCtrls_[ContextTypeIr]->applyControls(info->id);
 }
 
 /**
@@ -2794,7 +2799,7 @@ void NxpNeoCameraData::neoStatsBufferReady(FrameBuffer *buffer)
 	ipa_->processStats(sequence,
 			   static_cast<ipa::nxpneo::IPAContextType>(context),
 			   bufferIds,
-			   delayedCtrls_->get(sequence));
+			   delayedCtrls_[context]->get(sequence));
 
 	tryCompleteRequest(info);
 }
@@ -2876,10 +2881,10 @@ void NxpNeoCameraData::ipaMetadataReady(unsigned int id,
 }
 
 void NxpNeoCameraData::ipaSetSensorControls([[maybe_unused]] unsigned int id,
-					    [[maybe_unused]] ipa::nxpneo::IPAContextType context,
+					    ipa::nxpneo::IPAContextType context,
 					    const ControlList &sensorControls)
 {
-	delayedCtrls_->push(sensorControls);
+	delayedCtrls_[static_cast<ContextType>(context)]->push(sensorControls);
 }
 
 REGISTER_PIPELINE_HANDLER(PipelineHandlerNxpNeo, "nxp/neo")

@@ -218,7 +218,9 @@ int IPANxpNeo::init(const IPASettings &settings, const InitParams &params,
 
 int IPANxpNeo::start()
 {
-	setControls(0, IPAContextTypeRgb);
+	const std::array<IPAContextType, 2> allContexts = { IPAContextTypeRgb, IPAContextTypeIr };
+	for (const auto &context : allContexts)
+		setControls(0, context);
 
 	return 0;
 }
