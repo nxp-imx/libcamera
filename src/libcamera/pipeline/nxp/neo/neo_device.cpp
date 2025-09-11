@@ -27,6 +27,19 @@
 
 namespace libcamera {
 
+/* \todo Remove meta format local definitions. */
+#ifndef V4L2_META_FMT_NEO_ISP_PARAMS
+#define V4L2_META_FMT_NEO_ISP_PARAMS v4l2_fourcc('N', 'N', 'I', 'P')
+#define V4L2_META_FMT_NEO_ISP_EXT_PARAMS v4l2_fourcc('N', 'N', 'E', 'P')
+#define V4L2_META_FMT_NEO_ISP_STATS v4l2_fourcc('N', 'N', 'I', 'S')
+#define V4L2_META_FMT_NEO_ISP_EXT_STATS v4l2_fourcc('N', 'N', 'E', 'S')
+#endif
+
+/* \todo Remove when control is available in v4l2-controls header */
+#ifndef V4L2_CID_USER_NEOISP_BASE
+#define V4L2_CID_USER_NEOISP_BASE (V4L2_CID_USER_BASE + 0x11e0)
+#endif
+
 LOG_DEFINE_CATEGORY(NxpNeoDev)
 
 /**
@@ -55,6 +68,33 @@ int NeoDevice::init(MediaDevice *media)
 	if (ret) {
 		LOG(NxpNeoDev, Error) << logPrefix() << "Failed to open NEO";
 		return ret;
+	}
+
+	/*
+	 * Get uapi meta version from kernel, then select the most appropriate
+	 * version compatible with user space.
+	 */
+	const struct v4l2_query_ext_ctrl *ctlInfo = isp_->controlInfo(V4L2_CID_NEOISP_META_API_VERSION);
+	if (ctlInfo != nullptr) {
+		int maxVersionUser = NEOISP_META_BUFFER_VERSION_COUNT - 1;
+		int maxVersionKernel = static_cast<int>(ctlInfo->maximum);
+		int minVersionKernel = static_cast<int>(ctlInfo->minimum);
+
+		if (minVersionKernel > maxVersionUser) {
+			LOG(NxpNeoDev, Error) << "Device uAPI version not supported";
+			return -EINVAL;
+		}
+
+		int apiVersion = std::min(maxVersionUser, maxVersionKernel);
+		LOG(NxpNeoDev, Debug) << "Highest compatible uAPI version is " << apiVersion;
+
+		ControlList ctrls(isp_->controls());
+		ctrls.set(V4L2_CID_NEOISP_META_API_VERSION, apiVersion);
+		ret = isp_->setControls(&ctrls);
+		if (ret)
+			return ret;
+
+		apiVersion_ = apiVersion;
 	}
 
 	input0_ = V4L2VideoDevice::fromEntityName(media, kVDevInput0EntityName());
@@ -512,12 +552,6 @@ int NeoDevice::configure(PipeConfig &pipeConfig,
 {
 	int ret;
 
-	/* \todo remove meta format local definitions */
-#ifndef V4L2_META_FMT_NEO_ISP_PARAMS
-#define V4L2_META_FMT_NEO_ISP_PARAMS v4l2_fourcc('N', 'N', 'I', 'P')
-#define V4L2_META_FMT_NEO_ISP_STATS v4l2_fourcc('N', 'N', 'I', 'S')
-#endif
-
 	/*
 	 * Record optional (mutable) pads usage for later reference and
 	 * configure their links accordingly.
@@ -557,15 +591,31 @@ int NeoDevice::configure(PipeConfig &pipeConfig,
 			return ret;
 	}
 
+	uint32_t fourcc;
+	int size;
+	if (apiVersion_ == NEOISP_LEGACY_META_BUFFER) {
+		fourcc = V4L2_META_FMT_NEO_ISP_PARAMS;
+		size = sizeof(struct neoisp_meta_params_s);
+	} else {
+		fourcc = V4L2_META_FMT_NEO_ISP_EXT_PARAMS;
+		size = sizeof(struct neoisp_ext_params_s);
+	}
+
 	ret = configureVideoDeviceMeta(params_.get(), PAD_PARAMS,
-				       V4L2_META_FMT_NEO_ISP_PARAMS,
-				       sizeof(struct neoisp_meta_params_s));
+				       fourcc, size);
 	if (ret)
 		return ret;
 
+	if (apiVersion_ == NEOISP_LEGACY_META_BUFFER) {
+		fourcc = V4L2_META_FMT_NEO_ISP_STATS;
+		size = sizeof(struct neoisp_meta_stats_s);
+	} else {
+		fourcc = V4L2_META_FMT_NEO_ISP_EXT_STATS;
+		size = sizeof(struct neoisp_ext_stats_s);
+	}
+
 	ret = configureVideoDeviceMeta(stats_.get(), PAD_STATS,
-				       V4L2_META_FMT_NEO_ISP_STATS,
-				       sizeof(struct neoisp_meta_stats_s));
+				       fourcc, size);
 	if (ret)
 		return ret;
 

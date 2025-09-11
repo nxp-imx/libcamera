@@ -155,6 +155,11 @@ public:
 			IPADataSerializer<uint32_t>::serialize(data.hwRevision);
 		retData.insert(retData.end(), hwRevision.begin(), hwRevision.end());
 
+		std::vector<uint8_t> apiVersion;
+		std::tie(apiVersion, std::ignore) =
+			IPADataSerializer<uint32_t>::serialize(data.apiVersion);
+		retData.insert(retData.end(), apiVersion.begin(), apiVersion.end());
+
 		std::vector<uint8_t> sensorEntity;
 		std::tie(sensorEntity, std::ignore) =
 			IPADataSerializer<std::string>::serialize(data.sensorEntity);
@@ -216,6 +221,18 @@ public:
 			return ret;
 		}
 		ret.hwRevision = IPADataSerializer<uint32_t>::deserialize(m, m + 4);
+		m += 4;
+		dataSize -= 4;
+
+
+		if (dataSize < 4) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "apiVersion"
+				<< ": not enough data, expected "
+				<< (4) << ", got " << (dataSize);
+			return ret;
+		}
+		ret.apiVersion = IPADataSerializer<uint32_t>::deserialize(m, m + 4);
 		m += 4;
 		dataSize -= 4;
 

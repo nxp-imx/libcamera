@@ -256,7 +256,7 @@ namespace controls {
  * \var ExposureTime
  * \brief Exposure time for the frame applied in the sensor device.
  *
- * This value is specified in micro-seconds.
+ * This value is specified in microseconds.
  *
  * This control will only take effect if ExposureTimeMode is Manual. If
  * this control is set when ExposureTimeMode is Auto, the value will be
@@ -1416,6 +1416,21 @@ namespace controls {
  */
 
 /**
+ * \var FrameWallClock
+ * \brief This timestamp corresponds to the same moment in time as the
+ * SensorTimestamp, but is represented as a wall clock time as measured by
+ * the CLOCK_REALTIME clock. Like SensorTimestamp, the timestamp value is
+ * expressed in nanoseconds.
+ *
+ * Being a wall clock measurement, it can be used to synchronise timing
+ * across different devices.
+ *
+ * \sa SensorTimestamp
+ *
+ * The FrameWallClock control can only be returned in metadata.
+ */
+
+/**
  * \brief Namespace for draft controls
  */
 namespace draft {
@@ -2072,6 +2087,8 @@ extern const Control<float> Gamma(GAMMA, "Gamma", "libcamera", ControlId::Direct
 
 extern const Control<bool> DebugMetadataEnable(DEBUG_METADATA_ENABLE, "DebugMetadataEnable", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
 
+extern const Control<int64_t> FrameWallClock(FRAME_WALL_CLOCK, "FrameWallClock", "libcamera", ControlId::Direction::Out);
+
 
 
 namespace draft {
@@ -2249,6 +2266,7 @@ extern const ControlIdMap controls {
 	{ HDR_CHANNEL, &HdrChannel },
 	{ GAMMA, &Gamma },
 	{ DEBUG_METADATA_ENABLE, &DebugMetadataEnable },
+	{ FRAME_WALL_CLOCK, &FrameWallClock },
 	{ draft::AE_PRECAPTURE_TRIGGER, &draft::AePrecaptureTrigger },
 	{ draft::NOISE_REDUCTION_MODE, &draft::NoiseReductionMode },
 	{ draft::COLOR_CORRECTION_ABERRATION_MODE, &draft::ColorCorrectionAberrationMode },

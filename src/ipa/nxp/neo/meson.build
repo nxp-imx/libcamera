@@ -8,6 +8,8 @@ ipa_name = 'ipa_nxp_neo'
 neo_ipa_sources = files([
     'ipa_context.cpp',
     'neo_ipa.cpp',
+    'params.cpp',
+    'stats.cpp',
 ])
 
 neo_ipa_sources += neo_ipa_algorithms

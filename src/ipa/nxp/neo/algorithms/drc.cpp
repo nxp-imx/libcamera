@@ -562,7 +562,7 @@ uint16_t Drc::lutFirstRun(DrcLut *lutVars)
  */
 void Drc::lutSecondRun(std::vector<uint16_t> &lut, DrcLut *lutVars)
 {
-	for (int index = 1; index < NEO_DRC_GLOBAL_TONEMAP_SIZE; index++) {
+	for (unsigned int index = 1; index < NEO_DRC_GLOBAL_TONEMAP_SIZE; index++) {
 		float ratio = 1.0;
 		if (lutVars->maxRatio == 0)
 			LOG(NxpNeoAlgoDrc, Warning) << "Warning: maximum LUT ratio should not be 0";
@@ -686,35 +686,38 @@ int Drc::configure(IPAContext &context, const IPACameraSensorInfo &configInfo)
 void Drc::prepare([[maybe_unused]] IPAContext &context,
 		  [[maybe_unused]] const uint32_t frame,
 		  [[maybe_unused]] IPAFrameContext &frameContext,
-		  neoisp_meta_params_s *params)
+		  NxpNeoParams *params)
 {
 	bool update = gblMode_ == 2 || frame == 0;
 	if (update) {
+		auto drcGlobalTonemapConfig = params->block<BlockParamsType::DrcGlobalTonemap>();
 		/* Set global lut */
-		params->features_cfg.drc_global_tonemap_cfg = 1;
+		drcGlobalTonemapConfig.setUpdate(true);
 
-		memcpy(params->mems.gtm.drc_global_tonemap,
+		memcpy(drcGlobalTonemapConfig->drc_global_tonemap,
 		       gblLut_.data(),
-		       sizeof(params->mems.gtm.drc_global_tonemap));
+		       sizeof(struct neoisp_drc_global_tonemap_mem_params_s));
 	}
 
+	auto drcConfig = params->block<BlockParamsType::DrComp>();
+	drcConfig.setUpdate(true);
+
 	/* Set global gain */
-	params->features_cfg.dr_comp_cfg = 1;
-	params->regs.drc.lcl_stretch_stretch = kLocalStretchvalue;
-	params->regs.drc.alpha_alpha = kAlphaValue;
-	params->regs.drc.gbl_gain_gain = gblGain_;
+	drcConfig->lcl_stretch_stretch = kLocalStretchvalue;
+	drcConfig->alpha_alpha = kAlphaValue;
+	drcConfig->gbl_gain_gain = gblGain_;
 
 	/* Set ROI */
 	/* Make ROI0 (foreground) empty, ROI1 covers the whole image */
-	params->regs.drc.roi0.xpos = UINT16_MAX;
-	params->regs.drc.roi0.ypos = UINT16_MAX;
-	params->regs.drc.roi0.height = 0;
-	params->regs.drc.roi0.width = 0;
+	drcConfig->roi0.xpos = UINT16_MAX;
+	drcConfig->roi0.ypos = UINT16_MAX;
+	drcConfig->roi0.height = 0;
+	drcConfig->roi0.width = 0;
 
-	params->regs.drc.roi1.xpos = context.configuration.drc.roi.xpos;
-	params->regs.drc.roi1.ypos = context.configuration.drc.roi.ypos;
-	params->regs.drc.roi1.width = context.configuration.drc.roi.width;
-	params->regs.drc.roi1.height = context.configuration.drc.roi.height;
+	drcConfig->roi1.xpos = context.configuration.drc.roi.xpos;
+	drcConfig->roi1.ypos = context.configuration.drc.roi.ypos;
+	drcConfig->roi1.width = context.configuration.drc.roi.width;
+	drcConfig->roi1.height = context.configuration.drc.roi.height;
 }
 
 /**
@@ -723,11 +726,12 @@ void Drc::prepare([[maybe_unused]] IPAContext &context,
 void Drc::process([[maybe_unused]] IPAContext &context,
 		  const uint32_t frame,
 		  [[maybe_unused]] IPAFrameContext &frameContext,
-		  const neoisp_meta_stats_s *stats,
+		  const NxpNeoStats *stats,
 		  [[maybe_unused]] ControlList &metadata)
 {
 	if (gblMode_ == 2) {
-		const unsigned int *statsHistogram = stats->mems.drc.drc_global_hist_roi1;
+		auto drcMemStats = stats->block<BlockStatsType::MDrc>();
+		const unsigned int *statsHistogram = drcMemStats->drc_global_hist_roi1;
 		std::vector<uint32_t> inputHistogram(statsHistogram,
 						     statsHistogram + NEO_DRC_GLOBAL_TONEMAP_SIZE);
 

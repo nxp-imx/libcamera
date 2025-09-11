@@ -27,7 +27,7 @@ public:
 	int init(IPAContext &context, const YamlObject &tuningData) override;
 	void prepare(IPAContext &context, const uint32_t frame,
 		     IPAFrameContext &frameContext,
-		     neoisp_meta_params_s *params) override;
+		     NxpNeoParams *params) override;
 
 private:
 	static constexpr size_t kNumPoints = 4;

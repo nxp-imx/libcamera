@@ -213,7 +213,7 @@ void Agc::queueRequest(IPAContext &context,
  * \copydoc libcamera::ipa::Algorithm::prepare
  */
 void Agc::prepare(IPAContext &context, const uint32_t frame,
-		  IPAFrameContext &frameContext, neoisp_meta_params_s *params)
+		  IPAFrameContext &frameContext, NxpNeoParams *params)
 {
 	if (frameContext.agc.autoEnabled) {
 		frameContext.agc.exposure = context.activeState.agc.automatic.exposure;
@@ -223,18 +223,21 @@ void Agc::prepare(IPAContext &context, const uint32_t frame,
 	if (frame > 0)
 		return;
 
+	auto config = params->block<BlockParamsType::Stat>();
+	config.setUpdate(true);
+
 	/* Configure histograms */
 	/* Foreground ROI disabled (> Image geometry means invalid ROI) */
-	params->regs.stat.roi0.xpos = AGC_ROI_INVALID_IMAGE_GEOMETRY;
-	params->regs.stat.roi0.ypos = AGC_ROI_INVALID_IMAGE_GEOMETRY;
-	params->regs.stat.roi0.width = AGC_ROI_INVALID_IMAGE_GEOMETRY;
-	params->regs.stat.roi0.height = AGC_ROI_INVALID_IMAGE_GEOMETRY;
+	config->roi0.xpos = AGC_ROI_INVALID_IMAGE_GEOMETRY;
+	config->roi0.ypos = AGC_ROI_INVALID_IMAGE_GEOMETRY;
+	config->roi0.width = AGC_ROI_INVALID_IMAGE_GEOMETRY;
+	config->roi0.height = AGC_ROI_INVALID_IMAGE_GEOMETRY;
 	/* Background ROI: set to full image */
-	params->regs.stat.roi1 = context.configuration.agc.roi;
+	config->roi1 = context.configuration.agc.roi;
 
 	/* Histogram control */
 	/* HIST for Red */
-	neoisp_stat_hist_cfg_s *hist_red = &params->regs.stat.hists[AGC_HIST_CFG_RED];
+	neoisp_stat_hist_cfg_s *hist_red = &config->hists[AGC_HIST_CFG_RED];
 	hist_red->hist_ctrl_offset = 0;
 	hist_red->hist_ctrl_channel = NEO_HIST_CHANNEL_R;
 	hist_red->hist_ctrl_pattern = 0;
@@ -242,7 +245,7 @@ void Agc::prepare(IPAContext &context, const uint32_t frame,
 	hist_red->hist_ctrl_lin_input1_log = 0;
 	hist_red->hist_scale_scale = histScale_[AGC_HIST_CFG_RED];
 	/* HIST for Gr+Gb */
-	neoisp_stat_hist_cfg_s *hist_green = &params->regs.stat.hists[AGC_HIST_CFG_GREEN];
+	neoisp_stat_hist_cfg_s *hist_green = &config->hists[AGC_HIST_CFG_GREEN];
 	hist_green->hist_ctrl_offset = 0;
 	hist_green->hist_ctrl_channel = NEO_HIST_CHANNEL_GR | NEO_HIST_CHANNEL_GB;
 	hist_green->hist_ctrl_pattern = 0;
@@ -250,7 +253,7 @@ void Agc::prepare(IPAContext &context, const uint32_t frame,
 	hist_green->hist_ctrl_lin_input1_log = 0;
 	hist_green->hist_scale_scale = histScale_[AGC_HIST_CFG_GREEN];
 	/* HIST for Blue */
-	neoisp_stat_hist_cfg_s *hist_blue = &params->regs.stat.hists[AGC_HIST_CFG_BLUE];
+	neoisp_stat_hist_cfg_s *hist_blue = &config->hists[AGC_HIST_CFG_BLUE];
 	hist_blue->hist_ctrl_offset = 0;
 	hist_blue->hist_ctrl_channel = NEO_HIST_CHANNEL_B;
 	hist_blue->hist_ctrl_pattern = 0;
@@ -258,8 +261,6 @@ void Agc::prepare(IPAContext &context, const uint32_t frame,
 	hist_blue->hist_ctrl_lin_input1_log = 0;
 	hist_blue->hist_scale_scale = histScale_[AGC_HIST_CFG_BLUE];
 
-	/* Enable the STAT unit parameter update */
-	params->features_cfg.stat_cfg = 1;
 }
 
 void Agc::fillMetadata(IPAContext &context, IPAFrameContext &frameContext,
@@ -340,11 +341,13 @@ double Agc::estimateLuminance(double gain) const
  *
  * \return Histogram used for brightness estimation
  */
-Histogram Agc::parseStatistics(const neoisp_meta_stats_s *stats)
+Histogram Agc::parseStatistics(const NxpNeoStats *stats)
 {
-	const uint32_t *binRed = &(stats->mems.hist.hist_stat[AGC_HIST_MEM_RED]);
-	const uint32_t *binGreen = &(stats->mems.hist.hist_stat[AGC_HIST_MEM_GREEN]);
-	const uint32_t *binBlue = &(stats->mems.hist.hist_stat[AGC_HIST_MEM_BLUE]);
+	auto histMemStats = stats->block<BlockStatsType::MHist>();
+
+	const uint32_t *binRed = &(histMemStats->hist_stat[AGC_HIST_MEM_RED]);
+	const uint32_t *binGreen = &(histMemStats->hist_stat[AGC_HIST_MEM_GREEN]);
+	const uint32_t *binBlue = &(histMemStats->hist_stat[AGC_HIST_MEM_BLUE]);
 	Histogram histGreen{ Span<const uint32_t>(binGreen, NEO_HIST_BIN_SIZE) };
 
 	rgbTriples_.clear();
@@ -375,7 +378,7 @@ Histogram Agc::parseStatistics(const neoisp_meta_stats_s *stats)
  * new exposure and gain for the scene.
  */
 void Agc::process(IPAContext &context, [[maybe_unused]] const uint32_t frame,
-		  IPAFrameContext &frameContext, const neoisp_meta_stats_s *stats,
+		  IPAFrameContext &frameContext, const NxpNeoStats *stats,
 		  ControlList &metadata)
 {
 	if (!stats) {

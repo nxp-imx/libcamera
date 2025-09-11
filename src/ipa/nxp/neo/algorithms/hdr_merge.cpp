@@ -159,73 +159,72 @@ int HdrMerge::init([[maybe_unused]] IPAContext &context,
  */
 void HdrMerge::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
 		       [[maybe_unused]] IPAFrameContext &frameContext,
-		       neoisp_meta_params_s *params)
+		       NxpNeoParams *params)
 {
 	if (frame > 0)
 		return;
 
 	/* HDR Merge block configuration */
-	params->features_cfg.hdr_merge_cfg = 1;
+	auto config = params->block<BlockParamsType::HdrMerge>();
+	config.setUpdate(true);
 
-	neoisp_hdr_merge_cfg_s *merge = &params->regs.hdr_merge;
-
-	merge->ctrl_enable = 1;
-	merge->ctrl_obpp = obpp_;
-	merge->ctrl_motion_fix_en = motionfixEn_;
-	merge->ctrl_blend_3x3 = blend3x3_;
-	merge->ctrl_gain0bpp = gainBpp_[0];
-	merge->ctrl_gain1bpp = gainBpp_[1];
-
-	LOG(NxpNeoAlgoHdrMerge, Debug)
-		<< "obpp " << static_cast<int>(merge->ctrl_obpp)
-		<< " motion_fix_en " << static_cast<int>(merge->ctrl_motion_fix_en)
-		<< " blend_3x3 " << static_cast<int>(merge->ctrl_blend_3x3)
-		<< " gain bpp (0/1) " << static_cast<int>(merge->ctrl_gain0bpp)
-		<< "/" << static_cast<int>(merge->ctrl_gain0bpp);
-
-	merge->gain_offset_offset0 = gainOffset_[0];
-	merge->gain_offset_offset1 = gainOffset_[1];
+	config->ctrl_enable = 1;
+	config->ctrl_obpp = obpp_;
+	config->ctrl_motion_fix_en = motionfixEn_;
+	config->ctrl_blend_3x3 = blend3x3_;
+	config->ctrl_gain0bpp = gainBpp_[0];
+	config->ctrl_gain1bpp = gainBpp_[1];
 
 	LOG(NxpNeoAlgoHdrMerge, Debug)
-		<< "gain offset (0/1) " << utils::hex(merge->gain_offset_offset0)
-		<< "/" << utils::hex(merge->gain_offset_offset1);
+		<< "obpp " << static_cast<int>(config->ctrl_obpp)
+		<< " motion_fix_en " << static_cast<int>(config->ctrl_motion_fix_en)
+		<< " blend_3x3 " << static_cast<int>(config->ctrl_blend_3x3)
+		<< " gain bpp (0/1) " << static_cast<int>(config->ctrl_gain0bpp)
+		<< "/" << static_cast<int>(config->ctrl_gain0bpp);
 
-	merge->gain_scale_scale0 = gainScale_[0];
-	merge->gain_scale_scale1 = gainScale_[1];
-
-	LOG(NxpNeoAlgoHdrMerge, Debug)
-		<< "gain scale (0/1) " << utils::hex(merge->gain_scale_scale0)
-		<< "/" << utils::hex(merge->gain_scale_scale1);
-
-	merge->gain_shift_shift0 = gainShift_[0];
-	merge->gain_shift_shift1 = gainShift_[1];
+	config->gain_offset_offset0 = gainOffset_[0];
+	config->gain_offset_offset1 = gainOffset_[1];
 
 	LOG(NxpNeoAlgoHdrMerge, Debug)
-		<< "gain shift (0/1) " << static_cast<int>(merge->gain_shift_shift0)
-		<< "/" << static_cast<int>(merge->gain_shift_shift1);
+		<< "gain offset (0/1) " << utils::hex(config->gain_offset_offset0)
+		<< "/" << utils::hex(config->gain_offset_offset1);
 
-	merge->luma_th_th0 = lumaTh0_;
-	merge->luma_scale_scale = lumaScale_;
-	merge->luma_scale_shift = lumaScaleShift_;
-	merge->luma_scale_thshift = lumaScaleThShift_;
+	config->gain_scale_scale0 = gainScale_[0];
+	config->gain_scale_scale1 = gainScale_[1];
 
 	LOG(NxpNeoAlgoHdrMerge, Debug)
-		<< "luma th0 " << utils::hex(merge->luma_th_th0)
-		<< " luma scale " << utils::hex(merge->luma_scale_scale)
-		<< " luma shift " << static_cast<int>(merge->luma_scale_shift)
-		<< " luma th shift " << static_cast<int>(merge->luma_scale_thshift);
+		<< "gain scale (0/1) " << utils::hex(config->gain_scale_scale0)
+		<< "/" << utils::hex(config->gain_scale_scale1);
 
-	merge->downscale_imgscale0 = downscale_[0];
-	merge->downscale_imgscale1 = downscale_[1];
-	merge->upscale_imgscale0 = upscale_[0];
-	merge->upscale_imgscale1 = upscale_[1];
-	merge->post_scale_scale = postscale_;
+	config->gain_shift_shift0 = gainShift_[0];
+	config->gain_shift_shift1 = gainShift_[1];
+
 	LOG(NxpNeoAlgoHdrMerge, Debug)
-		<< "downscale (0/1) " << static_cast<int>(merge->downscale_imgscale0)
-		<< "/" << static_cast<int>(merge->downscale_imgscale1)
-		<< " upscale (0/1) " << static_cast<int>(merge->upscale_imgscale0)
-		<< "/" << static_cast<int>(merge->upscale_imgscale1)
-		<< " postscale " << static_cast<int>(merge->post_scale_scale);
+		<< "gain shift (0/1) " << static_cast<int>(config->gain_shift_shift0)
+		<< "/" << static_cast<int>(config->gain_shift_shift1);
+
+	config->luma_th_th0 = lumaTh0_;
+	config->luma_scale_scale = lumaScale_;
+	config->luma_scale_shift = lumaScaleShift_;
+	config->luma_scale_thshift = lumaScaleThShift_;
+
+	LOG(NxpNeoAlgoHdrMerge, Debug)
+		<< "luma th0 " << utils::hex(config->luma_th_th0)
+		<< " luma scale " << utils::hex(config->luma_scale_scale)
+		<< " luma shift " << static_cast<int>(config->luma_scale_shift)
+		<< " luma th shift " << static_cast<int>(config->luma_scale_thshift);
+
+	config->downscale_imgscale0 = downscale_[0];
+	config->downscale_imgscale1 = downscale_[1];
+	config->upscale_imgscale0 = upscale_[0];
+	config->upscale_imgscale1 = upscale_[1];
+	config->post_scale_scale = postscale_;
+	LOG(NxpNeoAlgoHdrMerge, Debug)
+		<< "downscale (0/1) " << static_cast<int>(config->downscale_imgscale0)
+		<< "/" << static_cast<int>(config->downscale_imgscale1)
+		<< " upscale (0/1) " << static_cast<int>(config->upscale_imgscale0)
+		<< "/" << static_cast<int>(config->upscale_imgscale1)
+		<< " postscale " << static_cast<int>(config->post_scale_scale);
 }
 
 REGISTER_IPA_ALGORITHM(HdrMerge, "HdrMerge")

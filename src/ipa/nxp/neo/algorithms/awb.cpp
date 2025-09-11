@@ -165,7 +165,7 @@ constexpr uint16_t Awb::gainDouble2Param(double gain)
  * \copydoc libcamera::ipa::Algorithm::prepare
  */
 void Awb::prepare(IPAContext &context, const uint32_t frame,
-		  IPAFrameContext &frameContext, neoisp_meta_params_s *params)
+		  IPAFrameContext &frameContext, NxpNeoParams *params)
 {
 	if (!enabled_)
 		return;
@@ -177,30 +177,36 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 	if (frameContext.awb.autoEnabled)
 		frameContext.awb.gains = context.activeState.awb.gains.automatic;
 
+	auto obwb0Config = params->block<BlockParamsType::Obwb0>();
+	auto obwb1Config = params->block<BlockParamsType::Obwb1>();
+	auto obwb2Config = params->block<BlockParamsType::Obwb2>();
+
+	const std::array<neoisp_obwb_cfg_s *, 3> obwbBlocks = {
+		reinterpret_cast<neoisp_obwb_cfg_s *>(obwb0Config.data().data()),
+		reinterpret_cast<neoisp_obwb_cfg_s *>(obwb1Config.data().data()),
+		reinterpret_cast<neoisp_obwb_cfg_s *>(obwb2Config.data().data()),
+	};
+
 	for (const uint8_t &obwb : obwbs_) {
-		int obpp;
 		if (obwb == 0) {
-			params->features_cfg.obwb0_cfg = 1;
-			obpp = NEO_OBWB_OBPP_20BPP;
+			obwb0Config.setUpdate(true);
+			obwb0Config->ctrl_obpp = NEO_OBWB_OBPP_20BPP;
 		} else if (obwb == 1) {
-			params->features_cfg.obwb1_cfg = 1;
-			obpp = NEO_OBWB_OBPP_16BPP;
+			obwb1Config.setUpdate(true);
+			obwb1Config->ctrl_obpp = NEO_OBWB_OBPP_16BPP;
 		} else if (obwb == 2) {
-			params->features_cfg.obwb2_cfg = 1;
-			obpp = NEO_OBWB_OBPP_20BPP;
+			obwb2Config.setUpdate(true);
+			obwb2Config->ctrl_obpp = NEO_OBWB_OBPP_20BPP;
 		} else {
 			LOG(NxpNeoAlgoAwb, Warning) << "Invalid OBWB" << +obwb << " block,";
 			continue;
 		}
-		params->regs.obwb[obwb].ctrl_obpp = obpp;
-		params->regs.obwb[obwb].r_ctrl_gain =
-			gainDouble2Param(frameContext.awb.gains.r());
-		params->regs.obwb[obwb].gr_ctrl_gain =
-			gainDouble2Param(frameContext.awb.gains.g());
-		params->regs.obwb[obwb].gb_ctrl_gain =
-			gainDouble2Param(frameContext.awb.gains.g());
-		params->regs.obwb[obwb].b_ctrl_gain =
-			gainDouble2Param(frameContext.awb.gains.b());
+
+		neoisp_obwb_cfg_s *config = obwbBlocks[obwb];
+		config->r_ctrl_gain = gainDouble2Param(frameContext.awb.gains.r());
+		config->gr_ctrl_gain = gainDouble2Param(frameContext.awb.gains.g());
+		config->gb_ctrl_gain = gainDouble2Param(frameContext.awb.gains.g());
+		config->b_ctrl_gain = gainDouble2Param(frameContext.awb.gains.b());
 
 		frameContext.awb.colorGainsSet[obwb] = true;
 
@@ -209,10 +215,10 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 		 * Zero offset values are configured as default (no BLC).
 		 */
 		if (!frameContext.blc.colorOffsetsSet[obwb]) {
-			params->regs.obwb[obwb].r_ctrl_offset = 0;
-			params->regs.obwb[obwb].gr_ctrl_offset = 0;
-			params->regs.obwb[obwb].gb_ctrl_offset = 0;
-			params->regs.obwb[obwb].b_ctrl_offset = 0;
+			config->r_ctrl_offset = 0;
+			config->gr_ctrl_offset = 0;
+			config->gb_ctrl_offset = 0;
+			config->b_ctrl_offset = 0;
 		}
 	}
 
@@ -220,16 +226,19 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 	if (frame > 0)
 		return;
 
+	auto ctempConfig = params->block<BlockParamsType::CTemp>();
+	ctempConfig.setUpdate(true);
+
 	/* Enable CTEMP measurements */
-	params->regs.ctemp.ctrl_enable = 1;
+	ctempConfig->ctrl_enable = 1;
 	/* Enable color space correction on the input pixel components
 	   before measurements */
-	params->regs.ctemp.ctrl_cscon = 1;
+	ctempConfig->ctrl_cscon = 1;
 	/* size of pixel components: set to default value */
-	params->regs.ctemp.ctrl_ibpp = NEO_CTEMP_IBPP_20BPP;
+	ctempConfig->ctrl_ibpp = NEO_CTEMP_IBPP_20BPP;
 
 	/* Configure the Block Statistics measurements. */
-	params->regs.ctemp.roi = context.configuration.awb.roi;
+	ctempConfig->roi = context.configuration.awb.roi;
 	/*
 	 * The block size should be such that the sum statistics never
 	 * exceeds the maximum sum value coded with 28 bits mantissa and
@@ -238,21 +247,16 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 	 * For 20bits maximum pixel format, the margin is large enough to not
 	 * reach this maximum sum value.
 	 */
-	params->regs.ctemp.stat_blk_size0_xsize =
-		params->regs.ctemp.roi.width / NEO_CTEMP_BLOCK_NB_X;
-	params->regs.ctemp.stat_blk_size0_ysize =
-		params->regs.ctemp.roi.height / NEO_CTEMP_BLOCK_NB_Y;
-
-	/* Enable the CTEMP unit parameter update */
-	params->features_cfg.ctemp_cfg = 1;
+	ctempConfig->stat_blk_size0_xsize = ctempConfig->roi.width / NEO_CTEMP_BLOCK_NB_X;
+	ctempConfig->stat_blk_size0_ysize = ctempConfig->roi.height / NEO_CTEMP_BLOCK_NB_Y;
 }
 
 /*
  * Generate an RGB vector with the average values for each block.
  */
-void Awb::generateBlocks(const neoisp_meta_stats_s *stats)
+void Awb::generateBlocks(const NxpNeoStats *stats)
 {
-	neoisp_ctemp_mem_stats_s ctemp = stats->mems.ctemp;
+	auto ctempMemStats = stats->block<BlockStatsType::MCTemp>();
 
 	blocks_.clear();
 
@@ -263,18 +267,18 @@ void Awb::generateBlocks(const neoisp_meta_stats_s *stats)
 		 * Hence the counted statistics is 4 times smaller than
 		 * the programmed block size.
 		 */
-		double counted = ctemp.ctemp_pix_cnt[i];
+		double counted = ctempMemStats->ctemp_pix_cnt[i];
 		unsigned long sumR, sumG, sumB = 0;
 		/*
 		 * Each statistics sum has 28 bits mantissa (bit[31:4]) and
 		 * 4 bits exponent (bit[3:0])
 		 */
-		sumR = static_cast<unsigned long>(ctemp.ctemp_r_sum[i] >> 4)
-		       << (ctemp.ctemp_r_sum[i] & 0xF);
-		sumG = static_cast<unsigned long>(ctemp.ctemp_g_sum[i] >> 4)
-		       << (ctemp.ctemp_g_sum[i] & 0xF);
-		sumB = static_cast<unsigned long>(ctemp.ctemp_b_sum[i] >> 4)
-		       << (ctemp.ctemp_b_sum[i] & 0xF);
+		sumR = static_cast<unsigned long>(ctempMemStats->ctemp_r_sum[i] >> 4)
+		       << (ctempMemStats->ctemp_r_sum[i] & 0xf);
+		sumG = static_cast<unsigned long>(ctempMemStats->ctemp_g_sum[i] >> 4)
+		       << (ctempMemStats->ctemp_g_sum[i] & 0xf);
+		sumB = static_cast<unsigned long>(ctempMemStats->ctemp_b_sum[i] >> 4)
+		       << (ctempMemStats->ctemp_b_sum[i] & 0xf);
 		RGB<double> block{ { static_cast<double>(sumR),
 				     static_cast<double>(sumG),
 				     static_cast<double>(sumB) } };
@@ -361,7 +365,7 @@ void Awb::awbGreyWorld(IPAActiveState &activeState, IPAFrameContext &frameContex
 void Awb::process(IPAContext &context,
 		  [[maybe_unused]] const uint32_t frame,
 		  IPAFrameContext &frameContext,
-		  const neoisp_meta_stats_s *stats,
+		  const NxpNeoStats *stats,
 		  ControlList &metadata)
 {
 	if (!enabled_)

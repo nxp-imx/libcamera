@@ -161,7 +161,7 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
  */
 void HdrDecomp::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
 			[[maybe_unused]] IPAFrameContext &frameContext,
-			neoisp_meta_params_s *params)
+			NxpNeoParams *params)
 {
 	if (frame > 0)
 		return;
@@ -170,65 +170,63 @@ void HdrDecomp::prepare([[maybe_unused]] IPAContext &context, const uint32_t fra
 		<< "input0/1 enabled " << input0_.enabled << "/" << input1_.enabled;
 
 	if (input0_.enabled) {
-		params->features_cfg.hdr_decompress_input0_cfg = 1;
+		auto hdrdec0Config = params->block<BlockParamsType::HdrDec0>();
+		hdrdec0Config.setUpdate(true);
 
-		neoisp_hdr_decompress0_cfg_s *hd0 =
-			&params->regs.decompress_input0;
-		hd0->ctrl_enable = 1;
+		hdrdec0Config->ctrl_enable = 1;
 
-		hd0->knee_point1 = input0_.points[0];
-		hd0->knee_point2 = input0_.points[1];
-		hd0->knee_point3 = input0_.points[2];
-		hd0->knee_point4 = input0_.points[3];
+		hdrdec0Config->knee_point1 = input0_.points[0];
+		hdrdec0Config->knee_point2 = input0_.points[1];
+		hdrdec0Config->knee_point3 = input0_.points[2];
+		hdrdec0Config->knee_point4 = input0_.points[3];
 
-		hd0->knee_offset0 = input0_.offsets[0];
-		hd0->knee_offset1 = input0_.offsets[1];
-		hd0->knee_offset2 = input0_.offsets[2];
-		hd0->knee_offset3 = input0_.offsets[3];
-		hd0->knee_offset4 = input0_.offsets[4];
+		hdrdec0Config->knee_offset0 = input0_.offsets[0];
+		hdrdec0Config->knee_offset1 = input0_.offsets[1];
+		hdrdec0Config->knee_offset2 = input0_.offsets[2];
+		hdrdec0Config->knee_offset3 = input0_.offsets[3];
+		hdrdec0Config->knee_offset4 = input0_.offsets[4];
 
-		hd0->knee_npoint0 = input0_.newpoints[0];
-		hd0->knee_npoint1 = input0_.newpoints[1];
-		hd0->knee_npoint2 = input0_.newpoints[2];
-		hd0->knee_npoint3 = input0_.newpoints[3];
-		hd0->knee_npoint4 = input0_.newpoints[4];
+		hdrdec0Config->knee_npoint0 = input0_.newpoints[0];
+		hdrdec0Config->knee_npoint1 = input0_.newpoints[1];
+		hdrdec0Config->knee_npoint2 = input0_.newpoints[2];
+		hdrdec0Config->knee_npoint3 = input0_.newpoints[3];
+		hdrdec0Config->knee_npoint4 = input0_.newpoints[4];
 
-		hd0->knee_ratio0 = input0_.ratios[0];
-		hd0->knee_ratio1 = input0_.ratios[1];
-		hd0->knee_ratio2 = input0_.ratios[2];
-		hd0->knee_ratio3 = input0_.ratios[3];
-		hd0->knee_ratio4 = input0_.ratios[4];
+		hdrdec0Config->knee_ratio0 = input0_.ratios[0];
+		hdrdec0Config->knee_ratio1 = input0_.ratios[1];
+		hdrdec0Config->knee_ratio2 = input0_.ratios[2];
+		hdrdec0Config->knee_ratio3 = input0_.ratios[3];
+		hdrdec0Config->knee_ratio4 = input0_.ratios[4];
 	}
 
 	if (input1_.enabled) {
-		params->features_cfg.hdr_decompress_input1_cfg = 1;
+		auto hdrdec1Config = params->block<BlockParamsType::HdrDec1>();
+		hdrdec1Config.setUpdate(true);
 
-		neoisp_hdr_decompress1_cfg_s *hd1 =
-			&params->regs.decompress_input1;
-		hd1->ctrl_enable = 1;
+		hdrdec1Config->ctrl_enable = 1;
 
-		hd1->knee_point1 = input1_.points[0];
-		hd1->knee_point2 = input1_.points[1];
-		hd1->knee_point3 = input1_.points[2];
-		hd1->knee_point4 = input1_.points[3];
+		hdrdec1Config->knee_point1 = input1_.points[0];
+		hdrdec1Config->knee_point2 = input1_.points[1];
+		hdrdec1Config->knee_point3 = input1_.points[2];
+		hdrdec1Config->knee_point4 = input1_.points[3];
 
-		hd1->knee_offset0 = input1_.offsets[0];
-		hd1->knee_offset1 = input1_.offsets[1];
-		hd1->knee_offset2 = input1_.offsets[2];
-		hd1->knee_offset3 = input1_.offsets[3];
-		hd1->knee_offset4 = input1_.offsets[4];
+		hdrdec1Config->knee_offset0 = input1_.offsets[0];
+		hdrdec1Config->knee_offset1 = input1_.offsets[1];
+		hdrdec1Config->knee_offset2 = input1_.offsets[2];
+		hdrdec1Config->knee_offset3 = input1_.offsets[3];
+		hdrdec1Config->knee_offset4 = input1_.offsets[4];
 
-		hd1->knee_npoint0 = input1_.newpoints[0];
-		hd1->knee_npoint1 = input1_.newpoints[1];
-		hd1->knee_npoint2 = input1_.newpoints[2];
-		hd1->knee_npoint3 = input1_.newpoints[3];
-		hd1->knee_npoint4 = input1_.newpoints[4];
+		hdrdec1Config->knee_npoint0 = input1_.newpoints[0];
+		hdrdec1Config->knee_npoint1 = input1_.newpoints[1];
+		hdrdec1Config->knee_npoint2 = input1_.newpoints[2];
+		hdrdec1Config->knee_npoint3 = input1_.newpoints[3];
+		hdrdec1Config->knee_npoint4 = input1_.newpoints[4];
 
-		hd1->knee_ratio0 = input1_.ratios[0];
-		hd1->knee_ratio1 = input1_.ratios[1];
-		hd1->knee_ratio2 = input1_.ratios[2];
-		hd1->knee_ratio3 = input1_.ratios[3];
-		hd1->knee_ratio4 = input1_.ratios[4];
+		hdrdec1Config->knee_ratio0 = input1_.ratios[0];
+		hdrdec1Config->knee_ratio1 = input1_.ratios[1];
+		hdrdec1Config->knee_ratio2 = input1_.ratios[2];
+		hdrdec1Config->knee_ratio3 = input1_.ratios[3];
+		hdrdec1Config->knee_ratio4 = input1_.ratios[4];
 	}
 }
 

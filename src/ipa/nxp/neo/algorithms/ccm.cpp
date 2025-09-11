@@ -72,7 +72,7 @@ int Ccm::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData
 	return 0;
 }
 
-void Ccm::setParameters(neoisp_meta_params_s *params,
+void Ccm::setParameters(NxpNeoParams *params,
 			const Matrix<float, 3, 3> &matrix,
 			const Matrix<int32_t, 3, 1> &offsets)
 {
@@ -93,10 +93,12 @@ void Ccm::setParameters(neoisp_meta_params_s *params,
 	 */
 	Matrix<float, 3, 3> CSC = RGB2YUV * matrix;
 
-	params->features_cfg.rgb2yuv_cfg = 1;
+	auto config = params->block<BlockParamsType::Rgb2Yuv>();
+	config.setUpdate(true);
+
 	/* NEO ISP gain format is u8.8 */
-	params->regs.rgb2yuv.gain_ctrl_rgain = 256;
-	params->regs.rgb2yuv.gain_ctrl_bgain = 256;
+	config->gain_ctrl_rgain = 256;
+	config->gain_ctrl_bgain = 256;
 
 	for (unsigned int i = 0; i < 3; i++) {
 		for (unsigned int j = 0; j < 3; j++)
@@ -107,14 +109,14 @@ void Ccm::setParameters(neoisp_meta_params_s *params,
 			 * in fixed point: from -32768 (0x8000) to
 			 * +32767 (0x7fff)
 			 */
-			params->regs.rgb2yuv.mat_rxcy[i][j] =
+			config->mat_rxcy[i][j] =
 				std::clamp<int16_t>(std::round(256 * CSC[i][j]),
 						    0x8000, 0x7fff);
 	}
 
 	for (unsigned int i = 0; i < 3; i++)
 		/* NEO ISP offset format is s21 */
-		params->regs.rgb2yuv.csc_offsets[i] = offsets[i][0] & 0x1fffff;
+		config->csc_offsets[i] = offsets[i][0] & 0x1fffff;
 
 	LOG(NxpNeoAlgoCcm, Debug) << "Setting matrix " << matrix;
 	LOG(NxpNeoAlgoCcm, Debug) << "Setting CSC " << CSC;
@@ -126,7 +128,7 @@ void Ccm::setParameters(neoisp_meta_params_s *params,
  */
 void Ccm::prepare(IPAContext &context, const uint32_t frame,
 		  IPAFrameContext &frameContext,
-		  neoisp_meta_params_s *params)
+		  NxpNeoParams *params)
 {
 	uint32_t ct = context.activeState.awb.temperatureK;
 
@@ -152,7 +154,7 @@ void Ccm::prepare(IPAContext &context, const uint32_t frame,
 void Ccm::process([[maybe_unused]] IPAContext &context,
 		  [[maybe_unused]] const uint32_t frame,
 		  IPAFrameContext &frameContext,
-		  [[maybe_unused]] const neoisp_meta_stats_s *stats,
+		  [[maybe_unused]] const NxpNeoStats *stats,
 		  ControlList &metadata)
 {
 	float m[9];

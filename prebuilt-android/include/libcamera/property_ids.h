@@ -45,15 +45,25 @@ enum LocationEnum {
 extern const std::array<const ControlValue, 3> LocationValues;
 extern const std::map<std::string, int32_t> LocationNameValueMap;
 extern const Control<int32_t> Location;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_PROPERTIES_LOCATION
 extern const Control<int32_t> Rotation;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_PROPERTIES_ROTATION
 extern const Control<std::string> Model;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_PROPERTIES_MODEL
 extern const Control<Size> UnitCellSize;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_PROPERTIES_UNIT_CELL_SIZE
 extern const Control<Size> PixelArraySize;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_PROPERTIES_PIXEL_ARRAY_SIZE
 extern const Control<Span<const Rectangle>> PixelArrayOpticalBlackRectangles;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_PROPERTIES_PIXEL_ARRAY_OPTICAL_BLACK_RECTANGLES
 extern const Control<Span<const Rectangle>> PixelArrayActiveAreas;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_PROPERTIES_PIXEL_ARRAY_ACTIVE_AREAS
 extern const Control<Rectangle> ScalerCropMaximum;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_PROPERTIES_SCALER_CROP_MAXIMUM
 extern const Control<float> SensorSensitivity;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_PROPERTIES_SENSOR_SENSITIVITY
 extern const Control<Span<const int64_t>> SystemDevices;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_PROPERTIES_SYSTEM_DEVICES
 
 namespace draft {
 
@@ -76,6 +86,7 @@ enum ColorFilterArrangementEnum {
 extern const std::array<const ControlValue, 6> ColorFilterArrangementValues;
 extern const std::map<std::string, int32_t> ColorFilterArrangementNameValueMap;
 extern const Control<int32_t> ColorFilterArrangement;
+#define LIBCAMERA_HAS_DRAFT_VENDOR_PROPERTIES_COLOR_FILTER_ARRANGEMENT
 
 } /* namespace draft */
 

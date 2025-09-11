@@ -77,6 +77,11 @@ enum IPARange {
 	IPARangeLimited = 1,
 };
 
+enum IPAStreamType {
+	IPAStreamTypeFrame = 0,
+	IPAStreamTypeIr = 1,
+};
+
 enum IPABufferType {
 	IPABufferTypeImage0 = 0,
 	IPABufferTypeImage1 = 1,
@@ -126,18 +131,19 @@ struct InitParams
 public:
 #ifndef __DOXYGEN__
 	InitParams()
-		: hwRevision(0)
+		: hwRevision(0), apiVersion(0)
 	{
 	}
 
-	InitParams(uint32_t _hwRevision, const std::string &_sensorEntity, const IPACameraSensorInfo &_sensorInfo, const ControlInfoMap &_sensorControls, const ControlList &_sensorControlList)
-		: hwRevision(_hwRevision), sensorEntity(_sensorEntity), sensorInfo(_sensorInfo), sensorControls(_sensorControls), sensorControlList(_sensorControlList)
+	InitParams(uint32_t _hwRevision, uint32_t _apiVersion, const std::string &_sensorEntity, const IPACameraSensorInfo &_sensorInfo, const ControlInfoMap &_sensorControls, const ControlList &_sensorControlList)
+		: hwRevision(_hwRevision), apiVersion(_apiVersion), sensorEntity(_sensorEntity), sensorInfo(_sensorInfo), sensorControls(_sensorControls), sensorControlList(_sensorControlList)
 	{
 	}
 #endif
 
 
 	uint32_t hwRevision;
+	uint32_t apiVersion;
 	std::string sensorEntity;
 	IPACameraSensorInfo sensorInfo;
 	ControlInfoMap sensorControls;
@@ -246,7 +252,7 @@ public:
 		const std::map<uint32_t, uint32_t> &bufferIds,
 		const ControlList &sensorControls) = 0;
 
-	Signal<uint32_t, const IPAContextType> paramsComputed;
+	Signal<uint32_t, const IPAContextType, uint32_t> paramsComputed;
 
 	Signal<uint32_t, const IPAContextType, const ControlList &> setSensorControls;
 

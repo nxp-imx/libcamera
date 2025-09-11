@@ -148,7 +148,8 @@ private:
 
         void paramsComputedThread(
         	const uint32_t frame,
-        	const IPAContextType context);
+        	const IPAContextType context,
+        	const uint32_t bytesused);
 	void paramsComputedIPC(
 		std::vector<uint8_t>::const_iterator data,
 		size_t dataSize,

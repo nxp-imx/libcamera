@@ -187,7 +187,7 @@ int BlackLevelCorrection::configure(IPAContext &context,
 void BlackLevelCorrection::prepare([[maybe_unused]] IPAContext &context,
 				   [[maybe_unused]] const uint32_t frame,
 				   IPAFrameContext &frameContext,
-				   neoisp_meta_params_s *params)
+				   NxpNeoParams *params)
 {
 	/*
 	 * Although the BLC offsets are statically set, the params need to be
@@ -197,37 +197,47 @@ void BlackLevelCorrection::prepare([[maybe_unused]] IPAContext &context,
 	if (!enabled_)
 		return;
 
+	auto obwb0Config = params->block<BlockParamsType::Obwb0>();
+	auto obwb1Config = params->block<BlockParamsType::Obwb1>();
+	auto obwb2Config = params->block<BlockParamsType::Obwb2>();
+
+	const std::array<neoisp_obwb_cfg_s *, 3> obwbBlocks = {
+		reinterpret_cast<neoisp_obwb_cfg_s *>(obwb0Config.data().data()),
+		reinterpret_cast<neoisp_obwb_cfg_s *>(obwb1Config.data().data()),
+		reinterpret_cast<neoisp_obwb_cfg_s *>(obwb2Config.data().data()),
+	};
+
 	for (const uint8_t &obwb : obwbs_) {
-		int obpp;
-		const Offsets &offsets_ = offsets(obwb);
 		if (obwb == 0) {
-			params->features_cfg.obwb0_cfg = 1;
-			obpp = NEO_OBWB_OBPP_20BPP;
+			obwb0Config.setUpdate(true);
+			obwb0Config->ctrl_obpp = NEO_OBWB_OBPP_20BPP;
 		} else if (obwb == 1) {
-			params->features_cfg.obwb1_cfg = 1;
-			obpp = NEO_OBWB_OBPP_16BPP;
+			obwb1Config.setUpdate(true);
+			obwb1Config->ctrl_obpp = NEO_OBWB_OBPP_16BPP;
 		} else if (obwb == 2) {
-			params->features_cfg.obwb2_cfg = 1;
-			obpp = NEO_OBWB_OBPP_20BPP;
+			obwb2Config.setUpdate(true);
+			obwb2Config->ctrl_obpp = NEO_OBWB_OBPP_20BPP;
 		} else {
 			LOG(NxpNeoAlgoBlc, Warning) << "Invalid OBWB" << +obwb << " block,";
 			continue;
 		}
 
-		params->regs.obwb[obwb].ctrl_obpp = obpp;
-		params->regs.obwb[obwb].r_ctrl_offset = offsets_.red;
-		params->regs.obwb[obwb].gr_ctrl_offset = offsets_.greenR;
-		params->regs.obwb[obwb].gb_ctrl_offset = offsets_.greenB;
-		params->regs.obwb[obwb].b_ctrl_offset = offsets_.blue;
+		neoisp_obwb_cfg_s *config = obwbBlocks[obwb];
+		const Offsets &offsets_ = offsets(obwb);
+
+		config->r_ctrl_offset = offsets_.red;
+		config->gr_ctrl_offset = offsets_.greenR;
+		config->gb_ctrl_offset = offsets_.greenB;
+		config->b_ctrl_offset = offsets_.blue;
 
 		frameContext.blc.colorOffsetsSet[obwb] = true;
 
 		if (!frameContext.awb.colorGainsSet[obwb]) {
 			uint16_t gain = (1 << 8);
-			params->regs.obwb[obwb].r_ctrl_gain = gain;
-			params->regs.obwb[obwb].gr_ctrl_gain = gain;
-			params->regs.obwb[obwb].gb_ctrl_gain = gain;
-			params->regs.obwb[obwb].b_ctrl_gain = gain;
+			config->r_ctrl_gain = gain;
+			config->gr_ctrl_gain = gain;
+			config->gb_ctrl_gain = gain;
+			config->b_ctrl_gain = gain;
 		}
 
 		if (frame == 0)
@@ -244,7 +254,7 @@ void BlackLevelCorrection::prepare([[maybe_unused]] IPAContext &context,
 void BlackLevelCorrection::process([[maybe_unused]] IPAContext &context,
 				   [[maybe_unused]] const uint32_t frame,
 				   [[maybe_unused]] IPAFrameContext &frameContext,
-				   [[maybe_unused]] const neoisp_meta_stats_s *stats,
+				   [[maybe_unused]] const NxpNeoStats *stats,
 				   ControlList &metadata)
 {
 	if (!enabled_)

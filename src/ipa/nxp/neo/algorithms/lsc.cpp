@@ -292,18 +292,6 @@ int LensShadingCorrection::configure([[maybe_unused]] IPAContext &context,
 	return 0;
 }
 
-void LensShadingCorrection::copyTable(neoisp_vignetting_table_mem_params_s &vt,
-				      const Components &set)
-{
-	/*
-	 * The vignetting LUT combines factors starting for red channel,
-	 * followed by green channel and then followed by blue channels.
-	 */
-	std::copy(set.r.begin(), set.r.end(), &vt.vignetting_table[0]);
-	std::copy(set.g.begin(), set.g.end(), &vt.vignetting_table[kChannelLutSize]);
-	std::copy(set.b.begin(), set.b.end(), &vt.vignetting_table[2 * kChannelLutSize]);
-}
-
 const std::optional<LensShadingCorrection::BlockCount>
 LensShadingCorrection::blockCount(Size resolution) const
 {
@@ -334,7 +322,7 @@ LensShadingCorrection::sets(Size resolution) const
 void LensShadingCorrection::prepare(IPAContext &context,
 				    [[maybe_unused]] const uint32_t frame,
 				    [[maybe_unused]] IPAFrameContext &frameContext,
-				    neoisp_meta_params_s *params)
+				    NxpNeoParams *params)
 {
 	if (status_ == NOT_CONFIGURED)
 		/* No Lsc is configured for current context */
@@ -356,21 +344,28 @@ void LensShadingCorrection::prepare(IPAContext &context,
 		return;
 
 	if (status_ != ENABLED) {
-		params->features_cfg.vignetting_ctrl_cfg = 1;
-		params->regs.vignetting_ctrl.ctrl_enable = 1;
-		params->regs.vignetting_ctrl.blk_conf_cols = blockCountX_;
-		params->regs.vignetting_ctrl.blk_conf_rows = blockCountY_;
-		params->regs.vignetting_ctrl.blk_size_xsize = blockWidth_;
-		params->regs.vignetting_ctrl.blk_size_ysize = blockHeight_;
-		params->regs.vignetting_ctrl.blk_stepx_step = blockStepX_;
-		params->regs.vignetting_ctrl.blk_stepy_step = blockStepY_;
+		auto vigCtrlConfig = params->block<BlockParamsType::VigCtrl>();
+		vigCtrlConfig.setUpdate(true);
+
+		vigCtrlConfig->ctrl_enable = 1;
+		vigCtrlConfig->blk_conf_cols = blockCountX_;
+		vigCtrlConfig->blk_conf_rows = blockCountY_;
+		vigCtrlConfig->blk_size_xsize = blockWidth_;
+		vigCtrlConfig->blk_size_ysize = blockHeight_;
+		vigCtrlConfig->blk_stepx_step = blockStepX_;
+		vigCtrlConfig->blk_stepy_step = blockStepY_;
 
 		LOG(NxpNeoAlgoLsc, Debug) << "Lsc is enabled";
 		status_ = ENABLED;
 	}
 
-	params->features_cfg.vignetting_table_cfg = 1;
-	copyTable(params->mems.vt, set);
+	auto vigTableConfig = params->block<BlockParamsType::VigTable>();
+	vigTableConfig.setUpdate(true);
+
+	/* Copy table */
+	std::copy(set.r.begin(), set.r.end(), &vigTableConfig->vignetting_table[0]);
+	std::copy(set.g.begin(), set.g.end(), &vigTableConfig->vignetting_table[kChannelLutSize]);
+	std::copy(set.b.begin(), set.b.end(), &vigTableConfig->vignetting_table[2 * kChannelLutSize]);
 
 	lastAppliedCt_ = ct;
 	lastAppliedQuantizedCt_ = quantizedCt;

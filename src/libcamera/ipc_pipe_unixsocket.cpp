@@ -221,13 +221,10 @@ IPCPipeUnixSocket::IPCPipeUnixSocket(const char *ipaModulePath,
 		LOG(IPCPipe, Error) << "Failed to create socket";
 		return;
 	}
-	int fd = socketWrap_->fd();
 
-	std::vector<int> fds;
-	std::vector<std::string> args;
-	args.push_back(ipaModulePath);
-	args.push_back(std::to_string(fd));
-	fds.push_back(fd);
+	int fd = socketWrap_->fd();
+	std::array args{ std::string(ipaModulePath), std::to_string(fd) };
+	std::array fds{ fd };
 
 	proc_ = std::make_unique<Process>();
 	int ret = proc_->start(ipaProxyWorkerPath, args, fds);

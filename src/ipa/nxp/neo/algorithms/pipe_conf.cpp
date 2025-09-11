@@ -96,7 +96,7 @@ int PipeConf::init([[maybe_unused]] IPAContext &context,
  */
 void PipeConf::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
 		       [[maybe_unused]] IPAFrameContext &frameContext,
-		       [[maybe_unused]] neoisp_meta_params_s *params)
+		       [[maybe_unused]] NxpNeoParams *params)
 {
 	if (frame > 0)
 		return;
@@ -106,13 +106,13 @@ void PipeConf::prepare([[maybe_unused]] IPAContext &context, const uint32_t fram
 		<< "lpalign0/1 " << lpAlign0_ << "/" << lpAlign1_;
 
 	/* PIPE_CONF unit configuration */
-	params->features_cfg.pipe_conf_cfg = 1;
+	auto config = params->block<BlockParamsType::PipeConf>();
+	config.setUpdate(true);
 
-	neoisp_pipe_conf_cfg_s *pconf = &params->regs.pipe_conf;
-	pconf->img_conf_inalign0 = inAlign0_;
-	pconf->img_conf_lpalign0 = lpAlign0_;
-	pconf->img_conf_inalign1 = inAlign1_;
-	pconf->img_conf_lpalign1 = lpAlign1_;
+	config->img_conf_inalign0 = inAlign0_;
+	config->img_conf_lpalign0 = lpAlign0_;
+	config->img_conf_inalign1 = inAlign1_;
+	config->img_conf_lpalign1 = lpAlign1_;
 }
 
 REGISTER_IPA_ALGORITHM(PipeConf, "PipeConf")

@@ -1,3 +1,4 @@
+
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * goc.cpp NXP NEO Gamma out control
@@ -341,7 +342,7 @@ void GammaOutCorrection::setEncodingParams(neoisp_gcm_cfg_s &gcm, const IPARange
 void GammaOutCorrection::prepare(IPAContext &context,
 				 [[maybe_unused]] const uint32_t frame,
 				 [[maybe_unused]] IPAFrameContext &frameContext,
-				 neoisp_meta_params_s *params)
+				 NxpNeoParams *params)
 {
 	if (!frameContext.goc.update)
 		return;
@@ -349,12 +350,13 @@ void GammaOutCorrection::prepare(IPAContext &context,
 	IPAColorSpace colorSpace = context.configuration.colorSpace;
 
 	/* Enable GCM block configuration. */
-	params->features_cfg.gcm_cfg = 1;
+	auto config = params->block<BlockParamsType::Gcm>();
+	config.setUpdate(true);
 
 	/* Set GCM params. */
-	setYuv2RgbParams(params->regs.gcm);
-	setXferParams(params->regs.gcm);
-	setEncodingParams(params->regs.gcm, colorSpace.range);
+	setYuv2RgbParams(*config);
+	setXferParams(*config);
+	setEncodingParams(*config, colorSpace.range);
 }
 
 /**
@@ -363,7 +365,7 @@ void GammaOutCorrection::prepare(IPAContext &context,
 void GammaOutCorrection::process([[maybe_unused]] IPAContext &context,
 				 [[maybe_unused]] const uint32_t frame,
 				 IPAFrameContext &frameContext,
-				 [[maybe_unused]] const neoisp_meta_stats_s *stats,
+				 [[maybe_unused]] const NxpNeoStats *stats,
 				 ControlList &metadata)
 {
 	metadata.set(controls::Gamma, frameContext.goc.gamma);

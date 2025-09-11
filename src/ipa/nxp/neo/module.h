@@ -5,7 +5,7 @@
  * Copyright (C) 2022, Ideas On Board
  *
  * module.h - NXP NEO IPA Module
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  */
 
 #pragma once
@@ -18,12 +18,15 @@
 
 #include "ipa_context.h"
 
+#include "params.h"
+#include "stats.h"
+
 namespace libcamera {
 
 namespace ipa::nxpneo {
 
 using Module = ipa::Module<IPAContext, IPAFrameContext, IPACameraSensorInfo,
-			   neoisp_meta_params_s, neoisp_meta_stats_s>;
+			   NxpNeoParams, NxpNeoStats>;
 
 } /* namespace ipa::nxpneo */
 

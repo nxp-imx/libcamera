@@ -27,10 +27,10 @@ public:
 		      const IPACameraSensorInfo &configInfo) override;
 	void prepare(IPAContext &context, const uint32_t frame,
 		     IPAFrameContext &frameContext,
-		     neoisp_meta_params_s *params) override;
+		     NxpNeoParams *params) override;
 	void process(IPAContext &context, const uint32_t frame,
 		     IPAFrameContext &frameContext,
-		     const neoisp_meta_stats_s *stats,
+		     const NxpNeoStats *stats,
 		     ControlList &metadata) override;
 
 	struct Offsets {

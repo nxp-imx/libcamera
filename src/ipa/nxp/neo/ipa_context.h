@@ -56,13 +56,14 @@ struct IPASessionConfiguration {
 
 	struct {
 		uint32_t revision;
+		uint32_t apiVersion;
 	} hw;
 
 	struct {
 		struct neoisp_roi_cfg_s roi;
 	} drc;
 
-	std::vector<IPAStream> streams;
+	std::map<IPAStreamType, IPAStream> streams;
 
 	IPAColorSpace colorSpace;
 };
@@ -140,6 +141,11 @@ struct IPAFrameContext : public FrameContext {
 };
 
 struct IPAContext {
+	IPAContext(unsigned int frameContextSize)
+		: frameContexts(frameContextSize)
+	{
+	}
+
 	IPASessionConfiguration configuration;
 	IPAActiveState activeState;
 

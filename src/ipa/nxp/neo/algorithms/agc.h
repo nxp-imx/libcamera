@@ -39,17 +39,17 @@ public:
 			  const ControlList &controls) override;
 	void prepare(IPAContext &context, const uint32_t frame,
 		     IPAFrameContext &frameContext,
-		     neoisp_meta_params_s *params) override;
+		     NxpNeoParams *params) override;
 	void process(IPAContext &context, const uint32_t frame,
 		     IPAFrameContext &frameContext,
-		     const neoisp_meta_stats_s *stats,
+		     const NxpNeoStats *stats,
 		     ControlList &metadata) override;
 
 private:
 	double estimateLuminance(double gain) const override;
 	void fillMetadata(IPAContext &context, IPAFrameContext &frameContext,
 			  ControlList &metadata);
-	Histogram parseStatistics(const neoisp_meta_stats_s *stats);
+	Histogram parseStatistics(const NxpNeoStats *stats);
 
 	RGB<double> gains_;
 	std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> rgbTriples_;

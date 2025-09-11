@@ -28,8 +28,9 @@ filegroup {
         ".git/**/*",
         ".gitignore",
         ".editorconfig",
+        ".b4-config",
         ".clang*",
-        ".reuse/**/*",
+        ".reuse/*",
         "subprojects/.gitignore",
         "**/*",
         "**/.style*",
@@ -97,6 +98,10 @@ cc_library_shared {
         "system/core/libcutils/include",
     ],
     local_include_dirs: [
+        "include",
+        "prebuilt-android/include",
+    ],
+    export_include_dirs: [
         "include",
         "prebuilt-android/include",
     ],

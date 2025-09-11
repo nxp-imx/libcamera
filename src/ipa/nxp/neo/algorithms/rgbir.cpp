@@ -125,91 +125,89 @@ int RgbIr::init([[maybe_unused]] IPAContext &context,
  */
 void RgbIr::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
 		    [[maybe_unused]] IPAFrameContext &frameContext,
-		    neoisp_meta_params_s *params)
+		    NxpNeoParams *params)
 {
 	if (frame > 0)
 		return;
 
 	/* Head Color configuration */
-	params->features_cfg.head_color_cfg = 1;
+	auto headColorConfig = params->block<BlockParamsType::HeadColor>();
+	headColorConfig.setUpdate(true);
 
-	neoisp_head_color_cfg_s *hc = &params->regs.head_color;
-	hc->ctrl_hoffset = headColor_[0];
-	hc->ctrl_voffset = headColor_[1];
+	headColorConfig->ctrl_hoffset = headColor_[0];
+	headColorConfig->ctrl_voffset = headColor_[1];
 
 	LOG(NxpNeoAlgoRgbIr, Debug)
-		<< "Head Color hoffset " << static_cast<unsigned int>(hc->ctrl_hoffset)
-		<< " voffset " << static_cast<unsigned int>(hc->ctrl_voffset);
+		<< "Head Color hoffset " << static_cast<unsigned int>(headColorConfig->ctrl_hoffset)
+		<< " voffset " << static_cast<unsigned int>(headColorConfig->ctrl_voffset);
 
 	/* RGBIR configuration */
-	params->features_cfg.rgbir_cfg = 1;
+	auto rgbirConfig = params->block<BlockParamsType::RgbIr>();
+	rgbirConfig.setUpdate(true);
 
-	neoisp_rgbir_cfg_s *rgbir = &params->regs.rgbir;
-	*rgbir = {};
+	rgbirConfig->ctrl_enable = 1;
+	rgbirConfig->ccm0_ccm = ccm_[0];
+	rgbirConfig->ccm1_ccm = ccm_[1];
+	rgbirConfig->ccm2_ccm = ccm_[2];
 
-	rgbir->ctrl_enable = 1;
-	rgbir->ccm0_ccm = ccm_[0];
-	rgbir->ccm1_ccm = ccm_[1];
-	rgbir->ccm2_ccm = ccm_[2];
-
-	rgbir->ccm0_th_threshold = crossTalkThreshold_[0];
-	rgbir->ccm1_th_threshold = crossTalkThreshold_[1];
-	rgbir->ccm2_th_threshold = crossTalkThreshold_[2];
+	rgbirConfig->ccm0_th_threshold = crossTalkThreshold_[0];
+	rgbirConfig->ccm1_th_threshold = crossTalkThreshold_[1];
+	rgbirConfig->ccm2_th_threshold = crossTalkThreshold_[2];
 
 	LOG(NxpNeoAlgoRgbIr, Debug)
 		<< "RGBIR ccm[0-2] "
-		<< rgbir->ccm0_ccm << " "
-		<< rgbir->ccm1_ccm << " "
-		<< rgbir->ccm2_ccm << ", ct-threshold [0-2] "
-		<< rgbir->ccm0_th_threshold << " "
-		<< rgbir->ccm1_th_threshold << " "
-		<< rgbir->ccm2_th_threshold;
+		<< rgbirConfig->ccm0_ccm << " "
+		<< rgbirConfig->ccm1_ccm << " "
+		<< rgbirConfig->ccm2_ccm << ", ct-threshold [0-2] "
+		<< rgbirConfig->ccm0_th_threshold << " "
+		<< rgbirConfig->ccm1_th_threshold << " "
+		<< rgbirConfig->ccm2_th_threshold;
 
-	/* Look for 8 or 16 bits IR stream, and defaults to 8 bits */
+	/* Look for 8 or 16 bits IR stream, and defaults to 8 bits. */
 	bool irStream16bits = false;
-	std::vector<IPAStream> &streams = context.configuration.streams;
-	auto iter = std::find_if(streams.begin(), streams.end(),
-				 [](auto &stream) {
-					 return stream.pixelFormat == formats::R16.fourcc();
-				 });
-	if (iter != streams.end())
-		irStream16bits = true;
+	auto it = context.configuration.streams.find(IPAStreamTypeIr);
+	if (it != context.configuration.streams.end()) {
+		IPAStream &streamIr = it->second;
+		if (streamIr.pixelFormat == formats::R16.fourcc())
+			irStream16bits = true;
+	}
 
 	/* IR Compression configuration */
-	params->features_cfg.ir_compress_cfg = 1;
-	neoisp_ir_compress_cfg_s *ircomp = &params->regs.ir_compress;
 	RgbIr::IrCompression &comp =
 		irStream16bits ? irComp16bits_ : irComp8bits_;
 
-	ircomp->ctrl_enable = 1;
-	ircomp->ctrl_obpp = irStream16bits ? 1 : 0;
+	auto irCompressConfig = params->block<BlockParamsType::IrComp>();
+	irCompressConfig.setUpdate(true);
 
-	ircomp->knee_point1_kneepoint = comp.points[0];
-	ircomp->knee_point2_kneepoint = comp.points[1];
-	ircomp->knee_point3_kneepoint = comp.points[2];
-	ircomp->knee_point4_kneepoint = comp.points[3];
+	irCompressConfig->ctrl_enable = 1;
+	irCompressConfig->ctrl_obpp = irStream16bits ? 1 : 0;
 
-	ircomp->knee_offset0_offset = comp.offsets[0];
-	ircomp->knee_offset1_offset = comp.offsets[1];
-	ircomp->knee_offset2_offset = comp.offsets[2];
-	ircomp->knee_offset3_offset = comp.offsets[3];
-	ircomp->knee_offset4_offset = comp.offsets[4];
+	irCompressConfig->knee_point1_kneepoint = comp.points[0];
+	irCompressConfig->knee_point2_kneepoint = comp.points[1];
+	irCompressConfig->knee_point3_kneepoint = comp.points[2];
+	irCompressConfig->knee_point4_kneepoint = comp.points[3];
 
-	ircomp->knee_npoint0_kneepoint = comp.newpoints[0];
-	ircomp->knee_npoint1_kneepoint = comp.newpoints[1];
-	ircomp->knee_npoint2_kneepoint = comp.newpoints[2];
-	ircomp->knee_npoint3_kneepoint = comp.newpoints[3];
-	ircomp->knee_npoint4_kneepoint = comp.newpoints[4];
+	irCompressConfig->knee_offset0_offset = comp.offsets[0];
+	irCompressConfig->knee_offset1_offset = comp.offsets[1];
+	irCompressConfig->knee_offset2_offset = comp.offsets[2];
+	irCompressConfig->knee_offset3_offset = comp.offsets[3];
+	irCompressConfig->knee_offset4_offset = comp.offsets[4];
 
-	ircomp->knee_ratio01_ratio0 = comp.ratios[0];
-	ircomp->knee_ratio01_ratio1 = comp.ratios[1];
-	ircomp->knee_ratio23_ratio2 = comp.ratios[2];
-	ircomp->knee_ratio23_ratio3 = comp.ratios[3];
-	ircomp->knee_ratio4_ratio4 = comp.ratios[4];
+	irCompressConfig->knee_npoint0_kneepoint = comp.newpoints[0];
+	irCompressConfig->knee_npoint1_kneepoint = comp.newpoints[1];
+	irCompressConfig->knee_npoint2_kneepoint = comp.newpoints[2];
+	irCompressConfig->knee_npoint3_kneepoint = comp.newpoints[3];
+	irCompressConfig->knee_npoint4_kneepoint = comp.newpoints[4];
+
+	irCompressConfig->knee_ratio01_ratio0 = comp.ratios[0];
+	irCompressConfig->knee_ratio01_ratio1 = comp.ratios[1];
+	irCompressConfig->knee_ratio23_ratio2 = comp.ratios[2];
+	irCompressConfig->knee_ratio23_ratio3 = comp.ratios[3];
+	irCompressConfig->knee_ratio4_ratio4 = comp.ratios[4];
 
 	LOG(NxpNeoAlgoRgbIr, Debug)
 		<< "IR Compression obpp "
-		<< static_cast<unsigned int>(ircomp->ctrl_obpp)
+		<< static_cast<unsigned int>(irCompressConfig->ctrl_obpp)
 		<< " kneepoints "
 		<< comp.points[0] << " " << comp.points[1] << " "
 		<< comp.points[2] << " " << comp.points[3]
