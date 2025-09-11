@@ -45,8 +45,10 @@ struct IPASessionConfiguration {
 	struct {
 		utils::Duration minExposureTime;
 		utils::Duration maxExposureTime;
+		utils::Duration defExposureTime;
 		double minAnalogueGain;
 		double maxAnalogueGain;
+		double defAnalogueGain;
 
 		int32_t defVBlank;
 		utils::Duration lineDuration;

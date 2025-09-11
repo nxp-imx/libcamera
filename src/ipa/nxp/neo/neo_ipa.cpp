@@ -516,9 +516,11 @@ void IPANxpNeo::updateSensorConfig(const IPACameraSensorInfo &sensorInfo,
 	 */
 	context_.configuration.sensor.minExposureTime = vMinExposure[0] * 1.0s;
 	context_.configuration.sensor.maxExposureTime = vMaxExposure[0] * 1.0s;
+	context_.configuration.sensor.defExposureTime = vDefExposure[0] * 1.0s;
 
 	context_.configuration.sensor.minAnalogueGain = vMinGain[0];
 	context_.configuration.sensor.maxAnalogueGain = vMaxGain[0];
+	context_.configuration.sensor.defAnalogueGain = vDefGain[0];
 
 	/* Update IPA context with sensor vblank, output size and line duration. */
 	context_.configuration.sensor.defVBlank = v4l2VBlank.def().get<int32_t>();
@@ -532,33 +534,22 @@ void IPANxpNeo::updateControls(const IPACameraSensorInfo &sensorInfo,
 			       ControlInfoMap *ipaControls)
 {
 	ControlInfoMap::Map ctrlMap = nxpneoControls;
+	auto &sensorConfig = context_.configuration.sensor;
 
-	/*
-	 * Compute exposure time limits from the exposure control limits and
-	 * the line duration.
-	 */
-	std::vector<double> vMinExposure, vMaxExposure, vDefExposure;
-	context_.camHelper->controlInfoMapGetExposureRange(
-		&sensorControls, &vMinExposure, &vMaxExposure, &vDefExposure);
 	/* ExposureTime range is in microseconds */
 	ctrlMap.emplace(std::piecewise_construct,
 			std::forward_as_tuple(&controls::ExposureTime),
 			std::forward_as_tuple(
-				static_cast<int32_t>(vMinExposure[0] * 1.0e6f),
-				static_cast<int32_t>(vMaxExposure[0] * 1.0e6f),
-				static_cast<int32_t>(vDefExposure[0] * 1.0e6f)));
-
-	/* Compute the analogue gain limits. */
-	std::vector<double> vMinGain, vMaxGain, vDefGain;
-	context_.camHelper->controlInfoMapGetAnalogGainRange(
-		&sensorControls, &vMinGain, &vMaxGain, &vDefGain);
+				static_cast<int32_t>(sensorConfig.minExposureTime / 1.0us),
+				static_cast<int32_t>(sensorConfig.maxExposureTime / 1.0us),
+				static_cast<int32_t>(sensorConfig.defExposureTime / 1.0us)));
 
 	ctrlMap.emplace(std::piecewise_construct,
 			std::forward_as_tuple(&controls::AnalogueGain),
 			std::forward_as_tuple(
-				static_cast<float>(vMinGain[0]),
-				static_cast<float>(vMaxGain[0]),
-				static_cast<float>(vDefGain[0])));
+				static_cast<float>(sensorConfig.minAnalogueGain),
+				static_cast<float>(sensorConfig.maxAnalogueGain),
+				static_cast<float>(sensorConfig.defAnalogueGain)));
 
 	/*
 	 * Compute the frame duration limits.
