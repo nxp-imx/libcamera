@@ -229,7 +229,7 @@ void IPANxpNeo::stop()
 
 int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 			 const std::map<uint32_t, IPAStream> &streamConfig,
-			 [[maybe_unused]] const IPAModeType mode,
+			 const IPAModeType mode,
 			 const IPAColorSpace &colorSpace,
 			 ControlInfoMap *ipaControls)
 {
@@ -237,6 +237,8 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	context_.configuration = {};
 	context_.activeState = {};
 	context_.frameContexts.clear();
+
+	context_.configuration.pipelineMode = mode;
 
 	const IPACameraSensorInfo &info = ipaConfig.sensorInfo;
 	/* Update the IPA context using the new sensor settings. */

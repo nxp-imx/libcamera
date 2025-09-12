@@ -68,6 +68,7 @@ struct IPASessionConfiguration {
 	std::map<IPAStreamType, IPAStream> streams;
 
 	IPAColorSpace colorSpace;
+	IPAModeType pipelineMode;
 };
 
 struct IPAActiveState {
