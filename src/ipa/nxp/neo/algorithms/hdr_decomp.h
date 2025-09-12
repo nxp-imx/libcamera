@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * hdr_decomp.h - NXP NEO HDR Decompression configuration
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  */
 
 #pragma once
@@ -21,10 +21,11 @@ namespace ipa::nxpneo::algorithms {
 class HdrDecomp : public Algorithm
 {
 public:
-	HdrDecomp();
+	HdrDecomp(){};
 	~HdrDecomp() = default;
 
 	int init(IPAContext &context, const YamlObject &tuningData) override;
+	int configure(IPAContext &context, const IPACameraSensorInfo &configInfo) override;
 	void prepare(IPAContext &context, const uint32_t frame,
 		     IPAFrameContext &frameContext,
 		     NxpNeoParams *params) override;
@@ -36,20 +37,22 @@ private:
 	static constexpr size_t kNumRatios = 5;
 
 	struct {
-		bool enabled = false;
 		std::vector<uint16_t> points;
 		std::vector<uint16_t> offsets;
 		std::vector<uint32_t> newpoints;
 		std::vector<uint16_t> ratios;
+		bool userConfig = false;
 	} input0_;
 
 	struct {
-		bool enabled = false;
 		std::vector<uint16_t> points;
 		std::vector<uint16_t> offsets;
 		std::vector<uint16_t> newpoints;
 		std::vector<uint16_t> ratios;
+		bool userConfig = false;
 	} input1_;
+
+	unsigned int bitsPerPixel_ = 0;
 };
 
 } /* namespace ipa::nxpneo::algorithms */
