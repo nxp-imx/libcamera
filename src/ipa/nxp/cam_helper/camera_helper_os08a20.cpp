@@ -29,8 +29,8 @@ public:
 
 		/* Adapt the default delayedControls for the os08a20 custom controls */
 		attributes_.delayedControlParams = {
-			{ V4L2_CID_ANALOGUE_GAIN, { 3, false } },
-			{ V4L2_CID_EXPOSURE, { 3, false } },
+			{ V4L2_CID_ANALOGUE_GAIN, { 2, false } },
+			{ V4L2_CID_EXPOSURE, { 2, false } },
 		};
 	}
 
