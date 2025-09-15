@@ -7,6 +7,7 @@
 #include "blc.h"
 
 #include <algorithm>
+#include <limits.h>
 
 #include <libcamera/base/log.h>
 
@@ -29,27 +30,66 @@ namespace ipa::nxpneo::algorithms {
  * channel in order to shift each black pixel color channel to a zero value.
  * Libcamera convention is to represent the BLC offsets as signed values,
  * relevant to a 16-bit pixel format.
- * On NEO ISP, offsetting is done in the OBWB blocks of the ISP pipeline.
- * At that stage, the pixels can have a:
- * - a 20-bit format for line path0 and merge path (OBWB0 and OBWB2)
- * - or 16-bit format for line path1 (OBWB1)
- * regardless of the actual bayer pixel format output by the sensor.
- * Also, the OBWB offset definitions are defined with an unsigned 16-bit value,
- * that represent the offset directly applied to the pixel format.
- * BLC correction is typically applied in the OBWB0/1 blocks which is the
- * default value. However, there is the option to specify in the calibration file
- * that BLC correction should be moved to OBWB2 instead.
- * BLC may share usage of the OBWB blocks with AWB, BLC configuring the
- * offsets and AWB configuring the gains. Thus, BLC also configures default unitary
- * gains in the OBWB blocks if they were not configured beforehand by AWB.
+ * On NEO ISP, offsetting is done in the OBWB blocks of the ISP pipeline, either
+ * in OBWB0/1 instances prior to the HDR-merge block, or in the OBWB2 instance
+ * post HDR-merge.
  *
- * When the camera driver supports multiple modes with different bit-depth, the
- * black offset is impacted by the rescaling so the offset correction has to be
- * adjusted accordingly. For that purpose, an optional definition of the
- * reference camera mode bit-depth is doable to specify the actual bit-depth
- * relevant to the offset listed. When that information is present, the BLC
- * algorithm can infer the black offset correction applicable to the other
- * bit-depths.
+ *       input0              input1
+ *     AXI IN0 DMA         AXI IN1 DMA
+ *          │                   │
+ *  ┌───────▼───────────────────▼───────┐
+ *  │ PIPECONF                          │
+ *  │    LPALIGN0             LPALIGN1  │
+ *  │    INALIGN0             INALIGN1  │
+ *  └───────┬───────────────────┬───────┘
+ *  ┌───────▼───────┐   ┌───────▼───────┐
+ *  │      HC0      │   │      HC1      │
+ *  └───────┬───────┘   └───────┬───────┘
+ *  ┌───────▼───────┐   ┌───────▼───────┐
+ *  │  HDR Decomp0  │   │  HDR Decomp1  │
+ *  └───────┬───────┘   └───────┬───────┘
+ *  ┌───────▼───────┐   ┌───────▼───────┐
+ *  │     OBWB0     │   │     OBWB1     │
+ *  └───────┬───────┘   └───────┬───────┘
+ *  ┌───────▼───────────────────▼───────┐
+ *  │             HDR Merge             │
+ *  └─────────────────┬─────────────────┘
+ *  ┌─────────────────▼─────────────────┐
+ *  │               RGBIR               │
+ *  └───────┬───────────────────┬───────┘
+ *  ┌───────▼───────┐           │
+ *  │     OBWB2     │           │
+ *  └───────┬───────┘           │
+ *          ▼                   ▼
+ *      to RGB Path        to IR path
+ *
+ * At the output of the HDR Decomp blocks, the camera pixel native format is
+ * expected to be:
+ * - Rescaled to 20-bit (input0) and 16-bit (input1) when HDR-merge block is not
+ *   used
+ * - Native camera pixel format (no rescaling) when HDR-merge block is used.
+ * Thus, those input formats are the ones relevant to OBWB0/1 instances.
+ * Conversely, at the output of HDR-merge block, pixel format is expected to be
+ * unconditionally 20-bit which is relevant to the OBWB2 instance input.
+ *
+ * When HDR-merge block is used to aggregate multiple captures, BLC is to be
+ * applied before the merge as further gain will be applied by this block.
+ * In other cases, either OBWB0/1 or OBWB2 may be used for BLC. Default OBWB
+ * instances selected by the algorithm for BLC are the OBWB0/1. That can be
+ * changed to select the OBWB2 via calibration file.
+ *
+ * The OBWB offset register values are defined as an unsigned 16-bit value,
+ * that represents the offset directly applied to the block input pixel format.
+ * BLC may share usage of the OBWB blocks with AWB, BLC configuring the
+ * offsets and AWB configuring the gains. Thus, BLC also configures default
+ * unitary gains in the OBWB blocks if they were not configured beforehand by
+ * the AWB algorithm.
+ *
+ * Some sensors expose the same BLC digital value, for instance 64, when
+ * operated from different driver modes having different bit-depth. In such
+ * case, a calibration entry specifies the reference sensor pixel format
+ * corresponding to the calibration value. That digital value will then be
+ * applied to all pixel formats.
  *
  * Relevant keys in the BLC section of the calibration file:
  * R: offset for R channel (signed, 16-bit pixel format)
@@ -95,7 +135,7 @@ int BlackLevelCorrection::init(IPAContext &context, const YamlObject &tuningData
 				<< bitDepth << " to " << referenceBitDepth_.value();
 	}
 
-	/* Get the OBWB block name from tuning file. */
+	/* Get the OBWB block(s) name from tuning file. */
 	const std::string &obwb_name =
 		tuningData["obwb-blocks"].get<std::string>().value_or(kDefaultObwb);
 
@@ -118,40 +158,25 @@ int BlackLevelCorrection::init(IPAContext &context, const YamlObject &tuningData
 	 * When no offset is available, zero offset values will be applied.
 	 */
 	if (tuningHasLevels) {
-		refOffsets_.format20b.red = offsetToObwb(r.value(), 20);
-		refOffsets_.format20b.greenR = offsetToObwb(gR.value(), 20);
-		refOffsets_.format20b.greenB = offsetToObwb(gB.value(), 20);
-		refOffsets_.format20b.blue = offsetToObwb(b.value(), 20);
-		refOffsets_.format16b.red = offsetToObwb(r.value(), 16);
-		refOffsets_.format16b.greenR = offsetToObwb(gR.value(), 16);
-		refOffsets_.format16b.greenB = offsetToObwb(gB.value(), 16);
-		refOffsets_.format16b.blue = offsetToObwb(b.value(), 16);
+		calibrationOffsets_[0] = static_cast<uint16_t>(r.value());
+		calibrationOffsets_[1] = static_cast<uint16_t>(gR.value());
+		calibrationOffsets_[2] = static_cast<uint16_t>(gB.value());
+		calibrationOffsets_[3] = static_cast<uint16_t>(b.value());
 	} else if (context.camHelper->blackLevel().has_value()) {
-		int16_t offset20b = offsetToObwb(
-			context.camHelper->blackLevel().value(), 20);
-		refOffsets_.format20b.red = offset20b;
-		refOffsets_.format20b.greenR = offset20b;
-		refOffsets_.format20b.greenB = offset20b;
-		refOffsets_.format20b.blue = offset20b;
-		int16_t offset16b = offsetToObwb(
-			context.camHelper->blackLevel().value(), 16);
-		refOffsets_.format16b.red = offset16b;
-		refOffsets_.format16b.greenR = offset16b;
-		refOffsets_.format16b.greenB = offset16b;
-		refOffsets_.format16b.blue = offset16b;
+		uint16_t offset =
+			static_cast<uint16_t>(context.camHelper->blackLevel().value_or(0));
+		calibrationOffsets_[0] = static_cast<uint16_t>(offset);
+		calibrationOffsets_[1] = static_cast<uint16_t>(offset);
+		calibrationOffsets_[2] = static_cast<uint16_t>(offset);
+		calibrationOffsets_[3] = static_cast<uint16_t>(offset);
 	}
 
 	enabled_ = true;
 
 	LOG(NxpNeoAlgoBlc, Debug)
-		<< "Reference BLC offsets 20b format R " << refOffsets_.format20b.red
-		<< " gR " << refOffsets_.format20b.greenR
-		<< " gB " << refOffsets_.format20b.greenB << " B " << refOffsets_.format20b.blue
-		<< " Reference bit-depth " << referenceBitDepth.value_or(0);
-	LOG(NxpNeoAlgoBlc, Debug)
-		<< "Reference BLC offsets 16b format R " << refOffsets_.format16b.red
-		<< " gR " << refOffsets_.format16b.greenR
-		<< " gB " << refOffsets_.format16b.greenB << " B " << refOffsets_.format16b.blue
+		<< "Calibration BLC offsets R " << calibrationOffsets_[0]
+		<< " gR " << calibrationOffsets_[1]
+		<< " gB " << calibrationOffsets_[2] << " B " << calibrationOffsets_[3]
 		<< " Reference bit-depth " << referenceBitDepth.value_or(0);
 
 	return 0;
@@ -166,17 +191,131 @@ int BlackLevelCorrection::configure(IPAContext &context,
 	if (!enabled_)
 		return 0;
 
+	/* \todo initialize input1 bpp separately when info is available. */
 	IPASessionConfiguration &config = context.configuration;
-	uint32_t bpp = config.sensor.bpp;
+	unsigned int bpp0 = config.sensor.bpp;
+	std::array<unsigned int, kInputsCount> bpps = { bpp0, bpp0 };
 
-	modeOffsets_.format20b.red = adjustOffsetToBpp(refOffsets_.format20b.red, bpp);
-	modeOffsets_.format20b.greenR = adjustOffsetToBpp(refOffsets_.format20b.greenR, bpp);
-	modeOffsets_.format20b.greenB = adjustOffsetToBpp(refOffsets_.format20b.greenB, bpp);
-	modeOffsets_.format20b.blue = adjustOffsetToBpp(refOffsets_.format20b.blue, bpp);
-	modeOffsets_.format16b.red = adjustOffsetToBpp(refOffsets_.format16b.red, bpp);
-	modeOffsets_.format16b.greenR = adjustOffsetToBpp(refOffsets_.format16b.greenR, bpp);
-	modeOffsets_.format16b.greenB = adjustOffsetToBpp(refOffsets_.format16b.greenB, bpp);
-	modeOffsets_.format16b.blue = adjustOffsetToBpp(refOffsets_.format16b.blue, bpp);
+	/*
+	 * Compute the BLC offset at sensor level for each ISP input. For each
+	 * input, adjust the calibration offset that is defined for a 16-bit
+	 * format, to the actual pixel format in use by the current driver mode.
+	 * Also, consider here the condition of the sensors that use the same
+	 * BLC digital value for all pixel formats.
+	 */
+	std::array<ChannelOffsets<uint16_t>, kInputsCount> sensorOffsets;
+	for (unsigned int input = 0; input < kInputsCount; input++) {
+		unsigned int &bpp = bpps[input];
+		int leftShift = bpp - 16;
+		if (referenceBitDepth_)
+			leftShift += referenceBitDepth_.value() - bpp;
+
+		ChannelOffsets<uint16_t> &offsets = sensorOffsets[input];
+		for (const auto &[channel, calibrationOffset] : utils::enumerate(calibrationOffsets_)) {
+			if (leftShift >= 0)
+				offsets[channel] = calibrationOffset << leftShift;
+			else
+				offsets[channel] = calibrationOffset >> (-leftShift);
+		}
+	}
+
+	/*
+	 * Compute the BLC offsets applicable to all the different OBWB blocks.
+	 * At OBWB level, the offset equals to the sensor offset multiplied by
+	 * the cumulated gain of the ISP upstream blocks. For OBWB0/1, upstream
+	 * gains come from PIPECONF (LPALIGN) and the HDR Decomp blocks. For
+	 * OBWB2, additional gain may come from HDR Merge block when enabled.
+	 * Assumption is that the internal pixel format at the input of OBWB
+	 * blocks is:
+	 * - OBWB0/1
+	 *     - 20/16-bit (input0/input1) for operation without HDR merge
+	 *     - The native sensor format (input0/input1) when HDR merge enabled
+	 * - OBwB2
+	 *     - 20-bit unconditionally
+	 */
+	std::array<unsigned int, kObwbCount> gainLeftShift;
+	IPAModeType &mode = context.configuration.pipelineMode;
+	if (mode != IPAModeTypeHdrMerge) {
+		gainLeftShift[0] = 20 - bpps[0];
+		gainLeftShift[1] = 16 - bpps[1];
+	} else {
+		gainLeftShift[0] = 0;
+		gainLeftShift[1] = 0;
+	}
+	gainLeftShift[2] = 20 - bpps[0];
+
+	auto applyGain = [](ChannelOffsets<uint16_t> &sensor,
+			    ChannelOffsets<uint16_t> &obwb,
+			    unsigned int leftShift) {
+		uint16_t maxOffset = std::numeric_limits<uint16_t>::max() >> leftShift;
+		for (unsigned channel = 0; channel < kChannelsCount; channel++) {
+			uint16_t offset = sensor[channel];
+			if (offset > maxOffset) {
+				LOG(NxpNeoAlgoBlc, Debug)
+					<< "Offset too large " << offset
+					<< " for shift " << leftShift
+					<< " clamped at " << maxOffset;
+				obwb[channel] = maxOffset << leftShift;
+			} else {
+				obwb[channel] = offset << leftShift;
+			}
+		}
+	};
+
+	for (unsigned int obwb = 0; obwb < kObwbCount; obwb++) {
+		/*
+		 * OBWB0/1 uses sensor offset from the respective sensor input
+		 * paths. OBWB2 uses sensor offset from sensor input path0 as
+		 * it is relevant to non-HDR merge cases.
+		 */
+		ChannelOffsets<uint16_t> &sensorOffset =
+			obwb != 1 ? sensorOffsets[0] : sensorOffsets[1];
+		ChannelOffsets<uint16_t> &obwbOffset = obwbOffsets_[obwb];
+		applyGain(sensorOffset, obwbOffset, gainLeftShift[obwb]);
+	}
+
+	/*
+	 * Store the BLC offsets to be reported in metadata. Metadata expects a
+	 * 16-bit pixel format for the offset, so the sensor offsets values are
+	 * rescaled accordingly.
+	 */
+	int leftShift = 16 - bpps[0];
+	for (unsigned channel = 0; channel < kChannelsCount; channel++) {
+		uint16_t &sensorOffset = sensorOffsets[0][channel];
+		if (leftShift >= 0)
+			mdOffsets_[channel] =
+				static_cast<int32_t>(sensorOffset << leftShift);
+		else
+			mdOffsets_[channel] =
+				static_cast<int32_t>(sensorOffset >> (-leftShift));
+	}
+
+	/*
+	 * Cache the OBWB obpp configuration that will be used at runtime.
+	 * Assumption is that 20-bit (input0) and 16-bit (input1) pixel format
+	 * is used in the ISP pipeline after HDR Decomp block. That is unless
+	 * HDR merge block is enabled and sensor pixel format is used until
+	 * merge.
+	 */
+	auto obpp = [](unsigned int ibpp) -> unsigned int {
+		if (ibpp <= 12)
+			return NEO_OBWB_OBPP_12BPP;
+		else if (ibpp <= 14)
+			return NEO_OBWB_OBPP_14BPP;
+		else if (ibpp <= 16)
+			return NEO_OBWB_OBPP_16BPP;
+		else
+			return NEO_OBWB_OBPP_20BPP;
+	};
+
+	if (mode != IPAModeTypeHdrMerge) {
+		obwbObpp_[0] = obpp(20);
+		obwbObpp_[1] = obpp(16);
+	} else {
+		obwbObpp_[0] = obpp(bpps[0]);
+		obwbObpp_[1] = obpp(bpps[1]);
+	}
+	obwbObpp_[2] = obpp(20);
 
 	return 0;
 }
@@ -210,29 +349,30 @@ void BlackLevelCorrection::prepare([[maybe_unused]] IPAContext &context,
 	for (const uint8_t &obwb : obwbs_) {
 		if (obwb == 0) {
 			obwb0Config.setUpdate(true);
-			obwb0Config->ctrl_obpp = NEO_OBWB_OBPP_20BPP;
+			obwb0Config->ctrl_obpp = obwbObpp_[0];
 		} else if (obwb == 1) {
 			obwb1Config.setUpdate(true);
-			obwb1Config->ctrl_obpp = NEO_OBWB_OBPP_16BPP;
+			obwb1Config->ctrl_obpp = obwbObpp_[1];
 		} else if (obwb == 2) {
 			obwb2Config.setUpdate(true);
-			obwb2Config->ctrl_obpp = NEO_OBWB_OBPP_20BPP;
+			obwb2Config->ctrl_obpp = obwbObpp_[2];
 		} else {
 			LOG(NxpNeoAlgoBlc, Warning) << "Invalid OBWB" << +obwb << " block,";
 			continue;
 		}
 
 		neoisp_obwb_cfg_s *config = obwbBlocks[obwb];
-		const Offsets &offsets_ = offsets(obwb);
+		const ChannelOffsets<uint16_t> &offsets = obwbOffsets_[obwb];
 
-		config->r_ctrl_offset = offsets_.red;
-		config->gr_ctrl_offset = offsets_.greenR;
-		config->gb_ctrl_offset = offsets_.greenB;
-		config->b_ctrl_offset = offsets_.blue;
+		config->r_ctrl_offset = offsets[0];
+		config->gr_ctrl_offset = offsets[1];
+		config->gb_ctrl_offset = offsets[2];
+		config->b_ctrl_offset = offsets[3];
 
 		frameContext.blc.colorOffsetsSet[obwb] = true;
 
 		if (!frameContext.awb.colorGainsSet[obwb]) {
+			/* OBWB gain in u8.8 format */
 			uint16_t gain = (1 << 8);
 			config->r_ctrl_gain = gain;
 			config->gr_ctrl_gain = gain;
@@ -242,9 +382,9 @@ void BlackLevelCorrection::prepare([[maybe_unused]] IPAContext &context,
 
 		if (frame == 0)
 			LOG(NxpNeoAlgoBlc, Debug)
-				<< "Sensor mode BLC offsets OBWB" << +obwb << " R " << offsets_.red
-				<< " gR " << offsets_.greenR
-				<< " gB " << offsets_.greenB << " B " << offsets_.blue;
+				<< "Sensor mode BLC offsets OBWB" << +obwb << " R " << offsets[0]
+				<< " gR " << offsets[1]
+				<< " gB " << offsets[2] << " B " << offsets[3];
 	}
 }
 
@@ -262,111 +402,7 @@ void BlackLevelCorrection::process([[maybe_unused]] IPAContext &context,
 
 	/* Report the offsets in 16-bit pixel format. */
 	metadata.set(controls::SensorBlackLevels,
-		     { static_cast<int32_t>(modeOffsets_.format16b.red),
-		       static_cast<int32_t>(modeOffsets_.format16b.greenR),
-		       static_cast<int32_t>(modeOffsets_.format16b.greenB),
-		       static_cast<int32_t>(modeOffsets_.format16b.blue) });
-}
-
-/**
- * \brief Convert the BLC offset to the ISP OBWB format
- * \param[in] offset The offset value in libcamera standard signed 16-bit format
- * \param[in] bpp The pixel bpp at the input of the OBWB block
- *
- * Libcamera standard format for the BLC offset is a signed 16-bit value,
- * relevant to a 16-bit pixel format. Depending on the OBWB input pixel
- * format, the BLC offset is rescaled appropriately.
- * Moreover the offset applied in the OBWB blocks has to be positive so
- * the negative values read from the calibration parameters are filtered out.
- *
- * \return The BLC offset rescaled according to the ISP OBWB format, clamped to a
- * 16-bit value
- */
-uint16_t BlackLevelCorrection::offsetToObwb(int16_t offset, uint16_t bpp) const
-{
-	uint32_t u32Offset = 0;
-
-	/* Input format should be at least 16-bit format */
-	if (bpp < 16)
-		return u32Offset;
-
-	/* OBWB only accepts positive values */
-	if (offset >= 0)
-		u32Offset = static_cast<uint32_t>(offset);
-
-	/* Convert from 16-bit to input OBWB pixel format, limited to 16-bit range */
-	unsigned int shift = bpp - 16;
-	u32Offset <<= shift;
-	if (u32Offset > std::numeric_limits<uint16_t>::max()) {
-		LOG(NxpNeoAlgoBlc, Warning)
-			<< "BLC offset " << u32Offset
-			<< " has been clamped to 16-bit value";
-		u32Offset = std::numeric_limits<uint16_t>::max();
-	}
-
-	return static_cast<uint16_t>(u32Offset);
-}
-
-/**
- * \brief Get the offsets to apply for a specific OBWB block
- * \param[in] obwb The id of the OBWB block
- *
- * The pixel format at the input of OBWB0 and OBWB2 blocks is 20-bit.
- * The pixel format at the input of OBWB1 block is 16-bit.
- *
- * \return The offsets converted in the input format of the OBWB block
- */
-const BlackLevelCorrection::Offsets &BlackLevelCorrection::offsets(uint16_t obwb) const
-{
-	if (obwb == 1)
-		return modeOffsets_.format16b;
-	else
-		return modeOffsets_.format20b;
-}
-
-/**
- * \brief Adjust the OBWB offset to the camera mode pixel bit-depth
- * \param[in] offset The offset value in OBWB format
- * \param[in] bpp The target camera bit-depth
- *
- * The BLC offset specified in the calibration file or in camHelper is relevant
- * to a given camera pixel format bit-depth. If this camera driver exposes other
- * modes with different bit-depth, the absolute offset to be applied by the
- * ISP after the rescaling to internal 20-bit format is to be adjusted
- * accordingly. When multiple bit-depth are used by the camera driver modes, a
- * reference bit-depth is used when provided to rescale the offsets depending on
- * the actual mode.
- *
- * \return The BLC offset in 20-bit unsigned ISP OBWB format, clamped to a
- * 16-bit value
- */
-uint16_t BlackLevelCorrection::adjustOffsetToBpp(uint16_t offset, uint32_t bpp) const
-{
-	if (!referenceBitDepth_.has_value())
-		return offset;
-
-	int32_t shift = static_cast<int32_t>(bpp - referenceBitDepth_.value());
-	if (std::abs(shift) > 32) {
-		LOG(NxpNeoAlgoBlc, Warning) << "Invalid bit shift " << shift;
-		shift = 0;
-	}
-
-	uint32_t u32Offset = offset;
-	if (shift > 0)
-		u32Offset >>= shift;
-	else
-		u32Offset <<= -shift;
-
-	if (u32Offset > std::numeric_limits<uint16_t>::max()) {
-		/* \todo Move log to Warning when BLC is relocated to OBWB0/1 */
-		LOG(NxpNeoAlgoBlc, Debug)
-			<< "BLC offset " << u32Offset
-			<< " has been clamped to 16-bit value";
-		u32Offset = std::numeric_limits<uint16_t>::max();
-	}
-
-	offset = static_cast<uint16_t>(u32Offset);
-	return offset;
+		     { mdOffsets_[0], mdOffsets_[1], mdOffsets_[2], mdOffsets_[3] });
 }
 
 REGISTER_IPA_ALGORITHM(BlackLevelCorrection, "BlackLevelCorrection")
