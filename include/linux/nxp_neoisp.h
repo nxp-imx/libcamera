@@ -44,12 +44,12 @@
  *
  * @NEOISP_HW_V1:	First Neoisp hardware variant used in i.MX95 A0/A1 boards
  * @NEOISP_HW_V2:	Neoisp hardware variant used in i.MX95 B0 boards
- * @NEOISP_HW_COUNT:	Neoisp variants count
+ * @NEOISP_HW_MAX:	Neoisp maximum variant index
  */
 enum neoisp_version_e {
-	NEOISP_HW_V1,
+	NEOISP_HW_V1 = 1,
 	NEOISP_HW_V2,
-	NEOISP_HW_COUNT,
+	NEOISP_HW_MAX = NEOISP_HW_V2,
 };
 
 /**
