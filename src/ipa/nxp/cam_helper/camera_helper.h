@@ -49,6 +49,14 @@ extern const ControlIdMap controlIdMap;
 
 } /* namespace md */
 
+/* Sensor stream modes */
+enum SensorStreamModes {
+	SensorStreamStandard = 0,
+	SensorStreamHdr,
+	SensorStreamRgbIr,
+	SensorStreamDualContext,
+};
+
 /* Subset of IPACameraSensorInfo structure*/
 struct CameraMode {
 	uint64_t pixelRate;
@@ -56,6 +64,13 @@ struct CameraMode {
 	uint32_t maxLineLength;
 	uint32_t minFrameLength;
 	uint32_t maxFrameLength;
+	/* bit depth of the raw camera output */
+	uint32_t bitdepth;
+	/* size in pixels of frames in this mode */
+	uint16_t width;
+	uint16_t height;
+	/* stream mode */
+	SensorStreamModes streamMode;
 };
 
 class CameraHelper : public ipa::CameraSensorHelper

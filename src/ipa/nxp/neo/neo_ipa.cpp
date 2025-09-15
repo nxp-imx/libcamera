@@ -93,6 +93,7 @@ private:
 				    const ControlList *ctrlsApplied,
 				    const ControlList *ctrlsToApply) const;
 
+	static const std::map<const IPAModeType, SensorStreamModes> kSensorStreamModeMap;
 	std::map<unsigned int, FrameBuffer> buffers_;
 	std::map<unsigned int, MappedFrameBuffer> mappedBuffers_;
 
@@ -100,6 +101,13 @@ private:
 
 	/* Local parameter storage */
 	struct IPAContext context_;
+};
+
+const std::map<const IPAModeType, SensorStreamModes> IPANxpNeo::kSensorStreamModeMap = {
+	{ IPAModeTypeStandard, SensorStreamStandard },
+	{ IPAModeTypeHdrMerge, SensorStreamHdr },
+	{ IPAModeTypeRgbIr, SensorStreamRgbIr },
+	{ IPAModeTypeRgbIrDual, SensorStreamDualContext },
 };
 
 namespace {
@@ -184,6 +192,7 @@ int IPANxpNeo::init(const IPASettings &settings, const InitParams &params,
 		return ret;
 	}
 
+	context_.configuration = {};
 	/* Initialize the IPA context. */
 	updateSensorConfig(params.sensorInfo, params.sensorControls);
 	/* Initialize controls. */
@@ -488,6 +497,19 @@ void IPANxpNeo::updateSensorConfig(const IPACameraSensorInfo &sensorInfo,
 	cameraMode.maxLineLength = sensorInfo.maxLineLength;
 	cameraMode.minFrameLength = sensorInfo.minFrameLength;
 	cameraMode.maxFrameLength = sensorInfo.maxFrameLength;
+	cameraMode.bitdepth = sensorInfo.bitsPerPixel;
+	cameraMode.width = sensorInfo.outputSize.width;
+	cameraMode.height = sensorInfo.outputSize.height;
+	auto iter = kSensorStreamModeMap.find(context_.configuration.pipelineMode);
+	if (iter != kSensorStreamModeMap.end()) {
+		cameraMode.streamMode = iter->second;
+	} else {
+		cameraMode.streamMode = SensorStreamStandard;
+		LOG(NxpNeoIPA, Warning)
+			<< "No sensor stream mode found for pipeline mode: "
+			<< context_.configuration.pipelineMode
+			<< " - Default mode is used: " << cameraMode.streamMode;
+	}
 	context_.camHelper->setCameraMode(cameraMode);
 
 	sensorControls_ = sensorControls;

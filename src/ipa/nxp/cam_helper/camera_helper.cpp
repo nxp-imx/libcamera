@@ -6,7 +6,7 @@
  *
  * camera_helper.c
  * Helper class that performs sensor-specific parameter computations
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  */
 #include "camera_helper.h"
 
@@ -190,7 +190,11 @@ void CameraHelper::setCameraMode(const CameraMode &mode)
 		<< mode.minLineLength << "/" << mode.maxLineLength
 		<< ") Frame length (min/max) ("
 		<< mode.minFrameLength << "/" << mode.maxFrameLength
-		<< ") Line duration " << lineDuration();
+		<< ") Line duration " << lineDuration()
+		<< " Bit depth " << mode.bitdepth
+		<< " Width " << mode.width
+		<< " Height " << mode.height
+		<< " StreamMode " << mode.streamMode;
 }
 
 /**
