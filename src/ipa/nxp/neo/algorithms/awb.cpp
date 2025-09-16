@@ -38,23 +38,60 @@ namespace ipa::nxpneo::algorithms {
  * Reference: Lam, Edmund & Fung, George. (2008). Automatic White Balancing in
  * Digital Photography. 10.1201/9781420054538.ch10.
  *
- * AWB correction is typically applied in the OBWB2 block which is the default
- * value. However, there is the option to specify in the calibration file that
- * AWB correction should be moved to OBWB0/1 instead.
+ * AWB correction consists in applying different gains to the individual color
+ * channels. That is done using the OBWB blocks of the ISP, either the
+ * OBWB0/OBWB1 block instances or the OBWB2 one.
+ *
+ *       input0              input1
+ *     AXI IN0 DMA         AXI IN1 DMA
+ *          │                   │
+ *  ┌───────▼───────────────────▼───────┐
+ *  │ PIPECONF                          │
+ *  │    LPALIGN0             LPALIGN1  │
+ *  │    INALIGN0             INALIGN1  │
+ *  └───────┬───────────────────┬───────┘
+ *  ┌───────▼───────┐   ┌───────▼───────┐
+ *  │      HC0      │   │      HC1      │
+ *  └───────┬───────┘   └───────┬───────┘
+ *  ┌───────▼───────┐   ┌───────▼───────┐
+ *  │  HDR Decomp0  │   │  HDR Decomp1  │
+ *  └───────┬───────┘   └───────┬───────┘
+ *  ┌───────▼───────┐   ┌───────▼───────┐
+ *  │     OBWB0     │   │     OBWB1     │
+ *  └───────┬───────┘   └───────┬───────┘
+ *  ┌───────▼───────────────────▼───────┐
+ *  │             HDR Merge             │
+ *  └─────────────────┬─────────────────┘
+ *  ┌─────────────────▼─────────────────┐
+ *  │               RGBIR               │
+ *  └───────┬───────────────────┬───────┘
+ *  ┌───────▼───────┐           │
+ *  │     OBWB2     │           │
+ *  └───────┬───────┘           │
+ *          ▼                   ▼
+ *      to RGB Path        to IR path
+ *
+ * The user has the option to define in the calibration file if AWB gains should
+ * be applied from OBWB0/1 or OBWB2 blocks. If not explictly defined, the
+ * algorithm will default to using OBWB2, unless the pipeline is operating in
+ * HDR merge mode where OBWB0/1 has to be used. The user configuration, if
+ * present, takes precedence over the default configuration.
+ *
  * AWB may share usage of the OBWB blocks with BLC, AWB configuring the
- * gains and BLC configuring the offsets. Thus, AWB also configures default offsets
- * to zero in the OBWB blocks if they were not configured beforehand by BLC.
+ * gains and BLC configuring the offsets. Thus, AWB also configures default
+ * offsets to zero in the OBWB blocks if they were not configured beforehand by
+ * the BLC algorithm.
  *
  * Relevant keys in the AWB section of the calibration file:
  * obwb-blocks: the OBWB blocks where AWB gains should apply - optional
  *              valid values: { "obwb0/1", "obwb2"}
- *              default value: "obwb2"
+ *              default value: "obwb2" (non HDR-merge) or "obwb0/1" (HDR-merge)
  */
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoAwb)
 
 Awb::Awb()
-	: enabled_(false), obwbs_(kObwbMap.at(kDefaultObwb))
+	: enabled_(false)
 {
 }
 
@@ -64,20 +101,22 @@ Awb::Awb()
 int Awb::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData)
 {
 	/* Get the OBWB block name from tuning file. */
-	const std::string &obwb_name =
-		tuningData["obwb-blocks"].get<std::string>().value_or(kDefaultObwb);
+	obwbUserConfig_ = tuningData["obwb-blocks"].get<std::string>();
 
 	/* Get the OBWB blocks where AWB gains should apply. */
-	auto it = kObwbMap.find(obwb_name);
-	if (it != kObwbMap.end()) {
-		obwbs_ = it->second;
-		LOG(NxpNeoAlgoAwb, Debug) << "AWB gains apply in " << it->first;
-	} else {
-		LOG(NxpNeoAlgoAwb, Warning)
-			<< "AWB gains are not applied! Invalid \"" << obwb_name
-			<< "\" name from tuning file, should be \"obwb0/1\" or \"obwb2\"";
-		enabled_ = false;
-		return 0;
+	if (obwbUserConfig_) {
+		const std::string &obwbConfig = obwbUserConfig_.value();
+		auto it = kObwbMap.find(obwbConfig);
+		if (it != kObwbMap.end()) {
+			obwbs_ = it->second;
+			LOG(NxpNeoAlgoAwb, Debug) << "AWB gains apply in " << it->first;
+		} else {
+			LOG(NxpNeoAlgoAwb, Warning)
+				<< "AWB gains are not applied! Invalid \"" << obwbConfig
+				<< "\" name from tuning file, should be \"obwb0/1\" or \"obwb2\"";
+			enabled_ = false;
+			return -EINVAL;
+		}
 	}
 
 	enabled_ = true;
@@ -93,6 +132,50 @@ int Awb::configure(IPAContext &context,
 {
 	if (!enabled_)
 		return 0;
+
+	/*
+	 * In case the OBWB blocks to be used by AWB were not explicitly
+	 * configured in the calibration file, default to OBWB2 unless we are
+	 * in HDR merge mode.
+	 */
+	IPAModeType &mode = context.configuration.pipelineMode;
+	if (!obwbUserConfig_) {
+		if (mode != IPAModeTypeHdrMerge)
+			obwbs_ = kObwbMap.at("obwb2");
+		else
+			obwbs_ = kObwbMap.at("obwb0/1");
+	}
+
+	/*
+	 * Cache the OBWB obpp configuration that will be used at runtime.
+	 * Assumption is that 20-bit (input0) and 16-bit (input1) pixel format
+	 * is used in the ISP pipeline after HDR Decomp block, unless HDR merge
+	 * block is enabled so that sensor pixel format is used until merge.
+	 */
+	auto obpp = [](unsigned int ibpp) -> unsigned int {
+		if (ibpp <= 12)
+			return NEO_OBWB_OBPP_12BPP;
+		else if (ibpp <= 14)
+			return NEO_OBWB_OBPP_14BPP;
+		else if (ibpp <= 16)
+			return NEO_OBWB_OBPP_16BPP;
+		else
+			return NEO_OBWB_OBPP_20BPP;
+	};
+
+	/* \todo initialize input1 bpp separately when info is available. */
+	IPASessionConfiguration &config = context.configuration;
+	unsigned int bpp0 = config.sensor.bpp;
+	std::array<unsigned int, kInputsCount> bpps = { bpp0, bpp0 };
+
+	if (mode != IPAModeTypeHdrMerge) {
+		obwbObpp_[0] = obpp(20);
+		obwbObpp_[1] = obpp(16);
+	} else {
+		obwbObpp_[0] = obpp(bpps[0]);
+		obwbObpp_[1] = obpp(bpps[1]);
+	}
+	obwbObpp_[2] = obpp(20);
 
 	context.activeState.awb.gains.manual = RGB<double>{ 1.0 };
 	context.activeState.awb.gains.automatic = RGB<double>{ 1.0 };
@@ -190,13 +273,13 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 	for (const uint8_t &obwb : obwbs_) {
 		if (obwb == 0) {
 			obwb0Config.setUpdate(true);
-			obwb0Config->ctrl_obpp = NEO_OBWB_OBPP_20BPP;
+			obwb0Config->ctrl_obpp = obwbObpp_[0];
 		} else if (obwb == 1) {
 			obwb1Config.setUpdate(true);
-			obwb1Config->ctrl_obpp = NEO_OBWB_OBPP_16BPP;
+			obwb1Config->ctrl_obpp = obwbObpp_[1];
 		} else if (obwb == 2) {
 			obwb2Config.setUpdate(true);
-			obwb2Config->ctrl_obpp = NEO_OBWB_OBPP_20BPP;
+			obwb2Config->ctrl_obpp = obwbObpp_[2];
 		} else {
 			LOG(NxpNeoAlgoAwb, Warning) << "Invalid OBWB" << +obwb << " block,";
 			continue;

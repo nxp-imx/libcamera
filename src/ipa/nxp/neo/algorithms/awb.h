@@ -50,12 +50,20 @@ private:
 	 * before slowing down to prevent flickering effect.
 	 */
 	static constexpr uint32_t kNumStartupFrames = 10;
+
+	/* OBWB instances: OBWB0, OBWB1 and OBWB2 */
+	static constexpr unsigned int kObwbCount = 3;
+	/* ISP inputs: Input0, Input1 */
+	static constexpr unsigned int kInputsCount = 2;
+
 	static const std::string kDefaultObwb;
 	static const std::map<const std::string, std::vector<uint8_t>> kObwbMap;
 
 	bool enabled_;
+	std::optional<std::string> obwbUserConfig_;
 	std::vector<RGB<double>> blocks_;
 	std::vector<uint8_t> obwbs_;
+	std::array<unsigned int, kObwbCount> obwbObpp_;
 };
 
 const std::string Awb::kDefaultObwb("obwb2");
