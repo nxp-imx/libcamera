@@ -106,6 +106,13 @@ namespace ipa::nxpneo::algorithms {
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoBlc)
 
+const std::string BlackLevelCorrection::kDefaultObwb{ "obwb0/1" };
+
+const std::map<const std::string, std::vector<uint8_t>> BlackLevelCorrection::kObwbMap = {
+	{ "obwb0/1", { 0, 1 } },
+	{ "obwb2", { 2 } },
+};
+
 BlackLevelCorrection::BlackLevelCorrection()
 	: enabled_(false), obwbs_(kObwbMap.at(kDefaultObwb))
 {
