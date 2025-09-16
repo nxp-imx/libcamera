@@ -66,11 +66,5 @@ private:
 	std::array<unsigned int, kObwbCount> obwbObpp_;
 };
 
-const std::string Awb::kDefaultObwb("obwb2");
-const std::map<const std::string, std::vector<uint8_t>> Awb::kObwbMap = {
-	{ "obwb0/1", { 0, 1 } },
-	{ "obwb2", { 2 } },
-};
-
 } /* namespace ipa::nxpneo::algorithms */
 } /* namespace libcamera */

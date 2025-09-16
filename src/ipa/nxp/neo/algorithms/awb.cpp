@@ -90,6 +90,13 @@ namespace ipa::nxpneo::algorithms {
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoAwb)
 
+const std::string Awb::kDefaultObwb("obwb2");
+
+const std::map<const std::string, std::vector<uint8_t>> Awb::kObwbMap = {
+	{ "obwb0/1", { 0, 1 } },
+	{ "obwb2", { 2 } },
+};
+
 Awb::Awb()
 	: enabled_(false)
 {
