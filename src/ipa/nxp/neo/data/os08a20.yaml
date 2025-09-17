@@ -3,6 +3,7 @@
 ---
 version: 1
 algorithms:
+  - PipeConf:
   - Awb:
   - BlackLevelCorrection:
       # Configured in sensor at 64
