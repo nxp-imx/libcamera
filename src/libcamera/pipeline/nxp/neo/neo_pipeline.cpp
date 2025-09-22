@@ -254,7 +254,6 @@ public:
 
 	bool sensorIsRgbIr() const { return sensorIsRgbIr_; }
 	void adjustTopLinesSize(Size *size) const;
-	int enumerateRawFormats();
 	int configureFrontEndFormat(V4L2SubdeviceFormat &sensorFormat,
 				    Transform transform);
 
@@ -291,6 +290,8 @@ private:
 	int configureFrontEndStream(const std::vector<CameraMediaStream::StreamLink> &streamLinks,
 				    V4L2SubdeviceFormat &sdFormat);
 	int configureFrontEndLinks() const;
+
+	int enumerateRawFormats();
 
 	void clearRequest(NxpNeoFrames::Info *info);
 	void cancelCompleteRequest(NxpNeoFrames::Info *info);
@@ -1947,121 +1948,6 @@ void NxpNeoCameraData::adjustTopLinesSize(Size *size) const
 }
 
 /**
- * \brief Enumerate the compatible sizes and mbus-codes for the sensor
- *
- * Enumerate the sizes and associated mbus-codes provided by the sensor modes
- * compatible with the pipeline. Two maps are stored in the class for later
- * usage:
- * - All sizes associated to a given mbus code
- *   This map can be later accessed via getter rawFormatsCodeToSizes()
- * - All mbus codes associated to a given size
- *   This map can be later accessed via getter rawFormatsSizeToCodes()
- * Mbus codes selected have to be Bayer formats supported by the frontend and
- * the ISP. Also, size widths selected must be within ISP supported range.
- * In case of multi-camera condition, the set of available formats is limited
- * to a single default value that will be used for the graph preconfiguration.
- */
-int NxpNeoCameraData::enumerateRawFormats()
-{
-	std::map<Size, std::vector<unsigned int>> &sizeToCodes =
-		rawFormatsSizeToCodes_;
-	std::map<unsigned int, std::vector<Size>> &codeToSizes =
-		rawFormatsCodeToSizes_;
-
-	const std::vector<unsigned int> &mbusCodes = sensor_->mbusCodes();
-	const std::map<uint32_t, V4L2PixelFormat> &isiFormats =
-		ISIDevice::mediaBusToPixelFormats();
-	const std::vector<V4L2PixelFormat> &neoPixelFormats =
-		NeoDevice::input0Formats();
-
-	/*  Camera formats filtering may be defined in the config file */
-	std::optional<unsigned int> bppFilter =
-		cameraInfo_->cameraProperties().formatBpp;
-	std::optional<Size> sizeFilter =
-		cameraInfo_->cameraProperties().formatSize;
-
-	for (unsigned int code : mbusCodes) {
-		const BayerFormat &bayerFormat = BayerFormat::fromMbusCode(code);
-		if (!bayerFormat.isValid())
-			continue;
-
-		if (!isiFormats.count(code))
-			continue;
-
-		if (std::find(neoPixelFormats.begin(), neoPixelFormats.end(),
-			      isiFormats.at(code)) == neoPixelFormats.end())
-			continue;
-
-		if (bppFilter && bayerFormat.bitDepth != bppFilter.value())
-			continue;
-
-		std::vector<Size> sizes = sensor_->sizes(code);
-		for (const Size &size : sizes) {
-			if (size.width > NeoDevice::kRawWidthMax)
-				continue;
-
-			if (sizeFilter && size != sizeFilter.value())
-				continue;
-
-			sizeToCodes[size].push_back(code);
-			codeToSizes[code].push_back(size);
-		}
-	}
-
-	/* Make sure there is at least one compatible size and code */
-	if (!sizeToCodes.size() || !sizeToCodes.begin()->second.size()) {
-		LOG(NxpNeoPipe, Debug)
-			<< "No compatible sensor format found for the pipeline";
-		return -EINVAL;
-	}
-
-	/*
-	 * At least one compatible format has been found.
-	 * Sort the map values by code bitdepth and size ascending order.
-	 */
-	for (auto &[size, codes] : sizeToCodes) {
-		std::sort(codes.begin(), codes.end(),
-			  [](const unsigned int &lhs, const unsigned int &rhs) {
-				  const BayerFormat &bayerFormatLhs =
-					  BayerFormat::fromMbusCode(lhs);
-				  const BayerFormat &bayerFormatRhs =
-					  BayerFormat::fromMbusCode(rhs);
-				  return bayerFormatLhs.bitDepth < bayerFormatRhs.bitDepth;
-			  });
-	}
-	for (auto &[code, sizes] : codeToSizes)
-		std::sort(sizes.begin(), sizes.end());
-
-	/*
-	 * For multi-camera, default configuration is set arbitrarily to the
-	 * highest size/bitdepth.
-	 */
-	if (multiCamera()) {
-		ASSERT(sizeToCodes.size());
-		const Size &sizeMax = sizeToCodes.rbegin()->first;
-		const std::vector<unsigned int> &codes = sizeToCodes.rbegin()->second;
-		ASSERT(codes.size());
-		unsigned int codeBitDepthMax = codes.back();
-		sizeToCodes.clear();
-		sizeToCodes[sizeMax] = { codeBitDepthMax };
-		codeToSizes.clear();
-		codeToSizes[codeBitDepthMax] = { sizeMax };
-	}
-
-	std::ostringstream oss;
-	oss << "Raw formats size [ mbuscodes ] ";
-	for (const auto &[size, codes] : sizeToCodes) {
-		oss << size.toString() << " [ ";
-		for (const unsigned int code : codes)
-			oss << utils::hex(code) << " ";
-		oss << size.toString() << "] ";
-	}
-	LOG(NxpNeoPipe, Debug) << oss.str();
-
-	return 0;
-}
-
-/**
  * \brief Configure the front end media controller device
  * \param[in] sensorFormat The sensor subdevice format
  * \param[in] transform The sensor transform
@@ -2496,6 +2382,121 @@ int NxpNeoCameraData::configureFrontEndLinks() const
 			}
 		}
 	}
+
+	return 0;
+}
+
+/**
+ * \brief Enumerate the compatible sizes and mbus-codes for the sensor
+ *
+ * Enumerate the sizes and associated mbus-codes provided by the sensor modes
+ * compatible with the pipeline. Two maps are stored in the class for later
+ * usage:
+ * - All sizes associated to a given mbus code
+ *   This map can be later accessed via getter rawFormatsCodeToSizes()
+ * - All mbus codes associated to a given size
+ *   This map can be later accessed via getter rawFormatsSizeToCodes()
+ * Mbus codes selected have to be Bayer formats supported by the frontend and
+ * the ISP. Also, size widths selected must be within ISP supported range.
+ * In case of multi-camera condition, the set of available formats is limited
+ * to a single default value that will be used for the graph preconfiguration.
+ */
+int NxpNeoCameraData::enumerateRawFormats()
+{
+	std::map<Size, std::vector<unsigned int>> &sizeToCodes =
+		rawFormatsSizeToCodes_;
+	std::map<unsigned int, std::vector<Size>> &codeToSizes =
+		rawFormatsCodeToSizes_;
+
+	const std::vector<unsigned int> &mbusCodes = sensor_->mbusCodes();
+	const std::map<uint32_t, V4L2PixelFormat> &isiFormats =
+		ISIDevice::mediaBusToPixelFormats();
+	const std::vector<V4L2PixelFormat> &neoPixelFormats =
+		NeoDevice::input0Formats();
+
+	/*  Camera formats filtering may be defined in the config file */
+	std::optional<unsigned int> bppFilter =
+		cameraInfo_->cameraProperties().formatBpp;
+	std::optional<Size> sizeFilter =
+		cameraInfo_->cameraProperties().formatSize;
+
+	for (unsigned int code : mbusCodes) {
+		const BayerFormat &bayerFormat = BayerFormat::fromMbusCode(code);
+		if (!bayerFormat.isValid())
+			continue;
+
+		if (!isiFormats.count(code))
+			continue;
+
+		if (std::find(neoPixelFormats.begin(), neoPixelFormats.end(),
+			      isiFormats.at(code)) == neoPixelFormats.end())
+			continue;
+
+		if (bppFilter && bayerFormat.bitDepth != bppFilter.value())
+			continue;
+
+		std::vector<Size> sizes = sensor_->sizes(code);
+		for (const Size &size : sizes) {
+			if (size.width > NeoDevice::kRawWidthMax)
+				continue;
+
+			if (sizeFilter && size != sizeFilter.value())
+				continue;
+
+			sizeToCodes[size].push_back(code);
+			codeToSizes[code].push_back(size);
+		}
+	}
+
+	/* Make sure there is at least one compatible size and code */
+	if (!sizeToCodes.size() || !sizeToCodes.begin()->second.size()) {
+		LOG(NxpNeoPipe, Debug)
+			<< "No compatible sensor format found for the pipeline";
+		return -EINVAL;
+	}
+
+	/*
+	 * At least one compatible format has been found.
+	 * Sort the map values by code bitdepth and size ascending order.
+	 */
+	for (auto &[size, codes] : sizeToCodes) {
+		std::sort(codes.begin(), codes.end(),
+			  [](const unsigned int &lhs, const unsigned int &rhs) {
+				  const BayerFormat &bayerFormatLhs =
+					  BayerFormat::fromMbusCode(lhs);
+				  const BayerFormat &bayerFormatRhs =
+					  BayerFormat::fromMbusCode(rhs);
+				  return bayerFormatLhs.bitDepth < bayerFormatRhs.bitDepth;
+			  });
+	}
+	for (auto &[code, sizes] : codeToSizes)
+		std::sort(sizes.begin(), sizes.end());
+
+	/*
+	 * For multi-camera, default configuration is set arbitrarily to the
+	 * highest size/bitdepth.
+	 */
+	if (multiCamera()) {
+		ASSERT(sizeToCodes.size());
+		const Size &sizeMax = sizeToCodes.rbegin()->first;
+		const std::vector<unsigned int> &codes = sizeToCodes.rbegin()->second;
+		ASSERT(codes.size());
+		unsigned int codeBitDepthMax = codes.back();
+		sizeToCodes.clear();
+		sizeToCodes[sizeMax] = { codeBitDepthMax };
+		codeToSizes.clear();
+		codeToSizes[codeBitDepthMax] = { sizeMax };
+	}
+
+	std::ostringstream oss;
+	oss << "Raw formats size [ mbuscodes ] ";
+	for (const auto &[size, codes] : sizeToCodes) {
+		oss << size.toString() << " [ ";
+		for (const unsigned int code : codes)
+			oss << utils::hex(code) << " ";
+		oss << size.toString() << "] ";
+	}
+	LOG(NxpNeoPipe, Debug) << oss.str();
 
 	return 0;
 }
