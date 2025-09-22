@@ -263,7 +263,7 @@ void HdrDecomp::prepare(IPAContext &context, const uint32_t frame,
 	 * related to PIPECONF.LPALIGN0 setting with 12-bit sensor pixel format:
 	 * - Rescaling is done to 16-bit instead of 20-bit for other sensor
 	 *   formats
-	 * - Rescaling is applied event though LPALIGN=0
+	 * - Rescaling is applied even though LPALIGN=0
 	 * This leads to 2 exceptions on this ISP revision V2 with input0 12-bit
 	 * pixel format:
 	 * 1) In non HDR-merge mode, we rely on PIPECONF.LPALIGN0/1 to rescale

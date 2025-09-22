@@ -105,7 +105,7 @@ namespace ipa::nxpneo::algorithms {
  * |  16  |  16   |  16   |  20   |  20   |
  * +------+-------+-------+-------+-------+
  *
- * input1 (INALIGN1)
+ * input1 (LPALIGN1)
  * +------+---------------+---------------+
  * |      | LPALIGN1 = 0  | LPALIGN1 = 1  |
  * | ibpp +-------+-------+-------+-------+
@@ -125,7 +125,7 @@ namespace ipa::nxpneo::algorithms {
  * entries, those are applied with priority. If not configured, the algorithm
  * falls back into automatic configuration mode using the following logic:
  * - For non HDR-merge mode of operation, configure LPALIGN0/1=1
- * - For HDR merge of operation, configure LPALIGN0/1=0 to keep the native
+ * - For HDR-merge mode of operation, configure LPALIGN0/1=0 to keep the native
  *   camera pixel format, as required for the HDR merge block.
  *
  * Note: for non-linear pixel format decompression using HDR Decompression unit,
