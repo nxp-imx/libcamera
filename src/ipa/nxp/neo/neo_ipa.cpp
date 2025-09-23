@@ -194,14 +194,21 @@ int IPANxpNeo::init(const IPASettings &settings, const InitParams &params,
 	const std::map<int32_t, std::pair<uint32_t, bool>> &camHelperDelayParams =
 		attributes->delayedControlParams;
 
+	ControlList ctrls(params.sensorControls);
+	auto idMap = ctrls.idMap();
 	std::map<int32_t, ipa::nxpneo::DelayedControlsParams> &ipaDelayParams =
 		sensorConfig->delayedControlsParams;
 	for (const auto &kv : camHelperDelayParams) {
 		auto k = kv.first;
 		auto v = kv.second;
-		ipaDelayParams.emplace(std::piecewise_construct,
-				       std::forward_as_tuple(k),
-				       std::forward_as_tuple(v.first, v.second));
+		if (idMap->find(kv.first) != idMap->end())
+			ipaDelayParams.emplace(std::piecewise_construct,
+					       std::forward_as_tuple(k),
+					       std::forward_as_tuple(v.first, v.second));
+		else
+			LOG(NxpNeoIPA, Warning)
+				<< "The sensor control list doesn't support the control ID "
+				<< utils::hex(kv.first);
 	}
 
 	sensorConfig->embeddedTopLines = attributes->mdParams.topLines;
