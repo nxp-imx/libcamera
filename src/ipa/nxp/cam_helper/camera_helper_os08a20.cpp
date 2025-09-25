@@ -161,16 +161,7 @@ void CameraHelperOs08a20::controlListSetAGC(
 		return CameraHelper::controlListSetAGC(ctrls, exposure, gain);
 
 	/* In HDR mode, the multi-capture controls are used. */
-	if (!controlListHasId(ctrls, V4L2_CID_EXPOSURE_MULTI)) {
-		LOG(NxpCameraHelper, Error)
-			<< "V4L2_CID_EXPOSURE_MULTI cannot be set";
-		return;
-	}
-	if (!controlListHasId(ctrls, V4L2_CID_AGAIN_MULTI)) {
-		LOG(NxpCameraHelper, Error)
-			<< "V4L2_CID_AGAIN_MULTI cannot be set";
-		return;
-	}
+
 	/* Exposure time and gain provided by AGC apply to long capture. */
 	uint32_t expRowsLong = static_cast<uint32_t>(std::round(exposure / lineDuration()));
 	double aGainLong = gain;
@@ -291,7 +282,6 @@ int CameraHelperOs08a20::sensorControlsToMetaData(const ControlList *sensorCtrls
 		return CameraHelper::sensorControlsToMetaData(sensorCtrls, mdCtrls);
 
 	/* In HDR mode, the multi-capture controls are used. */
-	ASSERT(controlListHasId(mdCtrls, md::AnalogueGain.id()));
 	const ControlValue &aGainCtrl = sensorCtrls->get(V4L2_CID_AGAIN_MULTI);
 	std::array<float, 2> aGainsArray = { 1.0f, 1.0f };
 	if (!aGainCtrl.isNone()) {
@@ -306,11 +296,9 @@ int CameraHelperOs08a20::sensorControlsToMetaData(const ControlList *sensorCtrls
 	mdCtrls->set(md::AnalogueGain, Span<float>(aGainsArray));
 
 	/* Unitary gain for digital gain */
-	ASSERT(controlListHasId(mdCtrls, md::DigitalGain.id()));
 	std::array<float, 1> dGainsArray = { 1.0f };
 	mdCtrls->set(md::DigitalGain, Span<float>(dGainsArray));
 
-	ASSERT(controlListHasId(mdCtrls, md::Exposure.id()));
 	const ControlValue &exposureCtrl = sensorCtrls->get(V4L2_CID_EXPOSURE_MULTI);
 	std::array<float, 2> exposureArray = { 0.0f, 0.0f };
 	if (!exposureCtrl.isNone()) {
@@ -325,12 +313,10 @@ int CameraHelperOs08a20::sensorControlsToMetaData(const ControlList *sensorCtrls
 	mdCtrls->set(md::Exposure, Span<float>(exposureArray));
 
 	/* Unitary gains for white balance */
-	ASSERT(controlListHasId(mdCtrls, md::WhiteBalanceGain.id()));
 	std::array<float, 4> wbGains = { 1.0f, 1.0f, 1.0f, 1.0f };
 	mdCtrls->set(md::WhiteBalanceGain, Span<float>(wbGains));
 
 	/* Arbitrary temperature value */
-	ASSERT(controlListHasId(mdCtrls, md::Temperature.id()));
 	mdCtrls->set(md::Temperature, 25.0);
 
 	return ret;

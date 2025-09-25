@@ -468,12 +468,6 @@ uint32_t CameraHelperMx95mbcam::distributeDigitalGain(
 #if USE_CUSTOM_CONTROLS
 void CameraHelperMx95mbcam::setControls(const ControlList *sensorCtrls)
 {
-	if (!controlListHasId(sensorCtrls, V4L2_CID_OX03C10_OTP_CORRECTION)) {
-		LOG(NxpCameraHelper, Error)
-			<< "V4L2_CID_OX03C10_OTP_CORRECTION not part of control list";
-		return;
-	}
-
 	const ControlValue &val = sensorCtrls->get(V4L2_CID_OX03C10_OTP_CORRECTION);
 	if (val.type() == ControlTypeNone) {
 		LOG(NxpCameraHelper, Error) << "Invalid OX03C10 OTP control";
@@ -513,22 +507,6 @@ void CameraHelperMx95mbcam::setControls(const ControlList *sensorCtrls)
 void CameraHelperMx95mbcam::controlListSetAGC(
 	ControlList *ctrls, double exposure, double gain) const
 {
-	if (!controlListHasId(ctrls, V4L2_CID_OX03C10_EXPOSURE)) {
-		LOG(NxpCameraHelper, Error)
-			<< "V4L2_CID_OX03C10_EXPOSURE cannot be set";
-		return;
-	}
-	if (!controlListHasId(ctrls, V4L2_CID_OX03C10_ANALOGUE_GAIN)) {
-		LOG(NxpCameraHelper, Error)
-			<< "V4L2_CID_OX03C10_ANALOGUE_GAIN cannot be set";
-		return;
-	}
-	if (!controlListHasId(ctrls, V4L2_CID_OX03C10_DIGITAL_GAIN)) {
-		LOG(NxpCameraHelper, Error)
-			<< "V4L2_CID_OX03C10_DIGITAL_GAIN cannot be set";
-		return;
-	}
-
 	const uint32_t sensorConversionRatio = calcConvRatio(convGainQ16_);
 
 	uint64_t lAgainL, lAgainS, lAgainSPD, lAgainVS;
@@ -917,12 +895,6 @@ int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 void CameraHelperMx95mbcam::controlListSetAWB(
 	ControlList *ctrls, Span<const double, 4> gains) const
 {
-	if (!controlListHasId(ctrls, V4L2_CID_OX03C10_WB_GAIN)) {
-		LOG(NxpCameraHelper, Error)
-			<< "V4L2_CID_OX03C10_WB_GAIN cannot be set";
-		return;
-	}
-
 	/* Sensor white balance gain format is UQ5.10 */
 	std::array<uint16_t, 4> uGains;
 	for (size_t i = 0; i < gains.size(); i++)
@@ -945,7 +917,6 @@ int CameraHelperMx95mbcam::sensorControlsToMetaData(const ControlList *sensorCtr
 {
 	int ret = 0;
 
-	ASSERT(controlListHasId(mdCtrls, md::AnalogueGain.id()));
 	const ControlValue &aGainCtrl = sensorCtrls->get(V4L2_CID_OX03C10_ANALOGUE_GAIN);
 	std::array<float, 3> aGainsArray = { 1.0f, 1.0f, 1.0f };
 	if (!aGainCtrl.isNone()) {
@@ -970,7 +941,6 @@ int CameraHelperMx95mbcam::sensorControlsToMetaData(const ControlList *sensorCtr
 	}
 	mdCtrls->set(md::AnalogueGain, Span<float>(aGainsArray));
 
-	ASSERT(controlListHasId(mdCtrls, md::DigitalGain.id()));
 	const ControlValue &dGainCtrl = sensorCtrls->get(V4L2_CID_OX03C10_DIGITAL_GAIN);
 	std::array<float, 3> dGainsArray = { 1.0f, 1.0f, 1.0f };
 	if (!dGainCtrl.isNone()) {
@@ -991,7 +961,6 @@ int CameraHelperMx95mbcam::sensorControlsToMetaData(const ControlList *sensorCtr
 	}
 	mdCtrls->set(md::DigitalGain, Span<float>(dGainsArray));
 
-	ASSERT(controlListHasId(mdCtrls, md::Exposure.id()));
 	const ControlValue &exposureCtrl = sensorCtrls->get(V4L2_CID_OX03C10_EXPOSURE);
 	std::array<float, 3> exposureArray = { 0.0f, 0.0f, 0.0f };
 	if (!exposureCtrl.isNone()) {
@@ -1013,7 +982,6 @@ int CameraHelperMx95mbcam::sensorControlsToMetaData(const ControlList *sensorCtr
 	}
 	mdCtrls->set(md::Exposure, Span<float>(exposureArray));
 
-	ASSERT(controlListHasId(mdCtrls, md::WhiteBalanceGain.id()));
 	const ControlValue &wbCtrl = sensorCtrls->get(V4L2_CID_OX03C10_WB_GAIN);
 	std::array<float, 4> wbGainsArray = { 1.0f, 1.0f, 1.0f, 1.0f };
 	if (!wbCtrl.isNone()) {
@@ -1040,7 +1008,6 @@ int CameraHelperMx95mbcam::sensorControlsToMetaData(const ControlList *sensorCtr
 	mdCtrls->set(md::WhiteBalanceGain, Span<float>(wbGainsArray));
 
 	/* No temperature information, report arbitrary value */
-	ASSERT(controlListHasId(mdCtrls, md::TEMPERATURE));
 	mdCtrls->set(md::Temperature, 25.0);
 
 	return ret;

@@ -116,7 +116,6 @@ public:
 	virtual double lineDuration() const;
 
 protected:
-	static bool controlListHasId(const ControlList *ctrls, unsigned int id);
 	Attributes attributes_;
 	CameraMode mode_;
 

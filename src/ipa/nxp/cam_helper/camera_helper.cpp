@@ -225,23 +225,10 @@ void CameraHelper::setControls(const ControlList *sensorCtrls)
 void CameraHelper::controlListSetAGC(
 	ControlList *ctrls, double exposure, double gain) const
 {
-	if (!controlListHasId(ctrls, V4L2_CID_ANALOGUE_GAIN)) {
-		LOG(NxpCameraHelper, Error)
-			<< "V4L2_CID_ANALOGUE_GAIN cannot be set";
-		return;
-	}
-
 	ctrls->set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gainCode(gain)));
 
 	int32_t lines =
 		static_cast<int32_t>(std::round(exposure / lineDuration()));
-
-	if (!controlListHasId(ctrls, V4L2_CID_EXPOSURE)) {
-		LOG(NxpCameraHelper, Error)
-			<< "V4L2_CID_EXPOSURE cannot be set";
-		return;
-	}
-
 	ctrls->set(V4L2_CID_EXPOSURE, lines);
 }
 
@@ -383,7 +370,6 @@ int CameraHelper::sensorControlsToMetaData(const ControlList *sensorCtrls,
 	int ret = 0;
 
 	/* Analog gain, consider single capture */
-	ASSERT(controlListHasId(mdCtrls, md::AnalogueGain.id()));
 	const ControlValue &aGainCtrl = sensorCtrls->get(V4L2_CID_ANALOGUE_GAIN);
 	std::array<float, 1> aGainsArray = { 1.0f };
 	if (!aGainCtrl.isNone()) {
@@ -396,12 +382,10 @@ int CameraHelper::sensorControlsToMetaData(const ControlList *sensorCtrls,
 	mdCtrls->set(md::AnalogueGain, Span<float>(aGainsArray));
 
 	/* Unitary gain for digital gain */
-	ASSERT(controlListHasId(mdCtrls, md::DigitalGain.id()));
 	std::array<float, 1> dGainsArray = { 1.0f };
 	mdCtrls->set(md::DigitalGain, Span<float>(dGainsArray));
 
 	/* Exposure, consider single capture */
-	ASSERT(controlListHasId(mdCtrls, md::Exposure.id()));
 	const ControlValue &exposureCtrl = sensorCtrls->get(V4L2_CID_EXPOSURE);
 	std::array<float, 1> exposuresArray = { 0.0f };
 	if (!exposureCtrl.isNone()) {
@@ -414,12 +398,10 @@ int CameraHelper::sensorControlsToMetaData(const ControlList *sensorCtrls,
 	mdCtrls->set(md::Exposure, Span<float>(exposuresArray));
 
 	/* Unitary gains for white balance */
-	ASSERT(controlListHasId(mdCtrls, md::WhiteBalanceGain.id()));
 	std::array<float, 4> wbGains = { 1.0f, 1.0f, 1.0f, 1.0f };
 	mdCtrls->set(md::WhiteBalanceGain, Span<float>(wbGains));
 
 	/* Arbitrary temperature value */
-	ASSERT(controlListHasId(mdCtrls, md::Temperature.id()));
 	mdCtrls->set(md::Temperature, 25.0);
 
 	return ret;
@@ -438,26 +420,6 @@ int CameraHelper::sensorControlsToMetaData(const ControlList *sensorCtrls,
 double CameraHelper::lineDuration() const
 {
 	return static_cast<double>(mode_.minLineLength) / mode_.pixelRate;
-}
-
-/**
- * \brief Helper to check if a ControlId is handled by a ControlList
- *
- * This function checks if a ControlList has been constructed with support for
- * a gived ControlId defined by its id.
- * If the ControlId is supported, the ControlList may not have a ControlValue
- * assigned yet, but ControlId will be at least present in the ControlIdMap of
- * the ControlList.
- *
- * \param[in] ctrls The control list
- * \param[in] id The id of the ControlId
- *
- * \return True if the ControlId is handled by the ControlList
- */
-bool CameraHelper::controlListHasId(const ControlList *ctrls, unsigned int id)
-{
-	auto idMap = ctrls->idMap();
-	return (idMap->find(id) != idMap->end());
 }
 
 /*-------------------------- Factory definitions --------------------------*/
