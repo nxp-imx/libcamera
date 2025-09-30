@@ -31,6 +31,8 @@
  * the REGISTER_CAMERA_HELPER() macro.
  */
 
+using namespace std::literals::chrono_literals;
+
 namespace libcamera {
 
 LOG_DEFINE_CATEGORY(NxpCameraHelper)
@@ -186,15 +188,16 @@ void CameraHelper::setCameraMode(const CameraMode &mode)
 	mode_ = mode;
 	LOG(NxpCameraHelper, Debug)
 		<< " pixel rate: " << mode_.pixelRate
-		<< " Line length (min/max) ("
-		<< mode.minLineLength << "/" << mode.maxLineLength
+		<< " hblank/vblank: " << mode_.hblank << "/" << mode_.vblank
+		<< " Line duration: " << hblankToLineLength(mode_.hblank)
+		<< " (min/max: "
+		<< mode_.minLineLength << "/" << mode_.maxLineLength
 		<< ") Frame length (min/max) ("
-		<< mode.minFrameLength << "/" << mode.maxFrameLength
-		<< ") Line duration " << lineDuration()
-		<< " Bit depth " << mode.bitdepth
-		<< " Width " << mode.width
-		<< " Height " << mode.height
-		<< " StreamMode " << mode.streamMode;
+		<< mode_.minFrameLength << "/" << mode_.maxFrameLength
+		<< ") Bit depth " << mode_.bitdepth
+		<< " Width " << mode_.width
+		<< " Height " << mode_.height
+		<< " StreamMode " << mode_.streamMode;
 }
 
 /**
@@ -223,12 +226,11 @@ void CameraHelper::setControls(const ControlList *sensorCtrls)
  * a proprietary programming model.
  */
 void CameraHelper::controlListSetAGC(
-	ControlList *ctrls, double exposure, double gain) const
+	ControlList *ctrls, Duration exposure, double gain) const
 {
 	ctrls->set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gainCode(gain)));
 
-	int32_t lines =
-		static_cast<int32_t>(std::round(exposure / lineDuration()));
+	int32_t lines = exposureLines(exposure, hblankToLineLength(mode_.hblank));
 	ctrls->set(V4L2_CID_EXPOSURE, lines);
 }
 
@@ -245,8 +247,8 @@ void CameraHelper::controlListSetAGC(
  * (short and/or very short).
  */
 void CameraHelper::controlInfoMapGetExposureRange(
-	const ControlInfoMap *ctrls, std::vector<double> *minExposure,
-	std::vector<double> *maxExposure, std::vector<double> *defExposure) const
+	const ControlInfoMap *ctrls, std::vector<Duration> *minExposure,
+	std::vector<Duration> *maxExposure, std::vector<Duration> *defExposure) const
 {
 	uint32_t min, max, def;
 	const auto it = ctrls->find(V4L2_CID_EXPOSURE);
@@ -263,15 +265,15 @@ void CameraHelper::controlInfoMapGetExposureRange(
 			<< "V4L2_CID_EXPOSURE not supported";
 	}
 
-	double line = lineDuration();
+	Duration lineLength = hblankToLineLength(mode_.hblank);
 	minExposure->clear();
-	minExposure->push_back(min * line);
+	minExposure->push_back(exposure(min, lineLength));
 
 	maxExposure->clear();
-	maxExposure->push_back(max * line);
+	maxExposure->push_back(exposure(max, lineLength));
 
 	defExposure->clear();
-	defExposure->push_back(def * line);
+	defExposure->push_back(exposure(def, lineLength));
 }
 
 /**
@@ -390,7 +392,7 @@ int CameraHelper::sensorControlsToMetaData(const ControlList *sensorCtrls,
 	std::array<float, 1> exposuresArray = { 0.0f };
 	if (!exposureCtrl.isNone()) {
 		int32_t exposureLines = exposureCtrl.get<int32_t>();
-		exposuresArray[0] = static_cast<float>(exposureLines * lineDuration());
+		exposuresArray[0] = exposure(exposureLines, hblankToLineLength(mode_.hblank)) / 1.0s;
 	} else {
 		LOG(NxpCameraHelper, Warning) << "Invalid exposure control";
 		ret = -1;
@@ -407,19 +409,19 @@ int CameraHelper::sensorControlsToMetaData(const ControlList *sensorCtrls,
 	return ret;
 }
 
-/**
- * \brief Report the line duration in seconds
- *
- * Line duration is computed by dividing the line length in pixels by the pixel
- * rate. By default, the line length is configured to its minimum value, so use
- * that value.
- * \todo make this computation dynamic according to the actual line length.
- *
- * \return The duration in seconds
- */
-double CameraHelper::lineDuration() const
+uint32_t CameraHelper::exposureLines(const Duration exposure, const Duration lineLength) const
 {
-	return static_cast<double>(mode_.minLineLength) / mode_.pixelRate;
+	return std::round(exposure / lineLength);
+}
+
+Duration CameraHelper::exposure(uint32_t exposureLines, const Duration lineLength) const
+{
+	return exposureLines * lineLength;
+}
+
+Duration CameraHelper::hblankToLineLength(uint32_t hblank) const
+{
+	return (mode_.width + hblank) * (1.0s / mode_.pixelRate);
 }
 
 /*-------------------------- Factory definitions --------------------------*/

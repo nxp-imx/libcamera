@@ -20,6 +20,7 @@
 
 #include <libcamera/base/file.h>
 #include <libcamera/base/log.h>
+#include <libcamera/base/utils.h>
 
 #include <libcamera/control_ids.h>
 #include <libcamera/framebuffer.h>
@@ -98,6 +99,7 @@ private:
 	std::map<unsigned int, MappedFrameBuffer> mappedBuffers_;
 
 	ControlInfoMap sensorControls_;
+	ControlList sensorControlList_;
 
 	/* Local parameter storage */
 	struct IPAContext context_;
@@ -154,9 +156,6 @@ int IPANxpNeo::init(const IPASettings &settings, const InitParams &params,
 		return -ENODEV;
 	}
 
-	context_.configuration.sensor.lineDuration = params.sensorInfo.minLineLength
-						* 1.0s / params.sensorInfo.pixelRate;
-
 	/* Load the tuning data file. */
 	File file(settings.configurationFile);
 	if (!file.open(File::OpenModeFlag::ReadOnly)) {
@@ -193,6 +192,8 @@ int IPANxpNeo::init(const IPASettings &settings, const InitParams &params,
 	}
 
 	context_.configuration = {};
+	sensorControlList_ = params.sensorControlList;
+
 	/* Initialize the IPA context. */
 	updateSensorConfig(params.sensorInfo, params.sensorControls);
 	/* Initialize controls. */
@@ -257,6 +258,8 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	context_.configuration.pipelineMode = mode;
 
 	const IPACameraSensorInfo &info = ipaConfig.sensorInfo;
+	sensorControlList_ = ipaConfig.sensorControlList;
+
 	/* Update the IPA context using the new sensor settings. */
 	updateSensorConfig(info, ipaConfig.sensorControls);
 	/* Update the camera controls using the new sensor settings. */
@@ -426,22 +429,21 @@ void IPANxpNeo::processStats(const uint32_t frame, const IPAContextType context,
 		context_.camHelper->sensorControlsToMetaData(&sensorControls, &mdControls);
 	}
 
-	float exposure = 0.0f;
+	Duration exposure;
 	if (mdControls.contains(md::Exposure.id())) {
 		const ControlValue &exposureValue =
 			mdControls.get(md::Exposure.id());
 		Span<const float> exposuresSpan =
 			exposureValue.get<Span<const float>>();
-		exposure = exposuresSpan[0];
+		exposure = exposuresSpan[0] * 1.0s;
 	} else {
 		LOG(NxpNeoIPA, Warning) << "No exposure metadata";
+		exposure = context_.configuration.sensor.minExposureTime;
 	}
 
-	double lineDuration =
-		context_.configuration.sensor.lineDuration.get<std::ratio<1>>();
-	double linesF = exposure / lineDuration;
-	uint32_t linesInt = static_cast<uint32_t>(std::round(linesF));
-	frameContext.sensor.exposure = linesInt;
+	frameContext.sensor.exposure = context_.camHelper->exposureLines(
+		exposure,
+		context_.configuration.sensor.lineDuration);
 
 	float aGain = 1.0f;
 	if (mdControls.contains(md::AnalogueGain.id())) {
@@ -493,13 +495,20 @@ void IPANxpNeo::updateSensorConfig(const IPACameraSensorInfo &sensorInfo,
 {
 	CameraMode cameraMode;
 	cameraMode.pixelRate = sensorInfo.pixelRate;
-	cameraMode.minLineLength = sensorInfo.minLineLength;
-	cameraMode.maxLineLength = sensorInfo.maxLineLength;
+	/*
+	 * Calculate the line length as the ratio between the line length in
+	 * pixels and the pixel rate. By default, the line length is configured
+	 * to its minimum value, so use that value.
+	 */
+	cameraMode.minLineLength = sensorInfo.minLineLength * (1.0s / sensorInfo.pixelRate);
+	cameraMode.maxLineLength = sensorInfo.maxLineLength * (1.0s / sensorInfo.pixelRate);
 	cameraMode.minFrameLength = sensorInfo.minFrameLength;
 	cameraMode.maxFrameLength = sensorInfo.maxFrameLength;
 	cameraMode.bitdepth = sensorInfo.bitsPerPixel;
 	cameraMode.width = sensorInfo.outputSize.width;
 	cameraMode.height = sensorInfo.outputSize.height;
+	cameraMode.hblank = sensorControlList_.get(V4L2_CID_HBLANK).get<int32_t>();
+	cameraMode.vblank = sensorControlList_.get(V4L2_CID_VBLANK).get<int32_t>();
 	auto iter = kSensorStreamModeMap.find(context_.configuration.pipelineMode);
 	if (iter != kSensorStreamModeMap.end()) {
 		cameraMode.streamMode = iter->second;
@@ -518,7 +527,7 @@ void IPANxpNeo::updateSensorConfig(const IPACameraSensorInfo &sensorInfo,
 	 * Compute exposure time limits from the exposure control limits and
 	 * the line duration.
 	 */
-	std::vector<double> vMinExposure, vMaxExposure, vDefExposure;
+	std::vector<Duration> vMinExposure, vMaxExposure, vDefExposure;
 	context_.camHelper->controlInfoMapGetExposureRange(
 		&sensorControls, &vMinExposure, &vMaxExposure, &vDefExposure);
 
@@ -540,9 +549,9 @@ void IPANxpNeo::updateSensorConfig(const IPACameraSensorInfo &sensorInfo,
 	 *
 	 * \todo take VBLANK into account for maximum exposure time
 	 */
-	context_.configuration.sensor.minExposureTime = vMinExposure[0] * 1.0s;
-	context_.configuration.sensor.maxExposureTime = vMaxExposure[0] * 1.0s;
-	context_.configuration.sensor.defExposureTime = vDefExposure[0] * 1.0s;
+	context_.configuration.sensor.minExposureTime = vMinExposure[0];
+	context_.configuration.sensor.maxExposureTime = vMaxExposure[0];
+	context_.configuration.sensor.defExposureTime = vDefExposure[0];
 
 	context_.configuration.sensor.minAnalogueGain = vMinGain[0];
 	context_.configuration.sensor.maxAnalogueGain = vMaxGain[0];
@@ -551,8 +560,8 @@ void IPANxpNeo::updateSensorConfig(const IPACameraSensorInfo &sensorInfo,
 	/* Update IPA context with sensor vblank, output size and line duration. */
 	context_.configuration.sensor.defVBlank = v4l2VBlank.def().get<int32_t>();
 	context_.configuration.sensor.size = sensorInfo.outputSize;
-	context_.configuration.sensor.lineDuration = sensorInfo.minLineLength * 1.0s /
-						     sensorInfo.pixelRate;
+	context_.configuration.sensor.lineDuration = context_.camHelper->hblankToLineLength(
+		cameraMode.hblank);
 }
 
 void IPANxpNeo::updateControls(const IPACameraSensorInfo &sensorInfo,
@@ -628,9 +637,9 @@ void IPANxpNeo::setControls(unsigned int frame, IPAContextType context)
 	 * This effect can be addressed later by configuring some startup
 	 * frames to be hidden.
 	 */
-	double lineDuration =
-		context_.configuration.sensor.lineDuration.get<std::ratio<1>>();
-	double exposure = frameContext.agc.exposure * lineDuration;
+	Duration exposure = context_.camHelper->exposure(frameContext.agc.exposure,
+							 context_.configuration.sensor.lineDuration);
+
 	if (frame)
 		context_.camHelper->controlListSetAGC(&ctrls, exposure, frameContext.agc.gain);
 

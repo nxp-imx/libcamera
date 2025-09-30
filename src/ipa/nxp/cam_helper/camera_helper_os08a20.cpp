@@ -14,6 +14,8 @@
 
 #include "camera_helper.h"
 
+using namespace std::literals::chrono_literals;
+
 namespace libcamera {
 
 #ifndef V4L2_CID_EXPOSURE_MULTI
@@ -45,14 +47,13 @@ public:
 	void setCameraMode(const CameraMode &mode);
 	uint32_t gainCode(double gain) const override;
 	double gain(uint32_t gainCode) const override;
-
 	void controlListSetAGC(
-		ControlList *ctrls, double exposure, double gain) const override;
+		ControlList *ctrls, Duration exposure, double gain) const override;
 	int sensorControlsToMetaData(
 		const ControlList *sensorCtrls, ControlList *mdCtrls) const override;
 	void controlInfoMapGetExposureRange(
-		const ControlInfoMap *ctrls, std::vector<double> *minExposure,
-		std::vector<double> *maxExposure, std::vector<double> *defExposure) const override;
+		const ControlInfoMap *ctrls, std::vector<Duration> *minExposure,
+		std::vector<Duration> *maxExposure, std::vector<Duration> *defExposure) const override;
 	void controlInfoMapGetAnalogGainRange(
 		const ControlInfoMap *ctrls, std::vector<double> *minGain,
 		std::vector<double> *maxGain, std::vector<double> *defGain) const override;
@@ -154,7 +155,7 @@ double CameraHelperOs08a20::gain(uint32_t gainCode) const
 }
 
 void CameraHelperOs08a20::controlListSetAGC(
-	ControlList *ctrls, double exposure, double gain) const
+	ControlList *ctrls, Duration exposure, double gain) const
 {
 	/* In non-HDR mode, the standard single-capture controls are used. */
 	if (mode_.streamMode != SensorStreamHdr)
@@ -163,7 +164,7 @@ void CameraHelperOs08a20::controlListSetAGC(
 	/* In HDR mode, the multi-capture controls are used. */
 
 	/* Exposure time and gain provided by AGC apply to long capture. */
-	uint32_t expRowsLong = static_cast<uint32_t>(std::round(exposure / lineDuration()));
+	uint32_t expRowsLong = exposureLines(exposure, hblankToLineLength(mode_.hblank));
 	double aGainLong = gain;
 	uint32_t expRowsShort = std::clamp(maxExposureLines(vts_) - expRowsLong,
 					   kMinShortExposureLines,
@@ -208,8 +209,8 @@ void CameraHelperOs08a20::controlListSetAGC(
 }
 
 void CameraHelperOs08a20::controlInfoMapGetExposureRange(
-	const ControlInfoMap *ctrls, std::vector<double> *minExposure,
-	std::vector<double> *maxExposure, std::vector<double> *defExposure) const
+	const ControlInfoMap *ctrls, std::vector<Duration> *minExposure,
+	std::vector<Duration> *maxExposure, std::vector<Duration> *defExposure) const
 {
 	(void)ctrls;
 
@@ -236,14 +237,15 @@ void CameraHelperOs08a20::controlInfoMapGetExposureRange(
 	 */
 	uint32_t maxLongExposureLines = maxExposureLines(vts_) - kMaxShortExposureLines;
 
+	Duration lineLength = hblankToLineLength(mode_.hblank);
 	minExposure->clear();
-	minExposure->push_back(kMinLongExposureLines * lineDuration());
+	minExposure->push_back(exposure(kMinLongExposureLines, lineLength));
 
 	maxExposure->clear();
-	maxExposure->push_back(maxLongExposureLines * lineDuration());
+	maxExposure->push_back(exposure(maxLongExposureLines, lineLength));
 
 	defExposure->clear();
-	defExposure->push_back((kMinLongExposureLines + maxLongExposureLines) / 2 * lineDuration());
+	defExposure->push_back(exposure((kMinLongExposureLines + maxLongExposureLines) / 2, lineLength));
 }
 
 void CameraHelperOs08a20::controlInfoMapGetAnalogGainRange(
@@ -304,8 +306,9 @@ int CameraHelperOs08a20::sensorControlsToMetaData(const ControlList *sensorCtrls
 	if (!exposureCtrl.isNone()) {
 		Span<const uint32_t> exposures = exposureCtrl.get<Span<const uint32_t>>();
 		ASSERT(exposures.size() == 2);
-		exposureArray[0] = exposures[0] * lineDuration();
-		exposureArray[1] = exposures[1] * lineDuration();
+		Duration lineLength= hblankToLineLength(mode_.hblank);
+		exposureArray[0] = exposure(exposures[0], lineLength) / 1.0s;
+		exposureArray[1] = exposure(exposures[1], lineLength) / 1.0s;
 	} else {
 		LOG(NxpCameraHelper, Warning) << "Invalid exposure control";
 		ret = -EINVAL;

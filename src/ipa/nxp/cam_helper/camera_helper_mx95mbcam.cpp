@@ -22,6 +22,8 @@
 #define Q10_1 (0x400U)
 #define Q16_1 (0x10000U)
 
+using namespace std::literals::chrono_literals;
+
 namespace libcamera {
 
 LOG_DECLARE_CATEGORY(NxpCameraHelper)
@@ -176,12 +178,12 @@ public:
 #if USE_CUSTOM_CONTROLS
 	void setControls(const ControlList *sensorCtrls) override;
 	void controlListSetAGC(
-		ControlList *ctrls, double exposure, double gain) const override;
+		ControlList *ctrls, Duration exposure, double gain) const override;
 #endif
 
 	virtual void controlInfoMapGetExposureRange(
-		const ControlInfoMap *ctrls, std::vector<double> *minExposure,
-		std::vector<double> *maxExposure, std::vector<double> *defExposure) const override;
+		const ControlInfoMap *ctrls, std::vector<Duration> *minExposure,
+		std::vector<Duration> *maxExposure, std::vector<Duration> *defExposure) const override;
 
 	virtual void controlInfoMapGetAnalogGainRange(
 		const ControlInfoMap *ctrls, std::vector<double> *minGain,
@@ -505,14 +507,14 @@ void CameraHelperMx95mbcam::setControls(const ControlList *sensorCtrls)
 }
 
 void CameraHelperMx95mbcam::controlListSetAGC(
-	ControlList *ctrls, double exposure, double gain) const
+	ControlList *ctrls, Duration exposure, double gain) const
 {
 	const uint32_t sensorConversionRatio = calcConvRatio(convGainQ16_);
 
 	uint64_t lAgainL, lAgainS, lAgainSPD, lAgainVS;
 	uint32_t lDgainL, lDgainS, lDgainSPD, lDgainVS;
 	uint64_t lAddGain;
-	uint32_t lExpIn = static_cast<uint32_t>(exposure * 1.0e6); // to usec
+	uint32_t lExpIn = static_cast<uint32_t>(exposure / 1.0us); // to usec
 	uint32_t lExpLinRows, lExpSPDinRows, lExpVSinRows;
 	uint64_t lExpTotalInRows;
 	uint64_t lExpTotalL;
@@ -734,21 +736,21 @@ void CameraHelperMx95mbcam::controlListSetAGC(
 #endif
 
 void CameraHelperMx95mbcam::controlInfoMapGetExposureRange(
-	const ControlInfoMap *ctrls, std::vector<double> *minExposure,
-	std::vector<double> *maxExposure, std::vector<double> *defExposure) const
+	const ControlInfoMap *ctrls, std::vector<Duration> *minExposure,
+	std::vector<Duration> *maxExposure, std::vector<Duration> *defExposure) const
 {
 	(void)ctrls;
 
 	/* \todo Append short and very short exposure values */
-	double line = kRowTimeNs * 1.0e-9;
+	Duration line = kRowTimeNs * 1.0ns;
 	minExposure->clear();
-	minExposure->push_back(kMinExposureLines * line);
+	minExposure->push_back(exposure(kMinExposureLines, line));
 
 	maxExposure->clear();
-	maxExposure->push_back(kMaxExposureLines * line);
+	maxExposure->push_back(exposure(kMaxExposureLines, line));
 
 	defExposure->clear();
-	defExposure->push_back((kMinExposureLines + kMaxExposureLines) / 2 * line);
+	defExposure->push_back(exposure((kMinExposureLines + kMaxExposureLines) / 2, line));
 }
 
 void CameraHelperMx95mbcam::controlInfoMapGetAnalogGainRange(
@@ -969,8 +971,8 @@ int CameraHelperMx95mbcam::sensorControlsToMetaData(const ControlList *sensorCtr
 		const struct ox03c10_exposure *exposure =
 			reinterpret_cast<const struct ox03c10_exposure *>(data.data());
 
-		float dcgExposureS = exposure->dcg * kRowTimeNs / 1.0e9f;
-		float spdExposureS = exposure->spd * kRowTimeNs / 1.0e9f;
+		float dcgExposureS = CameraHelper::exposure(exposure->dcg, kRowTimeNs * 1.0ns) / 1.0s;
+		float spdExposureS = CameraHelper::exposure(exposure->spd, kRowTimeNs * 1.0ns) / 1.0s;
 
 		/* SPD exposure time is provided as the last (shortest) capture. */
 		exposureArray[0] = dcgExposureS;
