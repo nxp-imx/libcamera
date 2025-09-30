@@ -34,6 +34,79 @@ LOG_DEFINE_CATEGORY(NxpNeoIsiDev)
  * -------------------------------- ISIPipe --------------------------------
  */
 
+namespace {
+
+/*
+ * Those are the mbus codes usable on a pipe sink pad for the processed channels.
+ * These codes are the ones available for the upstream graph configuration.
+ */
+const std::vector<unsigned int> processedSinkCodes = {
+	MEDIA_BUS_FMT_UYVY8_2X8,
+	MEDIA_BUS_FMT_YUYV8_2X8,
+	MEDIA_BUS_FMT_UYVY8_1X16,
+	MEDIA_BUS_FMT_YUV8_1X24,
+	MEDIA_BUS_FMT_RGB565_1X16,
+	MEDIA_BUS_FMT_RGB888_1X24,
+};
+
+/*
+ * This table maps the bayer video device formats to the relevant pipe pads mbus
+ * code, for a channel operated in bypass mode.
+ */
+const std::map<V4L2PixelFormat, uint32_t> bayerFormatsMap = {
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SBGGR8), MEDIA_BUS_FMT_SBGGR8_1X8 },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SGBRG8), MEDIA_BUS_FMT_SGBRG8_1X8 },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SGRBG8), MEDIA_BUS_FMT_SGRBG8_1X8 },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SRGGB8), MEDIA_BUS_FMT_SRGGB8_1X8 },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SBGGR10), MEDIA_BUS_FMT_SBGGR10_1X10, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SGBRG10), MEDIA_BUS_FMT_SGBRG10_1X10, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SGRBG10), MEDIA_BUS_FMT_SGRBG10_1X10, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SRGGB10), MEDIA_BUS_FMT_SRGGB10_1X10, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SBGGR12), MEDIA_BUS_FMT_SBGGR12_1X12, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SGBRG12), MEDIA_BUS_FMT_SGBRG12_1X12, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SGRBG12), MEDIA_BUS_FMT_SGRBG12_1X12, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SRGGB12), MEDIA_BUS_FMT_SRGGB12_1X12, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SBGGR14), MEDIA_BUS_FMT_SBGGR14_1X14, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SGBRG14), MEDIA_BUS_FMT_SGBRG14_1X14, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SGRBG14), MEDIA_BUS_FMT_SGRBG14_1X14, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SRGGB14), MEDIA_BUS_FMT_SRGGB14_1X14, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SBGGR16), MEDIA_BUS_FMT_SBGGR16_1X16, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SGBRG16), MEDIA_BUS_FMT_SGBRG16_1X16, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SGRBG16), MEDIA_BUS_FMT_SGRBG16_1X16, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_SRGGB16), MEDIA_BUS_FMT_SRGGB16_1X16, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_GREY), MEDIA_BUS_FMT_Y8_1X8, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_Y10), MEDIA_BUS_FMT_Y10_1X10, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_Y12), MEDIA_BUS_FMT_Y12_1X12, },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_Y16), MEDIA_BUS_FMT_Y16_1X16, },
+};
+
+/*
+ * This table maps the meta video device formats to the relevant pipe pads mbus
+ * code, for a channel operated in bypass mode.
+ */
+const std::map<V4L2PixelFormat, uint32_t> metaFormatsMap = {
+	{ V4L2PixelFormat(V4L2_META_FMT_GENERIC_8), MEDIA_BUS_FMT_META_8 },
+};
+
+/*
+ * This table maps the RGB/YUV video device formats to the relevant pipe source
+ * pad mbus code, for a channel operated in processed mode.
+ */
+const std::map<V4L2PixelFormat, uint32_t> processedFormatsMap = {
+	{ V4L2PixelFormat(V4L2_PIX_FMT_YUYV), MEDIA_BUS_FMT_YUV8_1X24 },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_YUVA32), MEDIA_BUS_FMT_YUV8_1X24 },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_NV12), MEDIA_BUS_FMT_YUV8_1X24 },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_NV16), MEDIA_BUS_FMT_YUV8_1X24 },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_YUV444M), MEDIA_BUS_FMT_YUV8_1X24 },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_RGB565), MEDIA_BUS_FMT_RGB888_1X24 },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_RGB24), MEDIA_BUS_FMT_RGB888_1X24 },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_BGR24), MEDIA_BUS_FMT_RGB888_1X24 },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_XBGR32), MEDIA_BUS_FMT_RGB888_1X24 },
+	{ V4L2PixelFormat(V4L2_PIX_FMT_RGBA32), MEDIA_BUS_FMT_RGB888_1X24 },
+};
+
+} // namespace
+
 /**
  * \brief Initialize components of the ISI pipe
  * \param[in] media The ISI media device
@@ -132,14 +205,22 @@ int ISIPipe::stop()
 }
 
 /**
- * \brief Configure the ISI channel with \a sinkFormat subdevice format
- * \param[in] sinkFormat Subdevice format fed to the ISI channel
- * \param[out] sourceFormat Corresponding device format configured in capture
- * device node.
+ * \brief Configure the ISI channel subdevice and video node formats
+ * \param[inout] sinkFormat The format applied to the subdevice sink pad
+ * \param[inout] videoFormat The format applied to the video device
+ *
+ * This function configures ISI pipe formats: the subdevice sink and source
+ * pads, and its capture video device.
+ * In channel bypass mode (bayer or meta), the subdevice sink and source formats
+ * are the same and the function infers both the subdevice source and the video
+ * device formats from the subdevice sink format.
+ * In processed mode, the subdevice source format differs from the sink, and is
+ * inferred from the video device format.
+ *
  * \return 0 on success or a negative error code otherwise
  */
-int ISIPipe::configure(const V4L2SubdeviceFormat &sinkFormat,
-		       V4L2DeviceFormat *sourceFormat)
+int ISIPipe::configure(V4L2SubdeviceFormat &sinkFormat,
+		       V4L2DeviceFormat &deviceFormat)
 {
 	int ret;
 
@@ -150,23 +231,91 @@ int ISIPipe::configure(const V4L2SubdeviceFormat &sinkFormat,
 		return -ENODEV;
 	}
 
-	*sourceFormat = {};
-	uint32_t code = sinkFormat.code;
+	V4L2SubdeviceFormat sourceFormat;
+	const std::vector<unsigned int> processedSinkCodes = sinkMbusCodesProcessed();
+	auto itSinkCode = std::find(processedSinkCodes.begin(), processedSinkCodes.end(),
+				    sinkFormat.code);
+	if (itSinkCode != processedSinkCodes.end()) {
+		/*
+		 * This is a processed channel, infer subdevice source format
+		 * from the video device format.
+		 */
+		const std::vector<V4L2PixelFormat> pixelFormats =
+			utils::map_keys(processedFormatsMap);
+		auto itPixelFormat = std::find(pixelFormats.begin(),
+					       pixelFormats.end(),
+					       deviceFormat.fourcc);
+		if (itPixelFormat == pixelFormats.end()) {
+			LOG(NxpNeoIsiDev, Error)
+				<< logPrefix()
+				<< "Invalid device pixel format "
+				<< deviceFormat.fourcc.toString();
+			return -EINVAL;
+		}
+		sourceFormat = {};
+		sourceFormat.code = processedFormatsMap.at(deviceFormat.fourcc);
+		sourceFormat.size = sinkFormat.size;
+		sourceFormat.colorSpace = sinkFormat.colorSpace;
+	} else {
+		/*
+		 * This is a bypass channel, so check that bayer/meta format is
+		 * supported and infer the subdevice source and video device
+		 * formats.
+		 */
+		const std::vector<unsigned int> bayerCodes = bayerMbusCodes();
+		auto itBayerCode = std::find(bayerCodes.begin(),
+					     bayerCodes.end(), sinkFormat.code);
+		bool isBayer = itBayerCode != bayerCodes.end();
+		const std::vector<unsigned int> metaCodes = metaMbusCodes();
+		auto itMetaCode = std::find(metaCodes.begin(),
+					    metaCodes.end(), sinkFormat.code);
+		bool isMeta = itMetaCode != metaCodes.end();
+		if (!isBayer && !isMeta) {
+			LOG(NxpNeoIsiDev, Error)
+				<< logPrefix()
+				<< "Invalid sink code " << sinkFormat.code;
+			return -EINVAL;
+		}
 
-	const std::map<uint32_t, V4L2PixelFormat> &formats = mediaBusToPixelFormats();
-	if (!formats.count(code)) {
-		LOG(NxpNeoIsiDev, Error)
-			<< logPrefix()
-			<< "mbus code " << code << " not supported by ISI ";
-		return -ENOTSUP;
+		sourceFormat = sinkFormat;
+
+		deviceFormat = {};
+		/* Look up for the appropriate device format. */
+		const std::map<V4L2PixelFormat, uint32_t> &formatsMap =
+			isBayer ? bayerFormatsMap : metaFormatsMap;
+		auto itDeviceFormat =
+			std::find_if(formatsMap.begin(), formatsMap.end(),
+				     [&](const std::pair<const V4L2PixelFormat, uint32_t> &pair) {
+					     return pair.second == sourceFormat.code;
+				     });
+		if (itDeviceFormat == formatsMap.end()) {
+			LOG(NxpNeoIsiDev, Error)
+				<< logPrefix()
+				<< "Invalid source code " << sourceFormat.code;
+			return -EINVAL;
+		}
+		deviceFormat.fourcc = itDeviceFormat->first;
+		deviceFormat.size = sourceFormat.size;
+		deviceFormat.colorSpace = sourceFormat.colorSpace;
 	}
 
-	sourceFormat->fourcc = formats.at(code);
-	sourceFormat->size = sinkFormat.size;
-	sourceFormat->colorSpace = sinkFormat.colorSpace;
+	ret = pipe_->setFormat(0, &sinkFormat);
+	if (ret) {
+		LOG(NxpNeoIsiDev, Error)
+			<< logPrefix()
+			<< "Failed to configure subdevice sink";
+		return ret;
+	}
 
-	/* \todo Set stride and format. */
-	ret = output_->setFormat(sourceFormat);
+	ret = pipe_->setFormat(1, &sourceFormat);
+	if (ret) {
+		LOG(NxpNeoIsiDev, Error)
+			<< logPrefix()
+			<< "Failed to configure subdevice source";
+		return ret;
+	}
+
+	ret = output_->setFormat(&deviceFormat);
 	if (ret) {
 		LOG(NxpNeoIsiDev, Error)
 			<< logPrefix()
@@ -178,7 +327,7 @@ int ISIPipe::configure(const V4L2SubdeviceFormat &sinkFormat,
 
 	LOG(NxpNeoIsiDev, Debug)
 		<< logPrefix() << " Video device configured "
-		<< " dev fmt " << sourceFormat->toString();
+		<< " dev fmt " << deviceFormat.toString();
 
 	return 0;
 }
@@ -203,14 +352,30 @@ int ISIPipe::allocateBuffers(unsigned int bufferCount)
 		return ret;
 	}
 
-	ret = output_->importBuffers(bufferCount);
+	return importBuffers(bufferCount);
+}
+
+/**
+ * \brief Import buffers for ISI channel
+ * \param[in] bufferCount The number of buffers to import
+ * \return 0 on success or a negative error code otherwise
+ */
+int ISIPipe::importBuffers(unsigned int bufferCount)
+{
+	if (!stateConfigured()) {
+		LOG(NxpNeoIsiDev, Error)
+			<< logPrefix()
+			<< "Can't import buffers in state " << getState();
+		return -ENODEV;
+	}
+
+	int ret = output_->importBuffers(bufferCount);
 	if (ret < 0) {
 		LOG(NxpNeoIsiDev, Error) << logPrefix() << "failed to import buffers";
 		freeBuffers();
-		return ret;
 	}
 
-	return 0;
+	return ret;
 }
 
 /**
@@ -232,49 +397,97 @@ void ISIPipe::freeBuffers()
 }
 
 /**
- * \brief Return the table of raw Bayer formats supported by ISI channels
- * \return A map of media bus code and corresponding capture device pixel
- *  formats
+ * \brief Return the supported bayer codes on the pipe pads of a bypass channel
+ * \return The bayer mbus codes
  */
-const std::map<uint32_t, V4L2PixelFormat> &ISIPipe::mediaBusToPixelFormats()
+const std::vector<uint32_t> &ISIPipe::bayerMbusCodes()
 {
-	/*
-	 * ISI channels are operated in bypass mode.
-	 * Table defines pixel formats of the channel output device node
-	 * depending on the media bus format of the incoming stream.
-	 */
-	static const std::map<uint32_t, V4L2PixelFormat> formats = {
+	/* Initialize once */
+	static const std::vector<uint32_t> bayerCodes = []() {
+		std::vector<uint32_t> codes;
+		std::transform(bayerFormatsMap.begin(), bayerFormatsMap.end(),
+			       std::back_inserter(codes),
+			       [](const std::pair<const V4L2PixelFormat, unsigned int> &pair) {
+				       return pair.second;
+			       });
+		return codes;
+	}();
+	return bayerCodes;
+}
 
-		/* Bayer formats (frame output) */
-		{ MEDIA_BUS_FMT_SBGGR8_1X8, V4L2PixelFormat(V4L2_PIX_FMT_SBGGR8) },
-		{ MEDIA_BUS_FMT_SGBRG8_1X8, V4L2PixelFormat(V4L2_PIX_FMT_SGBRG8) },
-		{ MEDIA_BUS_FMT_SGRBG8_1X8, V4L2PixelFormat(V4L2_PIX_FMT_SGRBG8) },
-		{ MEDIA_BUS_FMT_SRGGB8_1X8, V4L2PixelFormat(V4L2_PIX_FMT_SRGGB8) },
-		{ MEDIA_BUS_FMT_SBGGR10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_SBGGR10) },
-		{ MEDIA_BUS_FMT_SGBRG10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_SGBRG10) },
-		{ MEDIA_BUS_FMT_SGRBG10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_SGRBG10) },
-		{ MEDIA_BUS_FMT_SRGGB10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_SRGGB10) },
-		{ MEDIA_BUS_FMT_SBGGR12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_SBGGR12) },
-		{ MEDIA_BUS_FMT_SGBRG12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_SGBRG12) },
-		{ MEDIA_BUS_FMT_SGRBG12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_SGRBG12) },
-		{ MEDIA_BUS_FMT_SRGGB12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_SRGGB12) },
-		{ MEDIA_BUS_FMT_SBGGR14_1X14, V4L2PixelFormat(V4L2_PIX_FMT_SBGGR14) },
-		{ MEDIA_BUS_FMT_SGBRG14_1X14, V4L2PixelFormat(V4L2_PIX_FMT_SGBRG14) },
-		{ MEDIA_BUS_FMT_SGRBG14_1X14, V4L2PixelFormat(V4L2_PIX_FMT_SGRBG14) },
-		{ MEDIA_BUS_FMT_SRGGB14_1X14, V4L2PixelFormat(V4L2_PIX_FMT_SRGGB14) },
-		{ MEDIA_BUS_FMT_SBGGR16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_SBGGR16) },
-		{ MEDIA_BUS_FMT_SGBRG16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_SGBRG16) },
-		{ MEDIA_BUS_FMT_SGRBG16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_SGRBG16) },
-		{ MEDIA_BUS_FMT_SRGGB16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_SRGGB16) },
-		{ MEDIA_BUS_FMT_Y8_1X8, V4L2PixelFormat(V4L2_PIX_FMT_GREY) },
-		{ MEDIA_BUS_FMT_Y10_1X10, V4L2PixelFormat(V4L2_PIX_FMT_Y10) },
-		{ MEDIA_BUS_FMT_Y12_1X12, V4L2PixelFormat(V4L2_PIX_FMT_Y12) },
-		{ MEDIA_BUS_FMT_Y16_1X16, V4L2PixelFormat(V4L2_PIX_FMT_Y16) },
-		/* Metadata formats */
-		{ MEDIA_BUS_FMT_META_8, V4L2PixelFormat(V4L2_META_FMT_GENERIC_8) },
-	};
+/**
+ * \brief Return the supported meta codes on the pipe pads of a bypass channel
+ * \return The meta mbus codes
+ */
+const std::vector<uint32_t> &ISIPipe::metaMbusCodes()
+{
+	/* Initialize once */
+	static const std::vector<uint32_t> metaCodes = []() {
+		std::vector<uint32_t> codes;
+		std::transform(metaFormatsMap.begin(), metaFormatsMap.end(),
+			       std::back_inserter(codes),
+			       [](const std::pair<const V4L2PixelFormat, unsigned int> &pair) {
+				       return pair.second;
+			       });
+		return codes;
+	}();
+	return metaCodes;
+}
 
-	return formats;
+/**
+ * \brief Return the supported codes on the pipe sink pad of a processed channel
+ * \return The mbus codes
+ */
+const std::vector<uint32_t> &ISIPipe::sinkMbusCodesProcessed()
+{
+	return processedSinkCodes;
+}
+
+/**
+ * \brief Return the supported video device pixel formats on a processed channel
+ * \return The pixel formats
+ */
+const std::vector<PixelFormat> &ISIPipe::pixelFormatsProcessed()
+{
+	/* Initialize once */
+	static std::vector<PixelFormat> pixelFormats = []() {
+		std::vector<PixelFormat> formats;
+		std::vector<V4L2PixelFormat> deviceFormats =
+			utils::map_keys(processedFormatsMap);
+		std::transform(deviceFormats.begin(), deviceFormats.end(),
+			       std::back_inserter(formats),
+			       [](const V4L2PixelFormat &format) {
+				       return format.toPixelFormat();
+			       });
+		return formats;
+	}();
+
+	return pixelFormats;
+}
+
+/**
+ * \brief Return the pixel format associated to a bypass channel mbus code
+ * \return The pixel formats
+ */
+const V4L2PixelFormat ISIPipe::mbusCodeToPixelFormatBypass(unsigned int code)
+{
+	auto itRaw = std::find_if(bayerFormatsMap.begin(), bayerFormatsMap.end(),
+				  [=](const std::pair<V4L2PixelFormat, unsigned int> &pair) {
+					  return pair.second == code;
+				  });
+	if (itRaw != bayerFormatsMap.end())
+		return itRaw->first;
+
+	auto itMeta = std::find_if(metaFormatsMap.begin(), metaFormatsMap.end(),
+				   [=](const std::pair<V4L2PixelFormat, unsigned int> &pair) {
+					   return pair.second == code;
+				   });
+
+	if (itMeta != bayerFormatsMap.end())
+		return itMeta->first;
+
+	LOG(NxpNeoIsiDev, Error) << "Unknown bypass format";
+	return {};
 }
 
 /*

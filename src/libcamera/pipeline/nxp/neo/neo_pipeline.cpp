@@ -2018,7 +2018,7 @@ int NxpNeoCameraData::configureFrontEndFormat(V4L2SubdeviceFormat &sensorFormat,
 			return ret;
 
 		V4L2DeviceFormat devFormat;
-		ret = pipe->configure(format, &devFormat);
+		ret = pipe->configure(format, devFormat);
 		if (ret)
 			return ret;
 		pipesDevFormats_[stream] = std::move(devFormat);
@@ -2409,8 +2409,7 @@ int NxpNeoCameraData::enumerateRawFormats()
 		rawFormatsCodeToSizes_;
 
 	const std::vector<unsigned int> &mbusCodes = sensor_->mbusCodes();
-	const std::map<uint32_t, V4L2PixelFormat> &isiFormats =
-		ISIDevice::mediaBusToPixelFormats();
+	const std::vector<unsigned int> &bayerCodes = ISIPipe::bayerMbusCodes();
 	const std::vector<V4L2PixelFormat> &neoPixelFormats =
 		NeoDevice::input0Formats();
 
@@ -2421,17 +2420,19 @@ int NxpNeoCameraData::enumerateRawFormats()
 		cameraInfo_->cameraProperties().formatSize;
 
 	for (unsigned int code : mbusCodes) {
-		const BayerFormat &bayerFormat = BayerFormat::fromMbusCode(code);
-		if (!bayerFormat.isValid())
+		auto itBayerCode = std::find(bayerCodes.begin(),
+					     bayerCodes.end(), code);
+		if (itBayerCode == bayerCodes.end())
 			continue;
 
-		if (!isiFormats.count(code))
-			continue;
+		const V4L2PixelFormat deviceFormat =
+			ISIPipe::mbusCodeToPixelFormatBypass(code);
 
 		if (std::find(neoPixelFormats.begin(), neoPixelFormats.end(),
-			      isiFormats.at(code)) == neoPixelFormats.end())
+			      deviceFormat) == neoPixelFormats.end())
 			continue;
 
+		const BayerFormat &bayerFormat = BayerFormat::fromMbusCode(code);
 		if (bppFilter && bayerFormat.bitDepth != bppFilter.value())
 			continue;
 

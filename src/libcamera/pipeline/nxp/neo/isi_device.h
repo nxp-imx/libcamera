@@ -45,8 +45,8 @@ public:
 	int exportBuffers(unsigned int count,
 			  std::vector<std::unique_ptr<FrameBuffer>> *buffers);
 
-	int configure(const V4L2SubdeviceFormat &sinkFormat,
-		      V4L2DeviceFormat *sourceFormat);
+	int configure(V4L2SubdeviceFormat &sinkFormat,
+		      V4L2DeviceFormat &videoFormat);
 
 	int start();
 	int stop();
@@ -60,8 +60,15 @@ public:
 
 	unsigned int index() const { return index_; }
 	int allocateBuffers(unsigned int bufferCount);
+	int importBuffers(unsigned int bufferCount);
 	std::vector<std::unique_ptr<FrameBuffer>> &buffers() { return buffers_; }
 	void freeBuffers();
+
+	static const std::vector<uint32_t> &bayerMbusCodes();
+	static const std::vector<uint32_t> &metaMbusCodes();
+	static const std::vector<uint32_t> &sinkMbusCodesProcessed();
+	static const std::vector<PixelFormat> &pixelFormatsProcessed();
+	static const V4L2PixelFormat mbusCodeToPixelFormatBypass(unsigned int code);
 
 	std::unique_ptr<V4L2VideoDevice> output_;
 
@@ -69,8 +76,6 @@ private:
 	friend class ISIDevice;
 
 	int init(const MediaDevice *media);
-
-	static const std::map<uint32_t, V4L2PixelFormat> &mediaBusToPixelFormats();
 
 	void setState(unsigned int state) { state_ = state; }
 	unsigned getState() const { return state_; }
@@ -112,11 +117,6 @@ public:
 	static std::string kVDevPipeEntityName(unsigned int i)
 	{
 		return "mxc_isi." + std::to_string(i) + ".capture";
-	}
-
-	static const std::map<uint32_t, V4L2PixelFormat> &mediaBusToPixelFormats()
-	{
-		return ISIPipe::mediaBusToPixelFormats();
 	}
 
 	V4L2Subdevice *crossbar() const { return crossbar_.get(); }
