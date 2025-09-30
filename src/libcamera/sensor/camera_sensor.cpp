@@ -209,10 +209,6 @@ CameraSensor::~CameraSensor() = default;
  *
  * \return The image source stream
  */
-V4L2Subdevice::Stream CameraSensor::imageStream() const
-{
-	return { 0, 0 };
-}
 
 /**
  * \brief Retrieve the embedded data source stream
