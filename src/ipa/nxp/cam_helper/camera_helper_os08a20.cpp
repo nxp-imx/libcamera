@@ -44,7 +44,6 @@ public:
 		};
 	}
 
-	void setCameraMode(const CameraMode &mode);
 	uint32_t gainCode(double gain) const override;
 	double gain(uint32_t gainCode) const override;
 	void controlListSetAGC(
@@ -59,7 +58,7 @@ public:
 		std::vector<double> *maxGain, std::vector<double> *defGain) const override;
 
 private:
-	static uint32_t maxExposureLines(uint32_t vts);
+	uint32_t maxExposureLines() const;
 
 	/* min/max analog real gain value */
 	static constexpr double kMinAnalogGain = 1.0;
@@ -75,35 +74,7 @@ private:
 	static constexpr uint32_t kMinLongExposureLines = 8;
 
 	static constexpr uint32_t kRatioL2S = 16;
-	static const std::map<const Size, uint32_t> kVtsMap;
-
-	/* VTS is adapted with the sensor mode */
-	uint32_t vts_ = 0x4a4;
 };
-
-const std::map<const Size, uint32_t> CameraHelperOs08a20::kVtsMap = {
-	{ { 3840, 2160 }, 0x90a },
-	{ { 1920, 1080 }, 0x4a4 },
-};
-
-void CameraHelperOs08a20::setCameraMode(const CameraMode &mode)
-{
-	CameraHelper::setCameraMode(mode);
-
-	/* In HDR mode, VTS and max exposure lines are computed depending on the sensor mode, */
-	if (mode.streamMode == SensorStreamHdr) {
-		/* Get VTS value depending on the mode */
-		auto iter = kVtsMap.find({ mode.width, mode.height });
-		if (iter != kVtsMap.end()) {
-			vts_ = iter->second;
-		} else {
-			LOG(NxpCameraHelper, Warning)
-				<< "No VTS found for resolution: "
-				<< mode.width << "*" << mode.height
-				<< " - Default value is used: " << vts_;
-		}
-	}
-}
 
 uint32_t CameraHelperOs08a20::gainCode(double gain) const
 {
@@ -166,7 +137,7 @@ void CameraHelperOs08a20::controlListSetAGC(
 	/* Exposure time and gain provided by AGC apply to long capture. */
 	uint32_t expRowsLong = exposureLines(exposure, hblankToLineLength(mode_.hblank));
 	double aGainLong = gain;
-	uint32_t expRowsShort = std::clamp(maxExposureLines(vts_) - expRowsLong,
+	uint32_t expRowsShort = std::clamp(maxExposureLines() - expRowsLong,
 					   kMinShortExposureLines,
 					   kMaxShortExposureLines);
 	double aGainShort;
@@ -235,7 +206,7 @@ void CameraHelperOs08a20::controlInfoMapGetExposureRange(
 	 * - T_long + T_short <= maxExposureLines
 	 * - T_short is set to maximum for short capture
 	 */
-	uint32_t maxLongExposureLines = maxExposureLines(vts_) - kMaxShortExposureLines;
+	uint32_t maxLongExposureLines = maxExposureLines() - kMaxShortExposureLines;
 
 	Duration lineLength = hblankToLineLength(mode_.hblank);
 	minExposure->clear();
@@ -331,12 +302,11 @@ int CameraHelperOs08a20::sensorControlsToMetaData(const ControlList *sensorCtrls
  *        However image is improper if reaching (frame_length(VTS) - 4) - 1.
  *        Images are correct if maximum total exposure is clamped with (frame_length(VTS) - 8)
  *
- * \param[in] vts sensor mode VTS value
- *
  * \return Maximum total exposure combining short and long captures
  */
-uint32_t CameraHelperOs08a20::maxExposureLines(uint32_t vts)
+uint32_t CameraHelperOs08a20::maxExposureLines() const
 {
+	uint32_t vts = mode_.height + mode_.vblank;
 	return vts - 8;
 }
 
