@@ -60,6 +60,7 @@ struct InitParams {
 struct IPAConfigInfo {
 	libcamera.IPACameraSensorInfo sensorInfo;
 	libcamera.ControlInfoMap sensorControls;
+	libcamera.ControlList sensorControlList;
 };
 
 struct DelayedControlsParams {
