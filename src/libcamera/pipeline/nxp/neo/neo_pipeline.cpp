@@ -1876,7 +1876,9 @@ int NxpNeoCameraData::configureRaw(CameraConfiguration *c)
 	}
 
 	ipa::nxpneo::IPAConfigInfo configInfo;
+	std::vector<uint32_t> ids = utils::map_keys(sensor_->controls().idmap());
 	configInfo.sensorControls = sensor_->controls();
+	configInfo.sensorControlList = sensor_->getControls(ids);
 	configInfo.sensorInfo = sensorInfo;
 
 	ipa::nxpneo::IPAColorSpace IPAcolorSpace = ipa::nxpneo::IPAColorSpace(
