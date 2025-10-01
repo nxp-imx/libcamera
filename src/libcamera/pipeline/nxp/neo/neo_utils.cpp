@@ -61,8 +61,8 @@ namespace nxpneo {
  * \var CameraProperties::multiCamera
  * \brief Camera is sharing its MIPI CSI-2 port with other cameras
  *
- * This structure reports to the pipeline handler a set of properties defined
- * in the configuration file, or detected during the discovery procedure.
+ * This structure reports to the pipeline handler a set of properties coming
+ * from the platform configuration file and the graph discovery.
  */
 
 /* -----------------------------------------------------------------------------
@@ -164,9 +164,8 @@ int PipelineConfig::load(const std::string &filename, std::shared_ptr<ISIDevice>
  * \param[in] name The name of the camera media device entity
  *
  * The CameraInfo structure carries information related to the integration
- * of the sensor into the media device. Data is acquired either via
- * automatic graph detection or through parsing of a platform configuration
- * file.
+ * of the sensor into the media device, coming from the platform configuration
+ * file and the graph discovery.
  *
  * \return The pointer to CameraInfo structure if it exists, nullptr otherwise
  */
@@ -375,7 +374,7 @@ int PipelineConfig::loadAutoDetect()
 		}
 
 		/*
-		 * CameraInfo succesfully created
+		 * CameraInfo successfully created
 		 * - Store resulting entry into cameras database
 		 * - Merge camera streams routings to global routing
 		 * - Update the global streams map with the camera streams
