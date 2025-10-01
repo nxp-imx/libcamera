@@ -190,11 +190,7 @@ void CameraHelper::setCameraMode(const CameraMode &mode)
 		<< " pixel rate: " << mode_.pixelRate
 		<< " hblank/vblank: " << mode_.hblank << "/" << mode_.vblank
 		<< " Line duration: " << hblankToLineLength(mode_.hblank)
-		<< " (min/max: "
-		<< mode_.minLineLength << "/" << mode_.maxLineLength
-		<< ") Frame length (min/max) ("
-		<< mode_.minFrameLength << "/" << mode_.maxFrameLength
-		<< ") Bit depth " << mode_.bitdepth
+		<< " Bit depth " << mode_.bitdepth
 		<< " Width " << mode_.width
 		<< " Height " << mode_.height
 		<< " StreamMode " << mode_.streamMode;

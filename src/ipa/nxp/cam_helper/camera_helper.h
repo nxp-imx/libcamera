@@ -67,12 +67,6 @@ struct CameraMode {
 	/* size in pixels of frames in this mode */
 	uint16_t width;
 	uint16_t height;
-	/* minimum and maximum line time */
-	Duration minLineLength;
-	Duration maxLineLength;
-	/* minimum and maximum frame lengths in units of lines */
-	uint32_t minFrameLength;
-	uint32_t maxFrameLength;
 	/* pixel clock rate */
 	uint64_t pixelRate;
 	/* hblank and vblank in this mode */

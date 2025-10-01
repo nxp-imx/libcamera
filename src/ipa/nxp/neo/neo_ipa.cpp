@@ -495,15 +495,6 @@ void IPANxpNeo::updateSensorConfig(const IPACameraSensorInfo &sensorInfo,
 {
 	CameraMode cameraMode;
 	cameraMode.pixelRate = sensorInfo.pixelRate;
-	/*
-	 * Calculate the line length as the ratio between the line length in
-	 * pixels and the pixel rate. By default, the line length is configured
-	 * to its minimum value, so use that value.
-	 */
-	cameraMode.minLineLength = sensorInfo.minLineLength * (1.0s / sensorInfo.pixelRate);
-	cameraMode.maxLineLength = sensorInfo.maxLineLength * (1.0s / sensorInfo.pixelRate);
-	cameraMode.minFrameLength = sensorInfo.minFrameLength;
-	cameraMode.maxFrameLength = sensorInfo.maxFrameLength;
 	cameraMode.bitdepth = sensorInfo.bitsPerPixel;
 	cameraMode.width = sensorInfo.outputSize.width;
 	cameraMode.height = sensorInfo.outputSize.height;
