@@ -1781,24 +1781,30 @@ int NxpNeoCameraData::configureRaw(CameraConfiguration *c)
 			if (stream == &streamRaw_)
 				continue;
 
-			const auto fmts =
-				V4L2PixelFormat::fromPixelFormat(cfg.pixelFormat);
-			V4L2PixelFormat fmt;
-			if (fmts.size())
-				fmt = fmts[0];
+			V4L2DeviceFormat *deviceFormat;
+			V4L2VideoDevice *videoDevice;
+			if (stream == &streamFrame_) {
+				deviceFormat = &devFormatFrame;
+				videoDevice = neo_->frame_.get();
+			} else {
+				deviceFormat = &devFormatIr;
+				videoDevice = neo_->ir_.get();
+			}
 
-			V4L2DeviceFormat &devFormat =
-				stream == &streamFrame_ ? devFormatFrame : devFormatIr;
-			devFormat.size = cfg.size;
-			devFormat.fourcc = fmt;
+			V4L2PixelFormat pixelFormat =
+				videoDevice->toV4L2PixelFormat(cfg.pixelFormat);
+			deviceFormat->fourcc = pixelFormat;
 
-			/* Use libcamera sYCC colorspace definition that maps
+			deviceFormat->size = cfg.size;
+
+			/*
+			 * Use libcamera sYCC colorspace definition that maps
 			 * to a v4l2 sRGB colorspace equivalent.
 			 */
-			if (cfg.colorSpace == ColorSpace::Srgb)
-				devFormat.colorSpace = ColorSpace::Sycc;
-			else
-				devFormat.colorSpace = cfg.colorSpace;
+			std::optional<ColorSpace> colorSpace = cfg.colorSpace;
+			if (colorSpace && colorSpace.value() == ColorSpace::Srgb)
+				colorSpace = ColorSpace::Sycc;
+			deviceFormat->colorSpace = colorSpace;
 		}
 	} else {
 		/*
