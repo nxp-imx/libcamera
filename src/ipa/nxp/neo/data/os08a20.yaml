@@ -4,6 +4,7 @@
 version: 1
 algorithms:
   - PipeConf:
+  - HdrDecomp:
   - Awb:
   - BlackLevelCorrection:
       # Configured in sensor at 64
