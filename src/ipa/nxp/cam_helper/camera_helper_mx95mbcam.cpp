@@ -172,6 +172,7 @@ class CameraHelperMx95mbcam : public CameraHelper
 public:
 	CameraHelperMx95mbcam();
 
+	void setCameraMode(const CameraMode &mode);
 	uint32_t gainCode(double gain) const override;
 	double gain(uint32_t gainCode) const override;
 
@@ -285,13 +286,6 @@ private:
 	static constexpr uint32_t kPrecMult = 1000U;
 	static constexpr uint32_t kMult256 = 256U;
 
-	/* 62MHz */
-	static constexpr float kSclk = 62.0f;
-
-	static constexpr uint32_t kHtsDcg = 0x5E2U;
-	static constexpr uint32_t kHtsSpd = 0x2F1U;
-	static constexpr uint32_t kHtsVs = 0x2F1U;
-	static constexpr uint32_t kHts = kHtsDcg + kHtsSpd + kHtsVs;
 	/* VTS = 675 */
 	static constexpr uint32_t kVts = 0x2A3U;
 
@@ -300,13 +294,6 @@ private:
 	static constexpr uint32_t kMinExposureLines = 2U;
 	/* max_exp_lines = 631 => max exp_time = 631*48.580=30653us */
 	static constexpr uint32_t kMaxExposureLines = kVts - kMaxVsExposureLines - 12U - 1U;
-
-	/*
-	 * Double row time: 48.580us
-	 * Can also be retrieved with actual values from the driver:
-	 * double row time = 2 * hts / pixel clock = 2 * 2186 / 90MHz
-	 */
-	static constexpr uint32_t kRowTimeNs = (kHts * 1000U) / kSclk;
 
 #ifdef USE_OFFSET_M
 	static constexpr float kOffsetM = 0.232621227534758f;
@@ -324,6 +311,8 @@ private:
 	uint32_t convGainQ16_ = 7.32f * Q16_1;
 	/* LPD/SPD sensitivity ratio */
 	uint32_t lpdSpdSensRatioQ16_ = 108.5f * Q16_1;
+	/* Single line duration */
+	Duration lineDuration_;
 };
 
 CameraHelperMx95mbcam::CameraHelperMx95mbcam()
@@ -354,6 +343,14 @@ CameraHelperMx95mbcam::CameraHelperMx95mbcam()
 		parser_->setBitsPerPixel(bpp);
 
 	/* Note: gainType / gainConstants_ are unused */
+}
+
+void CameraHelperMx95mbcam::setCameraMode(const CameraMode &mode)
+{
+	CameraHelper::setCameraMode(mode);
+
+	/* Calculate the line duration based on the sensor hblank */
+	lineDuration_ = hblankToLineLength(mode.hblank);
 }
 
 uint32_t CameraHelperMx95mbcam::gainCode(double gain) const
@@ -387,12 +384,14 @@ uint32_t CameraHelperMx95mbcam::us2ns(uint32_t us) const
 
 uint32_t CameraHelperMx95mbcam::convertExposureTime2Rows(uint32_t exposureUs) const
 {
-	return (us2ns(exposureUs) + kRowTimeNs / 2U) / kRowTimeNs;
+	const uint32_t doubleLineDurationNs = 2 * lineDuration_ / 1.0ns;
+	return (us2ns(exposureUs) + doubleLineDurationNs / 2U) / doubleLineDurationNs;
 }
 
 uint32_t CameraHelperMx95mbcam::convertRows2ExposureTime(uint32_t rows) const
 {
-	return (rows * kRowTimeNs) / kPrecMult;
+	const uint32_t doubleLineDurationNs = 2 * lineDuration_ / 1.0ns;
+	return (rows * doubleLineDurationNs) / kPrecMult;
 }
 
 /**
@@ -409,7 +408,8 @@ uint32_t CameraHelperMx95mbcam::calcAdditionalGain(
 	uint32_t exposureUs, uint32_t exposureRows) const
 {
 	const uint64_t exposureNs = us2ns(exposureUs);
-	const uint64_t exposureRowsNs = exposureRows * kRowTimeNs;
+	const uint32_t doubleLineDurationNs = 2 * lineDuration_ / 1.0ns;
+	const uint64_t exposureRowsNs = exposureRows * doubleLineDurationNs;
 
 	return (exposureNs * Q8_1 + exposureRowsNs / 2) / exposureRowsNs;
 }
@@ -742,15 +742,16 @@ void CameraHelperMx95mbcam::controlInfoMapGetExposureRange(
 	(void)ctrls;
 
 	/* \todo Append short and very short exposure values */
-	Duration line = kRowTimeNs * 1.0ns;
+	/* Min/max exposure lines are in double rows */
 	minExposure->clear();
-	minExposure->push_back(exposure(kMinExposureLines, line));
+	minExposure->push_back(exposure(2 * kMinExposureLines, lineDuration_));
 
 	maxExposure->clear();
-	maxExposure->push_back(exposure(kMaxExposureLines, line));
+	maxExposure->push_back(exposure(2 * kMaxExposureLines, lineDuration_));
 
 	defExposure->clear();
-	defExposure->push_back(exposure((kMinExposureLines + kMaxExposureLines) / 2, line));
+	defExposure->push_back(exposure(2 * (kMinExposureLines + kMaxExposureLines) / 2,
+					lineDuration_));
 }
 
 void CameraHelperMx95mbcam::controlInfoMapGetAnalogGainRange(
@@ -846,9 +847,10 @@ int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 	uint32_t spdExposure =
 		(registers[AecSpdCtrl0eReg] << 8U) | registers[AecSpdCtrl0fReg];
 
-	float dcgExposureS = dcgExposure * kRowTimeNs / 1.0e9f;
+	/* Exposure from sensor is in double rows */
+	float dcgExposureS = exposure(2 * dcgExposure, lineDuration_) / 1.0s;
 	/* SPD exposure time is provided as the last (shortest) capture. */
-	float spdExposureS = spdExposure * kRowTimeNs / 1.0e9f;
+	float spdExposureS = exposure(2 * spdExposure, lineDuration_) / 1.0s;
 
 	std::array<float, 3> exposuresArray = { dcgExposureS,
 						dcgExposureS,
@@ -971,8 +973,9 @@ int CameraHelperMx95mbcam::sensorControlsToMetaData(const ControlList *sensorCtr
 		const struct ox03c10_exposure *exposure =
 			reinterpret_cast<const struct ox03c10_exposure *>(data.data());
 
-		float dcgExposureS = CameraHelper::exposure(exposure->dcg, kRowTimeNs * 1.0ns) / 1.0s;
-		float spdExposureS = CameraHelper::exposure(exposure->spd, kRowTimeNs * 1.0ns) / 1.0s;
+		/* Exposure from sensor is in double rows */
+		float dcgExposureS = CameraHelper::exposure(2 * exposure->dcg, lineDuration_) / 1.0s;
+		float spdExposureS = CameraHelper::exposure(2 * exposure->spd, lineDuration_) / 1.0s;
 
 		/* SPD exposure time is provided as the last (shortest) capture. */
 		exposureArray[0] = dcgExposureS;
