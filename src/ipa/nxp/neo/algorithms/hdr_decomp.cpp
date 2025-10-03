@@ -75,8 +75,10 @@ namespace ipa::nxpneo::algorithms {
  * - 20-bit on line path 0 (input0)
  * - 16-bit on line path 1 (input1)
  * When the HDR block is used, the target pixel format at the output of the HDR
- * Decompression blocks is the same as the native sensor format. Thus the block
- * is configured as bypass with a unitary gain.
+ * Decompression blocks is the same as the native sensor format, with a minimum
+ * of 12-bit to have support for the saturation in the subsequent OBWB blocks.
+ * Thus, the HDR block is configured either as bypass or, for 10-bit HDR merge
+ * mode, with the necessary gain to convert from 10-bit to 12-bit format.
  *
  * When the HDR Decompression block is explicitly configured in the calibration
  * file, those values are applied with priority.
@@ -233,19 +235,11 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 }
 
 /**
- * \copydoc libcamera::ipa::Algorithm::prepare
+ * \copydoc libcamera::ipa::Algorithm::configure
  */
-void HdrDecomp::prepare(IPAContext &context, const uint32_t frame,
-			[[maybe_unused]] IPAFrameContext &frameContext,
-			NxpNeoParams *params)
+int HdrDecomp::configure(IPAContext &context,
+			 [[maybe_unused]] const IPACameraSensorInfo &configInfo)
 {
-	if (frame > 0)
-		return;
-
-	LOG(NxpNeoAlgoHdrDecomp, Debug)
-		<< "input0/1 user config "
-		<< input0_.userConfig << "/" << input1_.userConfig;
-
 	/*
 	 * When no user configuration is present in the configuration file we
 	 * fallback to a default linear bypass configuration of the block.
@@ -254,7 +248,7 @@ void HdrDecomp::prepare(IPAContext &context, const uint32_t frame,
 	 * - Rescaling is done to 16-bit instead of 20-bit for other sensor
 	 *   formats
 	 * - Rescaling is applied even though LPALIGN=0
-	 * This leads to 2 exceptions on this ISP revision V2 with input0 12-bit
+	 * This leads to 2 exceptions using ISP revision V2 with 12-bit input0
 	 * pixel format:
 	 * 1) In non HDR-merge mode, we rely on PIPECONF.LPALIGN0/1 to rescale
 	 *    the pixels to 20-bits internal format. In that case an additional
@@ -265,18 +259,55 @@ void HdrDecomp::prepare(IPAContext &context, const uint32_t frame,
 	 *    purpose LPALIGN0=0 is set to avoid PIPECONF rescaling. But it
 	 *    does not apply to that specific case so a (1/16) fractional gain
 	 *    needs to be set to revert the pixel format from 16-bit to 12-bit.
+	 * During HDR merge operation where we want to keep the native sensor
+	 * bitdepth up to the HDR merge block, there is a constraint coming from
+	 * the OBWB block, whose saturation (obpp) is configurable only from
+	 * 12-bit onwards. Thus, for a lower pixel format (10-bit) the necessary
+	 * gain is applied in HDR Decomp block to rescale the input to 12-bit
+	 * format in order to meet the OBWB0/1 constraints.
 	 */
-
 	IPAModeType &mode = context.configuration.pipelineMode;
 	unsigned int &hwRevision = context.hw.hwRevision;
 	std::array<uint32_t, 2> &bpps = context.configuration.sensor.bpps;
+
+	/* Special cases: update ratio[4] to amend the unitary gain (u7.5). */
 	if (!input0_.userConfig && bpps[0] == 12 && hwRevision == NEOISP_HW_V2) {
-		/* Update ratio[4] to amend the unitary gain (u7.5 format). */
 		if (mode != IPAModeTypeHdrMerge)
 			input0_.ratios[4] = (1 << 5) * 16;
 		else
 			input0_.ratios[4] = (1 << 5) / 16;
 	}
+
+	if (!input0_.userConfig && bpps[0] == 10) {
+		if (mode != IPAModeTypeHdrMerge)
+			input0_.ratios[4] = (1 << 5);
+		else
+			input0_.ratios[4] = (1 << 5) * 4;
+	}
+
+	if (!input1_.userConfig && bpps[1] == 10) {
+		if (mode != IPAModeTypeHdrMerge)
+			input1_.ratios[4] = (1 << 5);
+		else
+			input1_.ratios[4] = (1 << 5) * 4;
+	}
+
+	return 0;
+}
+
+/**
+ * \copydoc libcamera::ipa::Algorithm::prepare
+ */
+void HdrDecomp::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
+			[[maybe_unused]] IPAFrameContext &frameContext,
+			NxpNeoParams *params)
+{
+	if (frame > 0)
+		return;
+
+	LOG(NxpNeoAlgoHdrDecomp, Debug)
+		<< "input0/1 user config "
+		<< input0_.userConfig << "/" << input1_.userConfig;
 
 	auto hdrdec0Config = params->block<BlockParamsType::HdrDec0>();
 	hdrdec0Config.setUpdate(true);
