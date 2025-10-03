@@ -205,8 +205,7 @@ public:
 private:
 	uint32_t calcConvRatio(uint32_t ratio) const;
 	uint32_t us2ns(uint32_t us) const;
-	uint32_t convertExposureTime2Rows(uint32_t exposureUs) const;
-	uint32_t convertRows2ExposureTime(uint32_t rows) const;
+	uint32_t convertExposureTime2DoubleRows(uint32_t exposureUs) const;
 	uint32_t calcAdditionalGain(
 		uint32_t exposureUs, uint32_t exposureRows) const;
 	uint32_t distributeAnalogGain(
@@ -221,6 +220,7 @@ private:
 		Span<const uint32_t> gainCodes, Span<float> gains) const;
 	Span<float> whiteBalanceGains(
 		Span<const uint32_t> gainCodes, Span<float> gains) const;
+	uint32_t maxExposureDoubleLines() const;
 
 	/* min/max analog real gain value */
 	static constexpr double kMinAnalogGain = 1.0;
@@ -286,14 +286,11 @@ private:
 	static constexpr uint32_t kPrecMult = 1000U;
 	static constexpr uint32_t kMult256 = 256U;
 
-	/* VTS = 675 */
-	static constexpr uint32_t kVts = 0x2A3U;
-
-	static constexpr uint32_t kMinVsExposureLines = 0U;
-	static constexpr uint32_t kMaxVsExposureLines = 31U;
-	static constexpr uint32_t kMinExposureLines = 2U;
-	/* max_exp_lines = 631 => max exp_time = 631*48.580=30653us */
-	static constexpr uint32_t kMaxExposureLines = kVts - kMaxVsExposureLines - 12U - 1U;
+	/* min/max exposure in double lines */
+	static constexpr uint32_t kMinVsExposureDoubleLines = 0U;
+	static constexpr uint32_t kMaxVsExposureDoubleLines = 31U;
+	static constexpr uint32_t kMinExposureDoubleLines = 2U;
+	uint32_t maxExposureDoubleLines_;
 
 #ifdef USE_OFFSET_M
 	static constexpr float kOffsetM = 0.232621227534758f;
@@ -351,6 +348,10 @@ void CameraHelperMx95mbcam::setCameraMode(const CameraMode &mode)
 
 	/* Calculate the line duration based on the sensor hblank */
 	lineDuration_ = hblankToLineLength(mode.hblank);
+
+	/* Calculate the maximum exposure in double lines */
+	maxExposureDoubleLines_ = maxExposureDoubleLines();
+	LOG(NxpCameraHelper, Debug) << "maxExposureDoubleLines_=" << maxExposureDoubleLines_;
 }
 
 uint32_t CameraHelperMx95mbcam::gainCode(double gain) const
@@ -382,16 +383,17 @@ uint32_t CameraHelperMx95mbcam::us2ns(uint32_t us) const
 	return us * 1000U;
 }
 
-uint32_t CameraHelperMx95mbcam::convertExposureTime2Rows(uint32_t exposureUs) const
+/**
+ * \brief Convert from exposure time to double rows
+ *
+ * \param[in] exposureUs the exposure time in us
+ *
+ * \return Exposure in double rows
+ */
+uint32_t CameraHelperMx95mbcam::convertExposureTime2DoubleRows(uint32_t exposureUs) const
 {
 	const uint32_t doubleLineDurationNs = 2 * lineDuration_ / 1.0ns;
 	return (us2ns(exposureUs) + doubleLineDurationNs / 2U) / doubleLineDurationNs;
-}
-
-uint32_t CameraHelperMx95mbcam::convertRows2ExposureTime(uint32_t rows) const
-{
-	const uint32_t doubleLineDurationNs = 2 * lineDuration_ / 1.0ns;
-	return (rows * doubleLineDurationNs) / kPrecMult;
 }
 
 /**
@@ -400,18 +402,18 @@ uint32_t CameraHelperMx95mbcam::convertRows2ExposureTime(uint32_t rows) const
  * \details Attempts to recover the lost, due to conversion to rows, exposure time as gain
  *
  * \param[in] exposureUs the exposure time before converting it to rows
- * \param[in] exposureRows the resulting rows after converting exposureUs to rows
+ * \param[in] exposureRows the resulting double rows after converting exposureUs to double rows
  *
  * \return The lost exposure time as gain in Q8
  */
 uint32_t CameraHelperMx95mbcam::calcAdditionalGain(
 	uint32_t exposureUs, uint32_t exposureRows) const
 {
-	const uint64_t exposureNs = us2ns(exposureUs);
+	const uint64_t exposureNsBeforeConv = us2ns(exposureUs);
 	const uint32_t doubleLineDurationNs = 2 * lineDuration_ / 1.0ns;
-	const uint64_t exposureRowsNs = exposureRows * doubleLineDurationNs;
+	const uint64_t exposureNsAfterConv = exposureRows * doubleLineDurationNs;
 
-	return (exposureNs * Q8_1 + exposureRowsNs / 2) / exposureRowsNs;
+	return (exposureNsBeforeConv * Q8_1 + exposureNsAfterConv / 2) / exposureNsAfterConv;
 }
 
 uint32_t CameraHelperMx95mbcam::distributeAnalogGain(
@@ -515,8 +517,8 @@ void CameraHelperMx95mbcam::controlListSetAGC(
 	uint32_t lDgainL, lDgainS, lDgainSPD, lDgainVS;
 	uint64_t lAddGain;
 	uint32_t lExpIn = static_cast<uint32_t>(exposure / 1.0us); // to usec
-	uint32_t lExpLinRows, lExpSPDinRows, lExpVSinRows;
-	uint64_t lExpTotalInRows;
+	uint32_t lExpLdoubleRows, lExpSPDdoubleRows, lExpVSdoubleRows;
+	uint64_t lExpTotalDoubleRows;
 	uint64_t lExpTotalL;
 	uint64_t lRatioL2S, lRatioL2SPD, lRatioL2VS;
 	uint64_t lMinGainL;
@@ -533,17 +535,17 @@ void CameraHelperMx95mbcam::controlListSetAGC(
 		(static_cast<uint64_t>(kMinAnalogGainVsQ16) * kMinDigitalGainVsQ16) / Q16_1;
 
 	/* make exposure a multiple of row time as driver needed it */
-	lExpLinRows = convertExposureTime2Rows(lExpIn); /* in rows */
+	lExpLdoubleRows = convertExposureTime2DoubleRows(lExpIn); /* in double rows */
 	/* distribution should provide valid values, here an extra check */
-	if (lExpLinRows < kMinExposureLines) {
-		lExpLinRows = kMinExposureLines;
+	if (lExpLdoubleRows < kMinExposureDoubleLines) {
+		lExpLdoubleRows = kMinExposureDoubleLines;
 		LOG(NxpCameraHelper, Warning)
-			<< "Long exposure distribution < kMinExposureLines. Value adjusted.";
+			<< "Long exposure distribution < kMinExposureDoubleLines. Value adjusted.";
 	} else {
-		if (lExpLinRows > kMaxExposureLines) {
-			lExpLinRows = kMaxExposureLines;
+		if (lExpLdoubleRows > maxExposureDoubleLines_) {
+			lExpLdoubleRows = maxExposureDoubleLines_;
 			LOG(NxpCameraHelper, Warning)
-				<< "Long exposure distribution > kMaxExposureLines. Value adjusted.";
+				<< "Long exposure distribution > maxExposureDoubleLines_. Value adjusted.";
 		}
 	}
 
@@ -569,16 +571,16 @@ void CameraHelperMx95mbcam::controlListSetAGC(
 		lAgainL = lMinGainL;
 		lExpIn = (uint32_t)(lExpTotalL / (kPrecMult * lAgainL)); /* LFM restriction may not strict */
 		/* make exposure a multiple of row time as driver needed it */
-		lExpLinRows = convertExposureTime2Rows(lExpIn); /* in rows */
+		lExpLdoubleRows = convertExposureTime2DoubleRows(lExpIn); /* in double rows */
 		/* distribution should provide valid values, here an extra check */
-		if (lExpLinRows < kMinExposureLines)
-			lExpLinRows = kMinExposureLines;
+		if (lExpLdoubleRows < kMinExposureDoubleLines)
+			lExpLdoubleRows = kMinExposureDoubleLines;
 	}
 
-	lAddGain = calcAdditionalGain(lExpIn, lExpLinRows);
+	lAddGain = calcAdditionalGain(lExpIn, lExpLdoubleRows);
 	lAgainL = (lAgainL * lAddGain + kMult256 / 2U) / kMult256; /* correct gain */
 
-	/* as result of lExpLinRows limitation causing fractional lAddGain */
+	/* as result of lExpLdoubleRows limitation causing fractional lAddGain */
 	if (lAgainL < lMinGainL)
 		lAgainL = lMinGainL;
 
@@ -586,55 +588,55 @@ void CameraHelperMx95mbcam::controlListSetAGC(
 	lAgainS = lAgainL * Q16_1 / lRatioL2S;
 
 	/* SPD distribution */
-	lExpSPDinRows = kMaxExposureLines;
+	lExpSPDdoubleRows = maxExposureDoubleLines_;
 	/* calculations of lAgainSPD with restrictions for SPD max exposure and min SPD gain */
-	lExpTotalInRows = lAgainL * ((uint64_t)lExpLinRows * lpdSpdSensRatioQ16_ / Q16_1); /* total exposure (with rows...) */
-	lAgainSPD = lExpTotalInRows * Q16_1 / (lRatioL2SPD * (uint64_t)lExpSPDinRows);
+	lExpTotalDoubleRows = lAgainL * ((uint64_t)lExpLdoubleRows * lpdSpdSensRatioQ16_ / Q16_1); /* total exposure (with rows...) */
+	lAgainSPD = lExpTotalDoubleRows * Q16_1 / (lRatioL2SPD * (uint64_t)lExpSPDdoubleRows);
 	if (lAgainSPD < lMinGainSPD) /* but if min gain restriction fails */
 	{
 		lAgainSPD = lMinGainSPD; /* set mandatory min gain and decrease exposure */
-		lExpSPDinRows = (uint32_t)(lExpTotalInRows * Q16_1 / (lRatioL2SPD * lAgainSPD));
-		if (lExpSPDinRows < kMinExposureLines) {
-			lExpSPDinRows = kMinExposureLines;
+		lExpSPDdoubleRows = (uint32_t)(lExpTotalDoubleRows * Q16_1 / (lRatioL2SPD * lAgainSPD));
+		if (lExpSPDdoubleRows < kMinExposureDoubleLines) {
+			lExpSPDdoubleRows = kMinExposureDoubleLines;
 		}
-		lAgainSPD = lExpTotalInRows * Q16_1 / (lRatioL2SPD * (uint64_t)lExpSPDinRows);
+		lAgainSPD = lExpTotalDoubleRows * Q16_1 / (lRatioL2SPD * (uint64_t)lExpSPDdoubleRows);
 	}
 
 	/* VS distribution */
-	lExpVSinRows = kMaxVsExposureLines; /* default VS exposure to max */
+	lExpVSdoubleRows = kMaxVsExposureDoubleLines; /* default VS exposure to max */
 
 	/* calculations of acAgain with restrictions for VS max exposure and min VS gain */
 	lTmpF = kOffsetM * (float)Q10_1;
-	lExpTotalInRows = lAgainL * ((uint64_t)lExpLinRows * Q10_1 + (uint64_t)lTmpF); /* total exposure (with rows...) */
+	lExpTotalDoubleRows = lAgainL * ((uint64_t)lExpLdoubleRows * Q10_1 + (uint64_t)lTmpF); /* total exposure (with rows...) */
 	lTmpF = kOffsetVs * (float)Q10_1;
-	lAgainVS = lExpTotalInRows * Q16_1 / (lRatioL2VS * ((uint64_t)lExpVSinRows * Q10_1 + (uint64_t)lTmpF));
+	lAgainVS = lExpTotalDoubleRows * Q16_1 / (lRatioL2VS * ((uint64_t)lExpVSdoubleRows * Q10_1 + (uint64_t)lTmpF));
 	/* but if min gain restriction fails */
 	if (lAgainVS < lMinGainVS) {
 		lAgainVS = lMinGainVS; /* set mandatory min gain and decrease exposure */
-		lExpVSinRows = (uint32_t)(lExpTotalInRows * Q16_1 / (lRatioL2VS * lAgainVS * Q10_1));
+		lExpVSdoubleRows = (uint32_t)(lExpTotalDoubleRows * Q16_1 / (lRatioL2VS * lAgainVS * Q10_1));
 		/**
-		 * \note <= is used instead of < because if kMinVsExposureLines is 0
+		 * \note <= is used instead of < because if kMinVsExposureDoubleLines is 0
 		 * then the expression would be always false and the compiler
 		 * might issue a warning that will be treated as error due to compiler flags
 		 */
-		if (lExpVSinRows <= kMinVsExposureLines) {
-			lExpVSinRows = kMinVsExposureLines;
+		if (lExpVSdoubleRows <= kMinVsExposureDoubleLines) {
+			lExpVSdoubleRows = kMinVsExposureDoubleLines;
 		}
 		lTmpF = kOffsetVs * (float)Q10_1;
-		lAgainVS = lExpTotalInRows * Q16_1 / (lRatioL2VS * ((uint64_t)lExpVSinRows * Q10_1 + (uint32_t)lTmpF));
+		lAgainVS = lExpTotalDoubleRows * Q16_1 / (lRatioL2VS * ((uint64_t)lExpVSdoubleRows * Q10_1 + (uint32_t)lTmpF));
 		if (lAgainVS < lMinGainVS) {
-			lExpVSinRows = (uint32_t)(lExpVSinRows * lAgainVS / Q16_1);
-			if (lExpVSinRows <= kMinVsExposureLines) {
-				lExpVSinRows = kMinVsExposureLines;
+			lExpVSdoubleRows = (uint32_t)(lExpVSdoubleRows * lAgainVS / Q16_1);
+			if (lExpVSdoubleRows <= kMinVsExposureDoubleLines) {
+				lExpVSdoubleRows = kMinVsExposureDoubleLines;
 			}
-			lAgainVS = lExpTotalInRows * Q16_1 / (lRatioL2VS * ((uint64_t)lExpVSinRows * Q10_1 + (uint32_t)lTmpF));
+			lAgainVS = lExpTotalDoubleRows * Q16_1 / (lRatioL2VS * ((uint64_t)lExpVSdoubleRows * Q10_1 + (uint32_t)lTmpF));
 		}
 	}
 
 	ox03c10_exposure v4l2Exposures;
-	v4l2Exposures.dcg = lExpLinRows; // DCG_exp_row
-	v4l2Exposures.spd = lExpSPDinRows; // SPD_exp_row
-	v4l2Exposures.vs = lExpVSinRows; // VS_exp_row
+	v4l2Exposures.dcg = lExpLdoubleRows; // DCG_exp_row
+	v4l2Exposures.spd = lExpSPDdoubleRows; // SPD_exp_row
+	v4l2Exposures.vs = lExpVSdoubleRows; // VS_exp_row
 
 	Span<uint8_t> expData(reinterpret_cast<uint8_t *>(&v4l2Exposures), sizeof(v4l2Exposures));
 	ctrls->set(V4L2_CID_OX03C10_EXPOSURE, expData);
@@ -744,13 +746,13 @@ void CameraHelperMx95mbcam::controlInfoMapGetExposureRange(
 	/* \todo Append short and very short exposure values */
 	/* Min/max exposure lines are in double rows */
 	minExposure->clear();
-	minExposure->push_back(exposure(2 * kMinExposureLines, lineDuration_));
+	minExposure->push_back(exposure(2 * kMinExposureDoubleLines, lineDuration_));
 
 	maxExposure->clear();
-	maxExposure->push_back(exposure(2 * kMaxExposureLines, lineDuration_));
+	maxExposure->push_back(exposure(2 * maxExposureDoubleLines_, lineDuration_));
 
 	defExposure->clear();
-	defExposure->push_back(exposure(2 * (kMinExposureLines + kMaxExposureLines) / 2,
+	defExposure->push_back(exposure(2 * (kMinExposureDoubleLines + maxExposureDoubleLines_) / 2,
 					lineDuration_));
 }
 
@@ -1047,6 +1049,19 @@ Span<float> CameraHelperMx95mbcam::whiteBalanceGains(
 	for (size_t i = 0; i < gainCodes.size(); i++)
 		gains[i] = gainCodes[i] * 1.0f / (1 << 10);
 	return gains;
+}
+
+/**
+ * \brief Calculate the maximum exposure based on VTS
+ *        Datasheet specifies
+ *        DCG_exp + VS_exp_max < VTS - 12
+ *
+ * \return Maximum exposure in double lines
+ */
+uint32_t CameraHelperMx95mbcam::maxExposureDoubleLines() const
+{
+	uint32_t vts = mode_.height + mode_.vblank;
+	return (vts / 2) - kMaxVsExposureDoubleLines - 12 - 1;
 }
 
 REGISTER_CAMERA_HELPER("mx95mbcam", CameraHelperMx95mbcam)
