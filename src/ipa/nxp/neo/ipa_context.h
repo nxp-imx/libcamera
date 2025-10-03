@@ -58,7 +58,8 @@ struct IPASessionConfiguration {
 		int32_t defVBlank;
 		utils::Duration lineDuration;
 		Size size;
-		uint32_t bpp;
+		/* bpp per ISP input */
+		std::array<uint32_t, 2> bpps;
 	} sensor;
 
 	struct {

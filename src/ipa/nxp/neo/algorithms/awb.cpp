@@ -170,10 +170,8 @@ int Awb::configure(IPAContext &context,
 			return NEO_OBWB_OBPP_20BPP;
 	};
 
-	/* \todo initialize input1 bpp separately when info is available. */
-	IPASessionConfiguration &config = context.configuration;
-	unsigned int bpp0 = config.sensor.bpp;
-	std::array<unsigned int, kInputsCount> bpps = { bpp0, bpp0 };
+	std::array<uint32_t, kInputsCount> &bpps =
+		context.configuration.sensor.bpps;
 
 	if (mode != IPAModeTypeHdrMerge) {
 		obwbObpp_[0] = obpp(20);

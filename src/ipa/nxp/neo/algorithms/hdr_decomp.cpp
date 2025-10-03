@@ -233,16 +233,6 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 }
 
 /**
- * \copydoc libcamera::ipa::Algorithm::configure
- */
-int HdrDecomp::configure([[maybe_unused]] IPAContext &context,
-			 const IPACameraSensorInfo &configInfo)
-{
-	bitsPerPixel_ = configInfo.bitsPerPixel;
-	return 0;
-}
-
-/**
  * \copydoc libcamera::ipa::Algorithm::prepare
  */
 void HdrDecomp::prepare(IPAContext &context, const uint32_t frame,
@@ -279,7 +269,8 @@ void HdrDecomp::prepare(IPAContext &context, const uint32_t frame,
 
 	IPAModeType &mode = context.configuration.pipelineMode;
 	unsigned int &hwRevision = context.hw.hwRevision;
-	if (!input0_.userConfig && bitsPerPixel_ == 12 && hwRevision == NEOISP_HW_V2) {
+	std::array<uint32_t, 2> &bpps = context.configuration.sensor.bpps;
+	if (!input0_.userConfig && bpps[0] == 12 && hwRevision == NEOISP_HW_V2) {
 		/* Update ratio[4] to amend the unitary gain (u7.5 format). */
 		if (mode != IPAModeTypeHdrMerge)
 			input0_.ratios[4] = (1 << 5) * 16;

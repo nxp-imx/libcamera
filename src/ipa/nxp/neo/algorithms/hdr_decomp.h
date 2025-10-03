@@ -25,7 +25,6 @@ public:
 	~HdrDecomp() = default;
 
 	int init(IPAContext &context, const YamlObject &tuningData) override;
-	int configure(IPAContext &context, const IPACameraSensorInfo &configInfo) override;
 	void prepare(IPAContext &context, const uint32_t frame,
 		     IPAFrameContext &frameContext,
 		     NxpNeoParams *params) override;
@@ -51,8 +50,6 @@ private:
 		std::vector<uint16_t> ratios;
 		bool userConfig = false;
 	} input1_;
-
-	unsigned int bitsPerPixel_ = 0;
 };
 
 } /* namespace ipa::nxpneo::algorithms */

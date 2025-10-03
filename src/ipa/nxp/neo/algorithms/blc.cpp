@@ -198,10 +198,8 @@ int BlackLevelCorrection::configure(IPAContext &context,
 	if (!enabled_)
 		return 0;
 
-	/* \todo initialize input1 bpp separately when info is available. */
-	IPASessionConfiguration &config = context.configuration;
-	unsigned int bpp0 = config.sensor.bpp;
-	std::array<unsigned int, kInputsCount> bpps = { bpp0, bpp0 };
+	std::array<uint32_t, kInputsCount> &bpps =
+		context.configuration.sensor.bpps;
 
 	/*
 	 * Compute the BLC offset at sensor level for each ISP input. For each

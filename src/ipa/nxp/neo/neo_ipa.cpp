@@ -265,9 +265,9 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	/* Update the camera controls using the new sensor settings. */
 	updateControls(info, ipaConfig.sensorControls, ipaControls);
 
+	/* \todo get image1 bpp when available from IPACameraSensorInfo. */
 	uint32_t bpp = ipaConfig.sensorInfo.bitsPerPixel;
-
-	context_.configuration.sensor.bpp = bpp;
+	context_.configuration.sensor.bpps = { bpp, bpp };
 
 	/* Active streams */
 	std::map<IPAStreamType, IPAStream> &streams = context_.configuration.streams;
@@ -380,8 +380,10 @@ void IPANxpNeo::computeParams(const uint32_t frame, const IPAContextType context
 			metaData = plane.data();
 			uint32_t topLines =
 				context_.camHelper->attributes()->mdParams.topLines;
-			unsigned int bpp = context_.configuration.sensor.bpp;
-			size_t bytepp = bpp <= 8 ? sizeof(uint8_t) : sizeof(uint16_t);
+			std::array<uint32_t, 2> &bpps =
+				context_.configuration.sensor.bpps;
+			size_t bytepp =
+				bpps[0] <= 8 ? sizeof(uint8_t) : sizeof(uint16_t);
 			unsigned int width =
 				context_.configuration.sensor.size.width;
 			metaSize = topLines * width * bytepp;
