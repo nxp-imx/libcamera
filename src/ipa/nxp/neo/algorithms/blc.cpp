@@ -67,7 +67,10 @@ namespace ipa::nxpneo::algorithms {
  * expected to be:
  * - Rescaled to 20-bit (input0) and 16-bit (input1) when HDR-merge block is not
  *   used
- * - Native camera pixel format (no rescaling) when HDR-merge block is used.
+ * - Native camera pixel format (no rescaling) when HDR-merge block is used,
+ *   unless pixel native format is 10-bit where it would have been rescaled to
+ *   12-bit to cope with OBWB saturation that requires at least 12-bit.
+ *
  * Thus, those input formats are the ones relevant to OBWB0/1 instances.
  * Conversely, at the output of HDR-merge block, pixel format is expected to be
  * unconditionally 20-bit which is relevant to the OBWB2 instance input.
@@ -235,6 +238,7 @@ int BlackLevelCorrection::configure(IPAContext &context,
 	 * - OBWB0/1
 	 *     - 20/16-bit (input0/input1) for operation without HDR merge
 	 *     - The native sensor format (input0/input1) when HDR merge enabled
+	 *       or 12-bit if the pixel format is 10-bit
 	 * - OBwB2
 	 *     - 20-bit unconditionally
 	 */
@@ -244,8 +248,8 @@ int BlackLevelCorrection::configure(IPAContext &context,
 		gainLeftShift[0] = 20 - bpps[0];
 		gainLeftShift[1] = 16 - bpps[1];
 	} else {
-		gainLeftShift[0] = 0;
-		gainLeftShift[1] = 0;
+		gainLeftShift[0] = bpps[0] == 10 ? (12 - 10) : 0;
+		gainLeftShift[1] = bpps[1] == 10 ? (12 - 10) : 0;
 	}
 	gainLeftShift[2] = 20 - bpps[0];
 
