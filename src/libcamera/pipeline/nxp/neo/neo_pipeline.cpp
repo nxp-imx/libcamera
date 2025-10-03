@@ -748,6 +748,9 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 		infoContext.paramDequeued_ = false;
 		infoContext.metadataProcessed_ = false;
 
+		if (data_->rawStreamOnly_)
+			continue;
+
 		/*
 		 * Map the ISP frame and infrared output buffer of the ISP. They
 		 * are provided by the application in the libcamera:Request as
@@ -762,15 +765,12 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 		case ModeTypeRgbIrDual:
 			ASSERT(context == ContextTypeRgb || context == ContextTypeIr);
 			if (context == ContextTypeRgb) {
-				if (data_->rawStreamOnly_)
-					frameBuffer = allocBuffer(BufferTypeFrame);
-				else
-					frameBuffer = info->frameStreamBuffer_;
+				frameBuffer = info->frameStreamBuffer_;
 				if (info->irStreamBuffer_)
 					irBuffer = allocBuffer(BufferTypeIr);
 			} else {
 				irBuffer = info->irStreamBuffer_;
-				if ((info->frameStreamBuffer_) || (data_->rawStreamOnly_))
+				if (info->frameStreamBuffer_)
 					frameBuffer = allocBuffer(BufferTypeFrame);
 			}
 			break;
@@ -779,10 +779,7 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 		case ModeTypeHdrMerge:
 		default:
 			ASSERT(context == ContextTypeRgb);
-			if (data_->rawStreamOnly_)
-				frameBuffer = allocBuffer(BufferTypeFrame);
-			else
-				frameBuffer = info->frameStreamBuffer_;
+			frameBuffer = info->frameStreamBuffer_;
 			irBuffer = info->irStreamBuffer_;
 			break;
 		}
@@ -2277,12 +2274,9 @@ int NxpNeoCameraData::allocateBuffersRaw()
 	 *  - Throw-away buffers for ISP frame and infrared outputs have to be
 	 *    allocated. They are used as temporary storage for the ISP
 	 *    decoded buffers not delivered to the application.
-	 * Raw-only operation also has the specificity that ISP capture buffer
-	 * for frame output is not provided in the libcamera::Request so it has
-	 * to be allocated internally. For RGBIr raw-only operation, a frame
-	 * buffer for the frame output is to be provided for both contexts.
-	 * \todo replace full size output buffers by short dummy buffers when
-	 * that is supported by the ISP driver.
+	 * Raw-only operation has the specificity that no buffers are provided
+	 * by the application for the ISP outputs. Therefore the capture video
+	 * devices are disabled and no buffers have to be provided to them.
 	 */
 	int ret = 0;
 	unsigned int _contextCount = contextCount();
@@ -2293,13 +2287,7 @@ int NxpNeoCameraData::allocateBuffersRaw()
 			{ BufferTypeFrame, { &frameBuffersPool_, neo_->frame_.get() } },
 			{ BufferTypeIr, { &irBuffersPool_, neo_->ir_.get() } },
 		};
-	if (rawStreamOnly_) {
-		unsigned int count = bufferCount * _contextCount;
-		const auto &[pool, device] = ispOutputPools.at(BufferTypeFrame);
-		int res = device->exportBuffers(count, pool);
-		ret |= res == static_cast<int>(count) ? 0 : -ENOMEM;
-		registerPoolBuffers(pool, BufferTypeFrame);
-	} else if (mode_ == ModeTypeRgbIrDual) {
+	if (mode_ == ModeTypeRgbIrDual && !rawStreamOnly_) {
 		for (const auto &[bufferType, pair] : ispOutputPools) {
 			std::vector<std::unique_ptr<FrameBuffer>> *pool = pair.first;
 			V4L2VideoDevice *device = pair.second;
@@ -2573,51 +2561,38 @@ int NxpNeoCameraData::configureRaw(CameraConfiguration *c)
 	rawStreamOnly_ = ((config->size() == 1) &&
 			  ((*config)[0].stream() == &streamRaw_));
 
-	if (!rawStreamOnly_) {
-		for (unsigned int i = 0; i < config->size(); ++i) {
-			StreamConfiguration &cfg = (*config)[i];
-			Stream *stream = cfg.stream();
 
-			if (stream == &streamRaw_)
-				continue;
+	for (unsigned int i = 0; i < config->size(); ++i) {
+		StreamConfiguration &cfg = (*config)[i];
+		Stream *stream = cfg.stream();
 
-			V4L2DeviceFormat *deviceFormat;
-			V4L2VideoDevice *videoDevice;
-			if (stream == &streamFrame_) {
-				deviceFormat = &devFormatFrame;
-				videoDevice = neo_->frame_.get();
-			} else {
-				deviceFormat = &devFormatIr;
-				videoDevice = neo_->ir_.get();
-			}
+		if (stream == &streamRaw_)
+			continue;
 
-			V4L2PixelFormat pixelFormat =
-				videoDevice->toV4L2PixelFormat(cfg.pixelFormat);
-			deviceFormat->fourcc = pixelFormat;
-
-			deviceFormat->size = cfg.size;
-
-			/*
-			 * Use libcamera sYCC colorspace definition that maps
-			 * to a v4l2 sRGB colorspace equivalent.
-			 */
-			std::optional<ColorSpace> colorSpace = cfg.colorSpace;
-			if (colorSpace && colorSpace.value() == ColorSpace::Srgb)
-				colorSpace = ColorSpace::Sycc;
-			deviceFormat->colorSpace = colorSpace;
+		V4L2DeviceFormat *deviceFormat;
+		V4L2VideoDevice *videoDevice;
+		if (stream == &streamFrame_) {
+			deviceFormat = &devFormatFrame;
+			videoDevice = neo_->frame_.get();
+		} else {
+			deviceFormat = &devFormatIr;
+			videoDevice = neo_->ir_.get();
 		}
-	} else {
+
+		V4L2PixelFormat pixelFormat =
+			videoDevice->toV4L2PixelFormat(cfg.pixelFormat);
+		deviceFormat->fourcc = pixelFormat;
+
+		deviceFormat->size = cfg.size;
+
 		/*
-		 * ISP driver requires at least one of the output video nodes to
-		 * be enabled. During raw-stream only mode of operation, there
-		 * is no buffer provided by the application for the outputs.
-		 * Thus, configure the frame output with an arbitrary format.
-		 * Internal buffers will be allocated and provided to the ISP.
+		 * Use libcamera sYCC colorspace definition that maps
+		 * to a v4l2 sRGB colorspace equivalent.
 		 */
-		devFormatFrame.size = devFormatInput0.size;
-		adjustTopLinesSize(&devFormatFrame.size);
-		devFormatFrame.fourcc = V4L2PixelFormat(V4L2_PIX_FMT_NV12);
-		devFormatFrame.colorSpace = ColorSpace::Sycc;
+		std::optional<ColorSpace> colorSpace = cfg.colorSpace;
+		if (colorSpace && colorSpace.value() == ColorSpace::Srgb)
+			colorSpace = ColorSpace::Sycc;
+		deviceFormat->colorSpace = colorSpace;
 	}
 
 	NeoDevice::PipeConfig pipeConfig = {};
