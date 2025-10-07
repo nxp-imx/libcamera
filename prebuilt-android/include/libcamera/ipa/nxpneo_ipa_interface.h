@@ -158,8 +158,8 @@ public:
 	{
 	}
 
-	IPAConfigInfo(const IPACameraSensorInfo &_sensorInfo, const ControlInfoMap &_sensorControls)
-		: sensorInfo(_sensorInfo), sensorControls(_sensorControls)
+	IPAConfigInfo(const IPACameraSensorInfo &_sensorInfo, const ControlInfoMap &_sensorControls, const ControlList &_sensorControlList)
+		: sensorInfo(_sensorInfo), sensorControls(_sensorControls), sensorControlList(_sensorControlList)
 	{
 	}
 #endif
@@ -167,6 +167,7 @@ public:
 
 	IPACameraSensorInfo sensorInfo;
 	ControlInfoMap sensorControls;
+	ControlList sensorControlList;
 };
 
 struct DelayedControlsParams
