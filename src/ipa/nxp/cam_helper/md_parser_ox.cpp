@@ -20,7 +20,8 @@ namespace nxp {
 
 /**
  * \brief Parser constructor
- * \param[in] registerList ordered list of registers output in embedded data
+ * \param[in] registerList The ordered list of registers output in embedded data
+ * \param[in] crcParams The parameters definining the CRC type and computation
  *
  * Registers output in embedded data is setup in the sensor as a list of
  * contiguous register addresses.
@@ -31,10 +32,11 @@ namespace nxp {
  * CRC. The 4 bytes of a CRC are transmitted MSB first, with a tag preceding
  * each byte.
  */
-MdParserOmniOx::MdParserOmniOx(std::initializer_list<uint32_t> registerList)
-	: registerList_{ registerList }
+MdParserOmniOx::MdParserOmniOx(std::initializer_list<uint32_t> registerList,
+			       CrcParams &crcParams)
+	: registerList_{ registerList }, crcParams_(crcParams)
 {
-	/* Number of registers is multiple of 4 */
+	/* Number of registers is multiple of 4. */
 	registerCount_ = registerList_.size();
 	if (registerCount_ % 3) {
 		registerCount_ += 3;
@@ -42,6 +44,10 @@ MdParserOmniOx::MdParserOmniOx(std::initializer_list<uint32_t> registerList)
 		LOG(NxpCameraHelper, Debug)
 			<< "Number of registers adjusted";
 	}
+
+	/* Force early init of the CRC LUT. */
+	if (crcParams_.type != CrcNone)
+		(void)crc32LeLut();
 }
 
 MdParserOmniOx::Status
@@ -83,39 +89,82 @@ MdParserOmniOx::Status MdParserOmniOx::parse(libcamera::Span<const uint8_t> buff
 	uint8_t value;
 	registers.clear();
 
-	for (uint32_t i = 0; i < registerList_.size(); i++) {
-		status = fetchRegister(buffer, i, &value);
-		if (status != Status::OK) {
-			LOG(NxpCameraHelper, Error)
-				<< "Could not read register offset " << i
-				<< "/" << registerList_.size();
-			return status;
+	status = Status::ERROR;
+	if (crcParams_.type == CrcNone) {
+		for (uint32_t i = 0; i < registerList_.size(); i++) {
+			status = fetchRegister(buffer, i, &value);
+			if (status != Status::OK) {
+				LOG(NxpCameraHelper, Warning)
+					<< "Could not read value offset " << i
+					<< "/" << registerList_.size();
+				return status;
+			}
+			registers[registerList_[i]] = value;
 		}
-		registers[registerList_[i]] = value;
+	} else if (crcParams_.type == Crc32Le) {
+		uint32_t crc32 = ~0U;
+
+		for (uint32_t i = 0; i < registerCount_ + 8; i++) {
+			status = fetchRegister(buffer, i, &value);
+			if (status != Status::OK) {
+				LOG(NxpCameraHelper, Warning)
+					<< "Could not read value offset " << i
+					<< "/" << registerList_.size();
+				return status;
+			}
+
+			if (i < registerList_.size())
+				registers[registerList_[i]] = value;
+
+			crc32 = crc32Le(crc32, value);
+		}
+
+		status = ~crc32 == crcParams_.check ? Status::OK : Status::ERROR;
+		if (status != Status::OK)
+			LOG(NxpCameraHelper, Warning) << "CRC error";
 	}
 
-	/*
-	 * Sanity check : 2 CRCs, 4-byte each, are appended after the register
-	 * values i.e. 8 bytes. Anything register attempt after that should
-	 * report an error as no more tag will be found.
-	 * \todo we may compute checksum value
-	 */
-	for (uint32_t i = 0; i < 8; i++) {
-		status = fetchRegister(buffer, registerCount_ + i, &value);
-		if (status != Status::OK) {
-			LOG(NxpCameraHelper, Error)
-				<< "Could not read checksum offset " << i;
-			return status;
-		}
-	}
-	status = fetchRegister(buffer, registerCount_ + 8, &value);
-	if (status == Status::OK) {
-		LOG(NxpCameraHelper, Error)
-			<< "Valid tag found after the 8 CRC bytes";
-		return Status::ERROR;
-	}
+	return status;
+}
 
-	return Status::OK;
+/*
+ * Little Endian (lsbit-first) CRC-32 computation - Sarwate algorithm
+ * Reference: https://en.wikipedia.org/wiki/Computation_of_cyclic_redundancy_checks
+ */
+uint32_t MdParserOmniOx::crc32Le(uint32_t crc32, uint8_t byte) const
+{
+	size_t index = (crc32 ^ byte) & 0xff;
+	return (crc32 >> 8) ^ crc32LeLut()[index];
+}
+
+const std::array<uint32_t, 256> &MdParserOmniOx::crc32LeLut() const
+{
+	/* Initialize once */
+	static const std::array<uint32_t, 256> lut = [this]() {
+		/* Reverse the polynomial for lsb-first CRC computation */
+		uint32_t reverse = 0;
+		uint32_t poly = crcParams_.polynomial;
+		for (uint32_t i = 0; i < 32; i++) {
+			reverse <<= 1;
+			reverse |= (poly & 1);
+			poly >>= 1;
+		}
+
+		std::array<uint32_t, 256> initLut{};
+		uint32_t crc32 = 1;
+		for (uint32_t i = 128; i; i >>= 1) {
+			if (crc32 & 1)
+				crc32 = (crc32 >> 1) ^ reverse;
+			else
+				crc32 = (crc32 >> 1);
+			for (int j = 0; j < 256; j += 2 * i)
+				initLut[i + j] = crc32 ^ initLut[j];
+		}
+
+		return initLut;
+	}();
+
+	return lut;
 }
 
 } /* namespace nxp */
