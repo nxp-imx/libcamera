@@ -243,22 +243,24 @@ int HdrDecomp::configure(IPAContext &context,
 	/*
 	 * When no user configuration is present in the configuration file we
 	 * fallback to a default linear bypass configuration of the block.
-	 * There is an hardware peculiarity in the ISP hardware revision V2
-	 * related to PIPECONF.LPALIGN0 setting with 12-bit sensor pixel format:
-	 * - Rescaling is done to 16-bit instead of 20-bit for other sensor
-	 *   formats
-	 * - Rescaling is applied even though LPALIGN=0
+	 * There is a hardware peculiarity in the ISP hardware revision V2
+	 * with 12-bit sensor pixel format:
+	 * - Rescaling for input0 and input1 is done to 16-bit regardless of the
+	 *   PIPECONF.LPALIGN setting.
 	 * This leads to 2 exceptions using ISP revision V2 with 12-bit input0
-	 * pixel format:
-	 * 1) In non HDR-merge mode, we rely on PIPECONF.LPALIGN0/1 to rescale
-	 *    the pixels to 20-bits internal format. In that case an additional
-	 *    (16) gain needs to be applied in HDR Decompression for the
-	 *    remaining 16-bit to 20-bit conversion.
+	 * and input1 pixel format:
+	 * 1) In non HDR-merge mode, the need is to rescale the pixels to:
+	 *    - 20-bits internal format for input0.
+	 *    - 16-bits internal format for input1.
+	 *    In that case, the HDR Decompression is configured to apply:
+	 *    - an additional gain of 16 for the input0 remaining 16-bit to 20-bit conversion.
+	 *    - linear decompression (no additional gain) for the input1
 	 * 2) In HDR-merge mode there is the opposite issue where we want to
 	 *    keep the native sensor format up to the HDR-merge block. For that
-	 *    purpose LPALIGN0=0 is set to avoid PIPECONF rescaling. But it
+	 *    purpose LPALIGN0/1=0 is set to avoid PIPECONF rescaling. But it
 	 *    does not apply to that specific case so a (1/16) fractional gain
-	 *    needs to be set to revert the pixel format from 16-bit to 12-bit.
+	 *    needs to be set to revert the pixel format from 16-bit to 12-bit
+	 *    for both input0 and input1.
 	 * During HDR merge operation where we want to keep the native sensor
 	 * bitdepth up to the HDR merge block, there is a constraint coming from
 	 * the OBWB block, whose saturation (obpp) is configurable only from
@@ -276,6 +278,11 @@ int HdrDecomp::configure(IPAContext &context,
 			input0_.ratios[4] = (1 << 5) * 16;
 		else
 			input0_.ratios[4] = (1 << 5) / 16;
+	}
+
+	if (!input1_.userConfig && bpps[1] == 12 && hwRevision == NEOISP_HW_V2) {
+		if (mode == IPAModeTypeHdrMerge)
+			input1_.ratios[4] = (1 << 5) / 16;
 	}
 
 	if (!input0_.userConfig && bpps[0] == 10) {
