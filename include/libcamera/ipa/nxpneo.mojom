@@ -50,6 +50,7 @@ struct IPAColorSpace {
 
 struct InitParams {
 	uint32 hwRevision;
+	uint32 hwCapabilities;
 	uint32 apiVersion;
 	string sensorEntity;
 	libcamera.IPACameraSensorInfo sensorInfo;
