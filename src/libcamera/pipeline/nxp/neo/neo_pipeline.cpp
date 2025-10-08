@@ -2177,7 +2177,8 @@ int NxpNeoCameraData::loadIPA()
 	ipa::nxpneo::SensorConfig sensorConfig;
 	const MediaEntity *entity = sensor->entity();
 	std::vector<uint32_t> ids = utils::map_keys(sensor_->controls().idmap());
-	ipa::nxpneo::InitParams initParams = { hwRevision, neo_->apiVersion(),
+	ipa::nxpneo::InitParams initParams = { hwRevision, neo_->hwCapabilities(),
+					       neo_->apiVersion(),
 					       entity->name(), sensorInfo,
 					       sensor->controls(),
 					       sensor_->getControls(ids) };

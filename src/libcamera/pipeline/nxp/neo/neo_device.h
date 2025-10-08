@@ -87,6 +87,11 @@ public:
 		return media_;
 	}
 
+	uint32_t hwCapabilities() const
+	{
+		return hwCapabilities_;
+	}
+
 	uint32_t apiVersion() const
 	{
 		return apiVersion_;
@@ -121,6 +126,7 @@ private:
 	bool configInput1_ = false;
 	bool configFrame_ = false;
 	bool configIr_ = false;
+	uint32_t hwCapabilities_ = 0;
 	uint32_t apiVersion_ = NEOISP_LEGACY_META_BUFFER;
 };
 

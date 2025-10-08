@@ -97,6 +97,19 @@ int NeoDevice::init(MediaDevice *media)
 		apiVersion_ = apiVersion;
 	}
 
+	/*
+	 * Get Neo ISP hardware and driver capabilities
+	 */
+	ctlInfo = isp_->controlInfo(V4L2_CID_NEOISP_QUERYCAP);
+	if (ctlInfo != nullptr) {
+		ControlList ctrls = isp_->getControls({ V4L2_CID_NEOISP_QUERYCAP });
+		if (!ctrls.empty())
+			hwCapabilities_ = ctrls.get(V4L2_CID_NEOISP_QUERYCAP).get<int32_t>();
+	} else {
+		/* Fallback on MSB for backward compatibility */
+		hwCapabilities_ = NEO_CAP_ALIGNMENT_MSB;
+	}
+
 	input0_ = V4L2VideoDevice::fromEntityName(media, kVDevInput0EntityName());
 	ret = input0_->open();
 	if (ret) {
