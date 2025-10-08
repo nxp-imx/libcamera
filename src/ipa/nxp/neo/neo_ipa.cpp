@@ -145,6 +145,7 @@ int IPANxpNeo::init(const IPASettings &settings, const InitParams &params,
 	/* Set the hardware-related block for the algorithms. */
 	context_.hw.apiVersion = params.apiVersion;
 	context_.hw.hwRevision = params.hwRevision;
+	context_.hw.hwCapabilities = params.hwCapabilities;
 
 	context_.camHelper = CameraHelperFactoryBase::create(settings.sensorModel);
 	if (!context_.camHelper) {
