@@ -18,9 +18,12 @@
 #include <vector>
 
 #include <libcamera/base/class.h>
+#include <libcamera/base/utils.h>
 #include <libcamera/controls.h>
 
 #include "libipa/camera_sensor_helper.h"
+
+using libcamera::utils::Duration;
 
 namespace libcamera {
 
@@ -49,13 +52,28 @@ extern const ControlIdMap controlIdMap;
 
 } /* namespace md */
 
+/* Sensor stream modes */
+enum SensorStreamModes {
+	SensorStreamStandard = 0,
+	SensorStreamHdr,
+	SensorStreamRgbIr,
+	SensorStreamDualContext,
+};
+
 /* Subset of IPACameraSensorInfo structure*/
 struct CameraMode {
+	/* bit depth of the raw camera output */
+	uint32_t bitdepth;
+	/* size in pixels of frames in this mode */
+	uint16_t width;
+	uint16_t height;
+	/* pixel clock rate */
 	uint64_t pixelRate;
-	uint32_t minLineLength;
-	uint32_t maxLineLength;
-	uint32_t minFrameLength;
-	uint32_t maxFrameLength;
+	/* hblank and vblank in this mode */
+	int32_t hblank;
+	int32_t vblank;
+	/* stream mode */
+	SensorStreamModes streamMode;
 };
 
 class CameraHelper : public ipa::CameraSensorHelper
@@ -67,11 +85,11 @@ public:
 	virtual void setControls(const ControlList *sensorCtrls);
 
 	virtual void controlListSetAGC(
-		ControlList *ctrls, double exposure, double gain) const;
+		ControlList *ctrls, Duration exposure, double gain) const;
 
 	virtual void controlInfoMapGetExposureRange(
-		const ControlInfoMap *ctrls, std::vector<double> *minExposure,
-		std::vector<double> *maxExposure, std::vector<double> *defExposure) const;
+		const ControlInfoMap *ctrls, std::vector<Duration> *minExposure,
+		std::vector<Duration> *maxExposure, std::vector<Duration> *defExposure) const;
 
 	virtual void controlInfoMapGetAnalogGainRange(
 		const ControlInfoMap *ctrls, std::vector<double> *minGain,
@@ -98,10 +116,13 @@ public:
 	virtual int sensorControlsToMetaData(
 		const ControlList *sensorCtrls, ControlList *mdCtrls) const;
 
-	virtual double lineDuration() const;
+	virtual uint32_t exposureLines(const Duration exposure,
+				       const Duration lineLength) const;
+	virtual Duration exposure(uint32_t exposureLines,
+				  const Duration lineLength) const;
+	Duration hblankToLineLength(uint32_t hblank) const;
 
 protected:
-	static bool controlListHasId(const ControlList *ctrls, unsigned int id);
 	Attributes attributes_;
 	CameraMode mode_;
 

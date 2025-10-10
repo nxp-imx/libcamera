@@ -18,6 +18,19 @@
 namespace libcamera::ipa::nxpneo {
 
 /**
+ * \struct IPAHwSettings
+ * \brief Neoisp version-specific hardware parameters
+ */
+
+/**
+ * \var IPAHwSettings::hwRevision
+ * \brief Neoisp media device HW revision
+ *
+ * \var IPAHwSettings::apiVersion
+ * \brief Neoisp uAPI meta version
+ */
+
+/**
  * \struct IPASessionConfiguration
  * \brief Session configuration for the IPA module
  *
@@ -90,6 +103,9 @@ namespace libcamera::ipa::nxpneo {
 /**
  * \struct IPAContext
  * \brief Global IPA context data shared between all algorithms
+ *
+ * \var IPAContext::hw
+ * \brief ISP version-specific hardware parameters
  *
  * \var IPAContext::configuration
  * \brief The IPA session configuration, immutable during the session

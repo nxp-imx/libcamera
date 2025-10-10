@@ -157,6 +157,8 @@ private:
 	GlobalInfo globalInfo_;
 };
 
+std::vector<MediaEntity *> locateSensors(MediaDevice *media);
+
 } // namespace nxpneo
 
 } // namespace libcamera

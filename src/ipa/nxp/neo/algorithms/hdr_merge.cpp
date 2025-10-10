@@ -30,6 +30,36 @@ namespace ipa::nxpneo::algorithms {
  *
  * This block when enabled combines the pixels of the two images of line path 0
  * and line path 1 into a single output.
+ *
+ *       input0              input1
+ *     AXI IN0 DMA         AXI IN1 DMA
+ *          │                   │
+ *  ┌───────▼───────────────────▼───────┐
+ *  │ PIPECONF                          │
+ *  │    LPALIGN0             LPALIGN1  │
+ *  │    INALIGN0             INALIGN1  │
+ *  └───────┬───────────────────┬───────┘
+ *  ┌───────▼───────┐   ┌───────▼───────┐
+ *  │      HC0      │   │      HC1      │
+ *  └───────┬───────┘   └───────┬───────┘
+ *  ┌───────▼───────┐   ┌───────▼───────┐
+ *  │  HDR Decomp0  │   │  HDR Decomp1  │
+ *  └───────┬───────┘   └───────┬───────┘
+ *  ┌───────▼───────┐   ┌───────▼───────┐
+ *  │     OBWB0     │   │     OBWB1     │
+ *  └───────┬───────┘   └───────┬───────┘
+ *  ┌───────▼───────────────────▼───────┐
+ *  │             HDR Merge             │
+ *  └─────────────────┬─────────────────┘
+ *  ┌─────────────────▼─────────────────┐
+ *  │               RGBIR               │
+ *  └───────┬───────────────────┬───────┘
+ *  ┌───────▼───────┐           │
+ *  │     OBWB2     │           │
+ *  └───────┬───────┘           │
+ *          ▼                   ▼
+ *      to RGB Path        to IR path
+ *
  * At first, image0 and image1 pixels (x,y) are scaled to the the same level by
  * the gain, offset and shift parameters:
  * gimageN[x,y] = ((imageN[x,y] - gain-offset[N]) * gain-scale[])
@@ -155,13 +185,25 @@ int HdrMerge::init([[maybe_unused]] IPAContext &context,
 }
 
 /**
+ * \copydoc libcamera::ipa::Algorithm::configure
+ */
+int HdrMerge::configure(IPAContext &context,
+			[[maybe_unused]] const IPACameraSensorInfo &configInfo)
+{
+	IPAModeType &mode = context.configuration.pipelineMode;
+	enabled_ = mode == IPAModeTypeHdrMerge;
+
+	return 0;
+}
+
+/**
  * \copydoc libcamera::ipa::Algorithm::prepare
  */
 void HdrMerge::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
 		       [[maybe_unused]] IPAFrameContext &frameContext,
 		       NxpNeoParams *params)
 {
-	if (frame > 0)
+	if (!enabled_ || frame > 0)
 		return;
 
 	/* HDR Merge block configuration */

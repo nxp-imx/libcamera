@@ -376,6 +376,16 @@ public:
 			appendPOD<uint32_t>(retData, 0);
 		}
 
+		if (data.sensorControlList.size() > 0) {
+			std::vector<uint8_t> sensorControlList;
+			std::tie(sensorControlList, std::ignore) =
+				IPADataSerializer<ControlList>::serialize(data.sensorControlList, cs);
+			appendPOD<uint32_t>(retData, sensorControlList.size());
+			retData.insert(retData.end(), sensorControlList.begin(), sensorControlList.end());
+		} else {
+			appendPOD<uint32_t>(retData, 0);
+		}
+
 		return {retData, {}};
 	}
 
@@ -440,6 +450,30 @@ public:
 		if (sensorControlsSize > 0)
 			ret.sensorControls =
 				IPADataSerializer<ControlInfoMap>::deserialize(m, m + sensorControlsSize, cs);
+		m += sensorControlsSize;
+		dataSize -= sensorControlsSize;
+
+
+		if (dataSize < 4) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "sensorControlListSize"
+				<< ": not enough data, expected "
+				<< (4) << ", got " << (dataSize);
+			return ret;
+		}
+		const size_t sensorControlListSize = readPOD<uint32_t>(m, 0, dataEnd);
+		m += 4;
+		dataSize -= 4;
+		if (dataSize < sensorControlListSize) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "sensorControlList"
+				<< ": not enough data, expected "
+				<< (sensorControlListSize) << ", got " << (dataSize);
+			return ret;
+		}
+		if (sensorControlListSize > 0)
+			ret.sensorControlList =
+				IPADataSerializer<ControlList>::deserialize(m, m + sensorControlListSize, cs);
 
 		return ret;
 	}
