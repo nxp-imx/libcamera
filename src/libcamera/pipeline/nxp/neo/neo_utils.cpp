@@ -37,6 +37,13 @@ namespace nxpneo {
  * \var CameraProperties::eDataStream
  * \brief Camera has a dedicated stream for embedded data
  *
+ * \var CameraProperties::multiCamera
+ * \brief Camera is sharing MIPI-CSI port with other cameras
+ *
+ * This flag reports that the camera is sharing its MIPI-CSI port with other
+ * cameras which induces some limitations in the capability of the front-end
+ * graph to be reconfigured after startup.
+ *
  * \var CameraProperties::formatBpp
  * \brief Format bit-per-pixel filter value (optional)
  *
