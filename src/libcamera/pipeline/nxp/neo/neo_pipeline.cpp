@@ -181,22 +181,38 @@ enum ModeType {
 class NxpNeoFrames
 {
 public:
-	struct InfoContext {
-		std::map<BufferType, std::pair<FrameBuffer *, bool>> buffers;
+	class InfoContext
+	{
+	public:
+		int completeBuffer(const FrameBuffer *buffer);
+		bool isBufferPending(const std::vector<BufferType> &bufferTypes) const;
+		bool isContextComplete() const;
+		FrameBuffer *buffer(BufferType, bool expected) const;
 
 		bool paramDequeued;
 		bool metadataProcessed;
+
+	private:
+		friend NxpNeoFrames;
+
+		std::map<BufferType, std::pair<FrameBuffer *, bool>> buffers;
 	};
 
-	struct Info {
+	class Info
+	{
+	public:
+		bool isFrameComplete() const;
+
 		unsigned int id;
 		Request *request;
+		std::map<ContextType, InfoContext> contexts;
+
+	private:
+		friend NxpNeoFrames;
 
 		FrameBuffer *rawStreamBuffer;
 		FrameBuffer *frameStreamBuffer;
 		FrameBuffer *irStreamBuffer;
-
-		std::map<ContextType, InfoContext> contexts;
 	};
 
 	NxpNeoFrames(NxpNeoCameraData *data);
@@ -211,15 +227,6 @@ public:
 	Info *find(unsigned int id) const;
 	std::pair<Info *, ContextType> find(FrameBuffer *buffer) const;
 	Info *find(Request *request) const;
-
-	int completeBuffer(Info *info, ContextType context,
-			   const FrameBuffer *buffer) const;
-	bool isBufferPending(Info *info, ContextType context,
-			     const std::vector<BufferType> &bufferTypes) const;
-	bool isContextComplete(Info *info, ContextType context) const;
-	bool isFrameComplete(Info *info) const;
-	FrameBuffer *buffer(Info *info, ContextType context,
-			    BufferType, bool expected) const;
 
 	Signal<> bufferAvailable;
 
@@ -451,6 +458,89 @@ const std::map<StreamType, BufferType> streamToBufferType = {
 	{ StreamTypeEData, BufferTypeEData },
 };
 
+}
+
+int NxpNeoFrames::InfoContext::completeBuffer(const FrameBuffer *buffer)
+{
+	auto it = std::find_if(buffers.begin(), buffers.end(),
+			       [buffer](const auto &entry) {
+				       const auto &bufferDesc = entry.second;
+				       return bufferDesc.first == buffer;
+			       });
+
+	if (it == buffers.end()) {
+		LOG(NxpNeoPipe, Error) << "Buffer to complete not found in Info";
+		return -ENOENT;
+	}
+
+	auto &bufferDesc = it->second;
+	if (!bufferDesc.second) {
+		LOG(NxpNeoPipe, Error) << "Buffer already completed";
+		return -EINVAL;
+	}
+
+	bufferDesc.second = false;
+	return 0;
+}
+
+bool NxpNeoFrames::InfoContext::isBufferPending(
+	const std::vector<BufferType> &bufferTypes) const
+{
+	for (BufferType bufferType : bufferTypes) {
+		auto it = buffers.find(bufferType);
+		if (it == buffers.end())
+			continue;
+		const auto &bufferDesc = it->second;
+		if (bufferDesc.second)
+			return true;
+	}
+
+	return false;
+}
+
+bool NxpNeoFrames::InfoContext::isContextComplete() const
+{
+	const std::vector<BufferType> allBufferTypes = {
+		BufferTypeImage0,
+		BufferTypeImage1,
+		BufferTypeEData,
+		BufferTypeParams,
+		BufferTypeStats,
+		BufferTypeFrame,
+		BufferTypeIr,
+	};
+	bool buffersComplete = !isBufferPending(allBufferTypes);
+	bool complete = buffersComplete &&
+			metadataProcessed && paramDequeued;
+
+	return complete;
+}
+
+FrameBuffer *NxpNeoFrames::InfoContext::buffer(
+	BufferType bufferType, bool expected) const
+{
+	FrameBuffer *buffer = nullptr;
+	auto it = buffers.find(bufferType);
+	if (it != buffers.end()) {
+		const auto &bufferDesc = it->second;
+		buffer = bufferDesc.first;
+	}
+
+	if (expected && !buffer)
+		LOG(NxpNeoPipe, Error)
+			<< "Expected buffer type " << bufferType;
+
+	return buffer;
+}
+
+bool NxpNeoFrames::Info::isFrameComplete() const
+{
+	for (const auto &[context, infoContext] : contexts) {
+		if (!infoContext.isContextComplete())
+			return false;
+	}
+
+	return true;
 }
 
 NxpNeoFrames::NxpNeoFrames(NxpNeoCameraData *data)
@@ -720,110 +810,6 @@ NxpNeoFrames::Info *NxpNeoFrames::find(Request *request) const
 	LOG(NxpNeoPipe, Debug) << "Can't find tracking information from request";
 
 	return nullptr;
-}
-
-int NxpNeoFrames::completeBuffer(Info *info, ContextType context,
-				 const FrameBuffer *buffer) const
-{
-	auto itContext = info->contexts.find(context);
-	if (itContext == info->contexts.end()) {
-		LOG(NxpNeoPipe, Error) << "Context does not exist " << context;
-		return -EINVAL;
-	}
-	InfoContext &infoContext = itContext->second;
-	for (auto &[bufferType, bufferDesc] : infoContext.buffers) {
-		if (bufferDesc.first != buffer)
-			continue;
-		if (!bufferDesc.second) {
-			LOG(NxpNeoPipe, Error) << "Buffer already completed";
-			return -EINVAL;
-		}
-		bufferDesc.second = false;
-		return 0;
-	}
-
-	LOG(NxpNeoPipe, Error) << "Buffer to complete not found in Info";
-
-	return -ENOENT;
-}
-
-bool NxpNeoFrames::isBufferPending(Info *info, ContextType context,
-				   const std::vector<BufferType> &bufferTypes) const
-{
-	auto itContext = info->contexts.find(context);
-	if (itContext == info->contexts.end()) {
-		LOG(NxpNeoPipe, Error) << "Context does not exist " << context;
-		return false;
-	}
-	const InfoContext &infoContext = itContext->second;
-	for (BufferType bufferType : bufferTypes) {
-		auto it = infoContext.buffers.find(bufferType);
-		if (it == infoContext.buffers.end())
-			continue;
-		const auto &bufferDesc = it->second;
-		if (bufferDesc.second)
-			return true;
-	}
-
-	return false;
-}
-
-bool NxpNeoFrames::isContextComplete(Info *info, ContextType context) const
-{
-	auto itContext = info->contexts.find(context);
-	if (itContext == info->contexts.end()) {
-		LOG(NxpNeoPipe, Error) << "Context does not exist " << context;
-		return false;
-	}
-	const InfoContext &infoContext = itContext->second;
-
-	const std::vector<BufferType> allBufferTypes = {
-		BufferTypeImage0,
-		BufferTypeImage1,
-		BufferTypeEData,
-		BufferTypeParams,
-		BufferTypeStats,
-		BufferTypeFrame,
-		BufferTypeIr,
-	};
-	bool buffersComplete = !isBufferPending(info, context, allBufferTypes);
-	bool complete = buffersComplete &&
-			infoContext.metadataProcessed && infoContext.paramDequeued;
-
-	return complete;
-}
-
-bool NxpNeoFrames::isFrameComplete(Info *info) const
-{
-	for (const auto &[context, infoContext] : info->contexts) {
-		if (!isContextComplete(info, context))
-			return false;
-	}
-
-	return true;
-}
-
-FrameBuffer *NxpNeoFrames::buffer(Info *info, ContextType context,
-				  BufferType bufferType, bool expected) const
-{
-	auto itContext = info->contexts.find(context);
-	if (itContext == info->contexts.end()) {
-		LOG(NxpNeoPipe, Error) << "Context does not exist " << context;
-		return nullptr;
-	}
-	const InfoContext &infoContext = itContext->second;
-
-	FrameBuffer *buffer = nullptr;
-	auto it = infoContext.buffers.find(bufferType);
-	if (it != infoContext.buffers.end()) {
-		auto &bufferDesc = it->second;
-		buffer = bufferDesc.first;
-	}
-
-	if (expected && !buffer)
-		LOG(NxpNeoPipe, Error)
-			<< "Expected buffer type " << bufferType;
-	return buffer;
 }
 
 FrameBuffer *NxpNeoFrames::allocBuffer(BufferType bufferType)
@@ -2082,12 +2068,11 @@ void NxpNeoCameraData::queuePendingRequests()
 		if (!info)
 			break;
 
-		for (const auto context : utils::map_keys(info->contexts)) {
+		for (const auto &[context, infoContext] : info->contexts) {
 			for (auto [stream, pipe] : pipes_) {
 				V4L2VideoDevice *dev = pipe->output_.get();
 				BufferType bufferType = streamToBufferType.at(stream);
-				FrameBuffer *buffer =
-					frameInfos_.buffer(info, context, bufferType, false);
+				FrameBuffer *buffer = infoContext.buffer(bufferType, false);
 				if (!buffer)
 					continue;
 				ret |= dev->queueBuffer(buffer);
@@ -3053,7 +3038,7 @@ void NxpNeoCameraData::tryCompleteRequest(NxpNeoFrames::Info *info)
 {
 	Request *request = info->request;
 
-	if (!frameInfos_.isFrameComplete(info))
+	if (!info->isFrameComplete())
 		return;
 
 	pipe()->completeRequest(request);
@@ -3077,28 +3062,29 @@ void NxpNeoCameraData::isiInputBufferReady(NxpNeoFrames::Info *info, ContextType
 {
 	const std::vector<BufferType>
 		inputBufferTypes = { BufferTypeImage0, BufferTypeImage1, BufferTypeEData };
-	if (frameInfos_.isBufferPending(info, context, inputBufferTypes))
+	NxpNeoFrames::InfoContext &infoContext = info->contexts.at(context);
+	if (infoContext.isBufferPending(inputBufferTypes))
 		return;
 
 	std::map<uint32_t, uint32_t> bufferIds;
 
 	FrameBuffer *image0Buffer =
-		frameInfos_.buffer(info, context, BufferTypeImage0, false);
+		infoContext.buffer(BufferTypeImage0, false);
 	if (image0Buffer)
 		bufferIds[ipa::nxpneo::IPABufferTypeImage0] = image0Buffer->cookie();
 
 	FrameBuffer *image1Buffer =
-		frameInfos_.buffer(info, context, BufferTypeImage1, false);
+		infoContext.buffer(BufferTypeImage1, false);
 	if (image1Buffer)
 		bufferIds[ipa::nxpneo::IPABufferTypeImage1] = image1Buffer->cookie();
 
 	FrameBuffer *edataBuffer =
-		frameInfos_.buffer(info, context, BufferTypeEData, false);
+		infoContext.buffer(BufferTypeEData, false);
 	if (edataBuffer)
 		bufferIds[ipa::nxpneo::IPABufferTypeEData] = edataBuffer->cookie();
 
 	FrameBuffer *paramsBuffer =
-		frameInfos_.buffer(info, context, BufferTypeParams, true);
+		infoContext.buffer(BufferTypeParams, true);
 	ASSERT(paramsBuffer);
 	bufferIds[ipa::nxpneo::IPABufferTypeParams] = paramsBuffer->cookie();
 
@@ -3116,7 +3102,8 @@ void NxpNeoCameraData::isiImage0BufferReady(FrameBuffer *buffer)
 	auto [info, context] = frameInfos_.find(buffer);
 	if (!info)
 		return;
-	frameInfos_.completeBuffer(info, context, buffer);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts.at(context);
+	infoContext.completeBuffer(buffer);
 
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
 		cancelCompleteRequest(info);
@@ -3157,7 +3144,8 @@ void NxpNeoCameraData::isiImage1BufferReady(FrameBuffer *buffer)
 	auto [info, context] = frameInfos_.find(buffer);
 	if (!info)
 		return;
-	frameInfos_.completeBuffer(info, context, buffer);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts.at(context);
+	infoContext.completeBuffer(buffer);
 
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
 		cancelCompleteRequest(info);
@@ -3171,7 +3159,7 @@ void NxpNeoCameraData::isiImage1BufferReady(FrameBuffer *buffer)
 		pipe()->completeBuffer(request, buffer);
 
 	if (mode_ == ModeTypeHdrMerge &&
-	    frameInfos_.isBufferPending(info, context, { BufferTypeImage0 }))
+	    infoContext.isBufferPending({ BufferTypeImage0 }))
 		LOG(NxpNeoPipe, Warning) << "Out of order input frame receipt";
 
 	isiInputBufferReady(info, context);
@@ -3192,7 +3180,8 @@ void NxpNeoCameraData::isiEmbeddedDataBufferReady(FrameBuffer *buffer)
 	auto [info, context] = frameInfos_.find(buffer);
 	if (!info)
 		return;
-	frameInfos_.completeBuffer(info, context, buffer);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts.at(context);
+	infoContext.completeBuffer(buffer);
 
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
 		cancelCompleteRequest(info);
@@ -3232,7 +3221,8 @@ void NxpNeoCameraData::neoOutputBufferReady(FrameBuffer *buffer)
 	auto [info, context] = frameInfos_.find(buffer);
 	if (!info)
 		return;
-	frameInfos_.completeBuffer(info, context, buffer);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts.at(context);
+	infoContext.completeBuffer(buffer);
 
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
 		cancelCompleteRequest(info);
@@ -3260,11 +3250,9 @@ void NxpNeoCameraData::neoParamsBufferReady(FrameBuffer *buffer)
 	auto [info, context] = frameInfos_.find(buffer);
 	if (!info)
 		return;
-	frameInfos_.completeBuffer(info, context, buffer);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts.at(context);
+	infoContext.completeBuffer(buffer);
 
-	auto it = info->contexts.find(context);
-	ASSERT(it != info->contexts.end());
-	NxpNeoFrames::InfoContext &infoContext = it->second;
 	if (infoContext.paramDequeued)
 		LOG(NxpNeoPipe, Error) << "Params buffer already dequeued ";
 	infoContext.paramDequeued = true;
@@ -3281,7 +3269,8 @@ void NxpNeoCameraData::neoStatsBufferReady(FrameBuffer *buffer)
 	auto [info, context] = frameInfos_.find(buffer);
 	if (!info)
 		return;
-	frameInfos_.completeBuffer(info, context, buffer);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts.at(context);
+	infoContext.completeBuffer(buffer);
 
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
 		cancelCompleteRequest(info);
@@ -3325,7 +3314,7 @@ void NxpNeoCameraData::frameStart([[maybe_unused]] uint32_t sequence)
 		}
 
 		for (const auto &[context, infoContext] : info->contexts) {
-			if (frameInfos_.isBufferPending(info, context, { BufferTypeStats })) {
+			if (infoContext.isBufferPending({ BufferTypeStats })) {
 				delayedCtrls_[context]->applyControls(info->id);
 				found = true;
 				break;
@@ -3349,35 +3338,41 @@ void NxpNeoCameraData::ipaParamsComputed(unsigned int id,
 		return;
 
 	ContextType _context = static_cast<ContextType>(context);
+	auto it = info->contexts.find(_context);
+	if (it == info->contexts.end()) {
+		LOG(NxpNeoPipe, Error) << "Invalid context from IPA";
+		return;
+	}
+	NxpNeoFrames::InfoContext &infoContext = it->second;
 
 	int ret = 0;
 	/* Queue buffers ISP output buffers */
 	FrameBuffer *frameBuffer =
-		frameInfos_.buffer(info, _context, BufferTypeFrame, false);
+		infoContext.buffer(BufferTypeFrame, false);
 	if (frameBuffer)
 		ret |= neo_->frame_->queueBuffer(frameBuffer);
 	FrameBuffer *irBuffer =
-		frameInfos_.buffer(info, _context, BufferTypeIr, false);
+		infoContext.buffer(BufferTypeIr, false);
 	if (irBuffer)
 		ret |= neo_->ir_->queueBuffer(irBuffer);
 
 	/* Queue ISP params and stats buffers */
 	FrameBuffer *paramsBuffer =
-		frameInfos_.buffer(info, _context, BufferTypeParams, true);
+		infoContext.buffer(BufferTypeParams, true);
 	if (paramsBuffer) {
 		paramsBuffer->_d()->metadata().planes()[0].bytesused = bytesused;
 		ret |= neo_->params_->queueBuffer(paramsBuffer);
 	}
 	FrameBuffer *statsBuffer =
-		frameInfos_.buffer(info, _context, BufferTypeStats, true);
+		infoContext.buffer(BufferTypeStats, true);
 	if (statsBuffer)
 		ret |= neo_->stats_->queueBuffer(statsBuffer);
 
 	/* Queue ISP input buffers */
 	FrameBuffer *image0Buffer =
-		frameInfos_.buffer(info, _context, BufferTypeImage0, false);
+		infoContext.buffer(BufferTypeImage0, false);
 	FrameBuffer *image1Buffer =
-		frameInfos_.buffer(info, _context, BufferTypeImage1, false);
+		infoContext.buffer(BufferTypeImage1, false);
 	if (image0Buffer)
 		ret |= neo_->input0_->queueBuffer(image0Buffer);
 	if (image1Buffer) {
