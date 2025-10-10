@@ -264,6 +264,10 @@ public:
 	std::map<StreamType, ISIPipe *> &isiPipes() { return pipes_; };
 	const std::string &cameraName() const { return sensor_->entity()->name(); }
 	bool multiCamera() const { return cameraInfo_->cameraProperties().multiCamera; }
+	bool updateControlsOnIspSync() const
+	{
+		return cameraInfo_->cameraProperties().updateControlsOnIspSync;
+	}
 	bool isRawCamera() const { return isRawCamera_; };
 	const std::map<Size, std::vector<unsigned int>> &
 	formatsSizeToCodes() const { return formatsSizeToCodes_; }
@@ -279,8 +283,8 @@ public:
 
 	/* Requests for which no buffer has been queued to the frontend  device yet */
 	std::queue<Request *> pendingRequests_;
-	/* Requests queued to the frontend device but not yet processed by the ISP */
-	std::queue<Request *> processingRequests_;
+	/* Requests in-flight not yet completed */
+	std::deque<Request *> processingRequests_;
 
 private:
 	friend NxpNeoFrames;
@@ -316,6 +320,7 @@ private:
 	void neoOutputBufferReady(FrameBuffer *buffer);
 	void neoParamsBufferReady(FrameBuffer *buffer);
 	void neoStatsBufferReady(FrameBuffer *buffer);
+	void frameStart(uint32_t sequence);
 
 	void ipaParamsComputed(unsigned int id, ipa::nxpneo::IPAContextType context,
 			       unsigned int bytesused);
@@ -2102,7 +2107,7 @@ void NxpNeoCameraData::queuePendingRequests()
 			ipa_->queueRequest(info->id, request->controls());
 
 		pendingRequests_.pop();
-		processingRequests_.push(request);
+		processingRequests_.push_back(request);
 	}
 
 	return;
@@ -2241,6 +2246,10 @@ int NxpNeoCameraData::init(DeviceEnumerator *enumerator)
 			this, &NxpNeoCameraData::neoParamsBufferReady);
 		neo_->stats_->bufferReady.connect(
 			this, &NxpNeoCameraData::neoStatsBufferReady);
+		if (updateControlsOnIspSync()) {
+			neo_->isp_->frameStart.connect(
+				this, &NxpNeoCameraData::frameStart);
+		}
 	}
 
 	return 0;
@@ -3002,11 +3011,10 @@ void NxpNeoCameraData::clearRequest(NxpNeoFrames::Info *info)
 {
 	Request *request = info->request;
 
-	std::queue<Request *> &queue = processingRequests_;
-	if (queue.empty() || queue.front() != request)
+	if (processingRequests_.empty() || processingRequests_.front() != request)
 		LOG(NxpNeoPipe, Warning) << "Processing request not found";
 	else
-		queue.pop();
+		processingRequests_.pop_front();
 
 	int ret = frameInfos_.destroy(info->id);
 	if (ret)
@@ -3133,7 +3141,8 @@ void NxpNeoCameraData::isiImage0BufferReady(FrameBuffer *buffer)
 	if (isRawCamera()) {
 		isiInputBufferReady(info, context);
 
-		delayedCtrls_[ContextTypeRgb]->applyControls(info->id);
+		if (!updateControlsOnIspSync())
+			delayedCtrls_[ContextTypeRgb]->applyControls(info->id);
 	} else {
 		tryCompleteRequest(info);
 	}
@@ -3167,7 +3176,7 @@ void NxpNeoCameraData::isiImage1BufferReady(FrameBuffer *buffer)
 
 	isiInputBufferReady(info, context);
 
-	if (mode_ == ModeTypeRgbIrDual)
+	if (mode_ == ModeTypeRgbIrDual && !updateControlsOnIspSync())
 		delayedCtrls_[ContextTypeIr]->applyControls(info->id);
 }
 
@@ -3290,6 +3299,45 @@ void NxpNeoCameraData::neoStatsBufferReady(FrameBuffer *buffer)
 			   delayedCtrls_[context]->get(sequence));
 
 	tryCompleteRequest(info);
+}
+
+/*
+ * \brief Handle the start of frame exposure signal
+ * \param[in] sequence The sequence number of frame
+ */
+void NxpNeoCameraData::frameStart([[maybe_unused]] uint32_t sequence)
+{
+	if (!updateControlsOnIspSync())
+		return;
+
+	/*
+	 * Event is used as the trigger to update the camera controls. The
+	 * requests in the processing queue are served in order. Iterate through
+	 * the active requests to find the first one having a context running in
+	 * the ISP, identified as having no stats buffer produced yet.
+	 */
+	bool found = false;
+	for (Request *request : processingRequests_) {
+		NxpNeoFrames::Info *info = frameInfos_.find(request);
+		if (!info) {
+			LOG(NxpNeoPipe, Error) << "No info found for request";
+			return;
+		}
+
+		for (const auto &[context, infoContext] : info->contexts) {
+			if (frameInfos_.isBufferPending(info, context, { BufferTypeStats })) {
+				delayedCtrls_[context]->applyControls(info->id);
+				found = true;
+				break;
+			}
+		}
+
+		if (found)
+			break;
+	}
+
+	if (!found)
+		LOG(NxpNeoPipe, Error) << "No context found for controls update";
 }
 
 void NxpNeoCameraData::ipaParamsComputed(unsigned int id,

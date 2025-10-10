@@ -44,6 +44,13 @@ namespace nxpneo {
  * cameras which induces some limitations in the capability of the front-end
  * graph to be reconfigured after startup.
  *
+ * \var CameraProperties::updateControlsOnIspSync
+ * \brief Camera controls are to be updated on ISP frame start event
+ *
+ * Default operation is to update the camera controls on ISI pipe buffer
+ * available event. To workaround some camera issues, this flag indicates that
+ * the camera controls update should be moved to the ISP frame start event.
+ *
  * \var CameraProperties::formatBpp
  * \brief Format bit-per-pixel filter value (optional)
  *
@@ -836,6 +843,19 @@ int PipelineConfig::parseCameras(const YamlObject &cameras)
 			else
 				LOG(NxpNeoPipe, Warning)
 					<< "Invalid orientation value " << orientation;
+		}
+
+		const YamlObject &controlsUpdateObj = cameraObj["controls-update"];
+		std::optional<std::string> controlsUpdate =
+			controlsUpdateObj.get<std::string>();
+		properties.updateControlsOnIspSync = false;
+		if (controlsUpdate) {
+			if (controlsUpdate.value() == "isp-sync")
+				properties.updateControlsOnIspSync = true;
+			else if (controlsUpdate.value() != "frame-available")
+				LOG(NxpNeoPipe, Warning)
+					<< "Invalid controls-update "
+					<< controlsUpdate.value();
 		}
 
 		LOG(NxpNeoPipe, Debug)
