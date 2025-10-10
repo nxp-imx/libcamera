@@ -16,6 +16,16 @@ algorithms:
       Gb: 1024
       B: 1024
   - Agc:
+      AeConstraintMode:
+        ConstraintHighlight:
+          lower:
+            qLo: 0.98
+            qHi: 1.0
+            yTarget: [ 0.5 ]
+          upper:
+            qLo: 0.98
+            qHi: 1.0
+            yTarget: [ 0.8 ]
   - Ccm:
       ccms: [
           {
@@ -76,6 +86,12 @@ algorithms:
       # 1 - pre-configured. LUT with 416 entries needs to be specified in this config file
       #     under 'gbl-lut'. If not configured, falls back to mode 0.
       # 2 - dynamic. LUT determined per frame according to input data.
-      gbl-mode: 0
+      gbl-mode: 2
+      # Global DRC alpha. Selects between histogram equalization (=0) and histogram stretching (=256)
+      gdrc-alpha: 128
+      # Global DRC gamma. Controls the strength of dynamic range compression with histogram stretching
+      gdrc-gamma: 180
+      # Global DRC fixed gamma. Controls the default compression curve which GDRC works with
+      fixed-gamma: 180
   - GammaOutCorrection:
 ...
