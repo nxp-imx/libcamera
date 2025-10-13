@@ -123,7 +123,7 @@ enum ModeType {
  */
 
 /**
- * \var NxpNeoFrames::InfoContext::buffers
+ * \var NxpNeoFrames::InfoContext::buffers_
  * \brief Buffers and status associated to the context image
  *
  * Each element of the map is a std::pair<BufferFrame *, bool> representing
@@ -139,10 +139,10 @@ enum ModeType {
  *    application as the buffers associated to the streams.
  * Buffers allocation and mapping is done at NxpNeoFrames::Info creation time.
  *
- * \var NxpNeoFrames::InfoContext::paramDequeued
+ * \var NxpNeoFrames::InfoContext::paramDequeued_
  * \brief Indicates that the params buffer has been consumed by the ISP
  *
- * \var NxpNeoFrames::InfoContext::metadataProcessed
+ * \var NxpNeoFrames::InfoContext::metadataProcessed_
  * \brief Indicates that the IPA produced the metadata from the ISP stats buffer
  */
 
@@ -159,22 +159,22 @@ enum ModeType {
  */
 
 /**
- * \var NxpNeoFrames::Info::id
+ * \var NxpNeoFrames::Info::id_
  * \brief Corresponds to the libcamera::Request sequence number
  *
- * \var NxpNeoFrames::Info::request
+ * \var NxpNeoFrames::Info::request_
  * \brief The libcamera::Request bundled to that frame
  *
- * \var NxpNeoFrames::Info::rawStreamBuffer
+ * \var NxpNeoFrames::Info::rawStreamBuffer_
  * \brief The application raw Stream buffer from the request - null if none
  *
- *  \var NxpNeoFrames::Info::frameStreamBuffer
+ *  \var NxpNeoFrames::Info::frameStreamBuffer_
  * \brief The application frame Stream buffer from the request - null if none
  *
- *  \var NxpNeoFrames::Info::irStreamBuffer
+ *  \var NxpNeoFrames::Info::irStreamBuffer_
  * \brief The application IR Stream buffer from the request - null if none
  *
- *  \var NxpNeoFrames::Info::contexts
+ *  \var NxpNeoFrames::Info::contexts_
  * \brief Map of one or more context instances associated to this frame
  */
 
@@ -189,13 +189,13 @@ public:
 		bool isContextComplete() const;
 		FrameBuffer *buffer(BufferType) const;
 
-		bool paramDequeued;
-		bool metadataProcessed;
+		bool paramDequeued_;
+		bool metadataProcessed_;
 
 	private:
 		friend NxpNeoFrames;
 
-		std::map<BufferType, std::pair<FrameBuffer *, bool>> buffers;
+		std::map<BufferType, std::pair<FrameBuffer *, bool>> buffers_;
 	};
 
 	class Info
@@ -203,16 +203,16 @@ public:
 	public:
 		bool isFrameComplete() const;
 
-		unsigned int id;
-		Request *request;
-		std::map<ContextType, InfoContext> contexts;
+		unsigned int id_;
+		Request *request_;
+		std::map<ContextType, InfoContext> contexts_;
 
 	private:
 		friend NxpNeoFrames;
 
-		FrameBuffer *rawStreamBuffer;
-		FrameBuffer *frameStreamBuffer;
-		FrameBuffer *irStreamBuffer;
+		FrameBuffer *rawStreamBuffer_;
+		FrameBuffer *frameStreamBuffer_;
+		FrameBuffer *irStreamBuffer_;
 	};
 
 	NxpNeoFrames(NxpNeoCameraData *data);
@@ -228,7 +228,7 @@ public:
 	std::pair<Info *, ContextType> find(FrameBuffer *buffer) const;
 	Info *find(Request *request) const;
 
-	Signal<> bufferAvailable;
+	Signal<> bufferAvailable_;
 
 private:
 	FrameBuffer *allocBuffer(BufferType bufferType);
@@ -462,13 +462,13 @@ const std::map<StreamType, BufferType> streamToBufferType = {
 
 int NxpNeoFrames::InfoContext::completeBuffer(const FrameBuffer *buffer)
 {
-	auto it = std::find_if(buffers.begin(), buffers.end(),
+	auto it = std::find_if(buffers_.begin(), buffers_.end(),
 			       [buffer](const auto &entry) {
 				       const auto &bufferDesc = entry.second;
 				       return bufferDesc.first == buffer;
 			       });
 
-	if (it == buffers.end()) {
+	if (it == buffers_.end()) {
 		LOG(NxpNeoPipe, Error) << "Buffer to complete not found in Info";
 		return -ENOENT;
 	}
@@ -487,8 +487,8 @@ bool NxpNeoFrames::InfoContext::isBufferPending(
 	const std::vector<BufferType> &bufferTypes) const
 {
 	for (BufferType bufferType : bufferTypes) {
-		auto it = buffers.find(bufferType);
-		if (it == buffers.end())
+		auto it = buffers_.find(bufferType);
+		if (it == buffers_.end())
 			continue;
 		const auto &bufferDesc = it->second;
 		if (bufferDesc.second)
@@ -511,7 +511,7 @@ bool NxpNeoFrames::InfoContext::isContextComplete() const
 	};
 	bool buffersComplete = !isBufferPending(allBufferTypes);
 	bool complete = buffersComplete &&
-			metadataProcessed && paramDequeued;
+			metadataProcessed_ && paramDequeued_;
 
 	return complete;
 }
@@ -520,8 +520,8 @@ FrameBuffer *NxpNeoFrames::InfoContext::buffer(
 	BufferType bufferType) const
 {
 	FrameBuffer *buffer = nullptr;
-	auto it = buffers.find(bufferType);
-	if (it != buffers.end()) {
+	auto it = buffers_.find(bufferType);
+	if (it != buffers_.end()) {
 		const auto &bufferDesc = it->second;
 		buffer = bufferDesc.first;
 	}
@@ -531,7 +531,7 @@ FrameBuffer *NxpNeoFrames::InfoContext::buffer(
 
 bool NxpNeoFrames::Info::isFrameComplete() const
 {
-	for (const auto &[context, infoContext] : contexts) {
+	for (const auto &[context, infoContext] : contexts_) {
 		if (!infoContext.isContextComplete())
 			return false;
 	}
@@ -551,21 +551,21 @@ int NxpNeoFrames::destroy(unsigned int id)
 		return -ENOENT;
 
 	/* Return internal buffers for reuse. */
-	for (const auto &[context, infoContext] : info->contexts) {
-		for (const auto &[bufferType, bufferDesc] : infoContext.buffers) {
+	for (const auto &[context, infoContext] : info->contexts_) {
+		for (const auto &[bufferType, bufferDesc] : infoContext.buffers_) {
 			FrameBuffer *buffer = bufferDesc.first;
-			if (buffer == info->rawStreamBuffer ||
-			    buffer == info->frameStreamBuffer ||
-			    buffer == info->irStreamBuffer)
+			if (buffer == info->rawStreamBuffer_ ||
+			    buffer == info->frameStreamBuffer_ ||
+			    buffer == info->irStreamBuffer_)
 				continue;
 			data_->availableBuffersMap_[bufferType].push(buffer);
 		}
 	}
 
 	/* Delete the extended frame information. */
-	frameInfo_.erase(info->id);
+	frameInfo_.erase(info->id_);
 
-	bufferAvailable.emit();
+	bufferAvailable_.emit();
 
 	return 0;
 }
@@ -608,17 +608,17 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 	/* \todo Remove the dynamic allocation of Info */
 	std::unique_ptr<Info> info = std::make_unique<Info>();
 
-	info->id = id;
-	info->request = request;
-	info->rawStreamBuffer = request->findBuffer(&data_->streamRaw_);
-	info->frameStreamBuffer = request->findBuffer(&data_->streamFrame_);
-	info->irStreamBuffer = request->findBuffer(&data_->streamIr_);
-	info->contexts.insert({ ContextTypeRgb, {} });
+	info->id_ = id;
+	info->request_ = request;
+	info->rawStreamBuffer_ = request->findBuffer(&data_->streamRaw_);
+	info->frameStreamBuffer_ = request->findBuffer(&data_->streamFrame_);
+	info->irStreamBuffer_ = request->findBuffer(&data_->streamIr_);
+	info->contexts_.insert({ ContextTypeRgb, {} });
 	if (data_->mode_ == ModeTypeRgbIrDual)
-		info->contexts.insert({ ContextTypeIr, {} });
+		info->contexts_.insert({ ContextTypeIr, {} });
 
 	bool evenRequest = (id % 2 == 0);
-	for (auto &[context, infoContext] : info->contexts) {
+	for (auto &[context, infoContext] : info->contexts_) {
 		/*
 		 * Map the ISP input buffers that are typically internal buffers
 		 * unless the raw stream is active in which case the raw buffer
@@ -642,28 +642,28 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 				  (mode == ModeTypeRgbIrDual && context == ContextTypeIr));
 
 		bool alternatedRawStream = data_->alternatedRawStream_;
-		if (info->rawStreamBuffer) {
+		if (info->rawStreamBuffer_) {
 			if (alternatedRawStream && mode == ModeTypeRgbIrDual) {
 				unsigned int rawContext = evenRequest ? ContextTypeRgb : ContextTypeIr;
 				if (context == rawContext) {
 					if (hasImage0)
-						image0Buffer = info->rawStreamBuffer;
+						image0Buffer = info->rawStreamBuffer_;
 					else
-						image1Buffer = info->rawStreamBuffer;
+						image1Buffer = info->rawStreamBuffer_;
 				}
 			} else if (alternatedRawStream && mode == ModeTypeHdrMerge) {
 				if (evenRequest)
-					image0Buffer = info->rawStreamBuffer;
+					image0Buffer = info->rawStreamBuffer_;
 				else
-					image1Buffer = info->rawStreamBuffer;
+					image1Buffer = info->rawStreamBuffer_;
 
 			} else {
 				if (hasImage0)
-					image0Buffer = info->rawStreamBuffer;
+					image0Buffer = info->rawStreamBuffer_;
 			}
 		}
 
-		auto &buffersMap = infoContext.buffers;
+		auto &buffersMap = infoContext.buffers_;
 		if (hasImage0 && !image0Buffer)
 			image0Buffer = allocBuffer(BufferTypeImage0);
 		if (image0Buffer)
@@ -687,8 +687,8 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 		FrameBuffer *statsBuffer = allocBuffer(BufferTypeStats);
 		buffersMap.insert({ BufferTypeStats, { statsBuffer, true } });
 
-		infoContext.paramDequeued = false;
-		infoContext.metadataProcessed = false;
+		infoContext.paramDequeued_ = false;
+		infoContext.metadataProcessed_ = false;
 
 		/*
 		 * Map the ISP frame and infrared output buffer of the ISP. They
@@ -707,12 +707,12 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 				if (data_->rawStreamOnly_)
 					frameBuffer = allocBuffer(BufferTypeFrame);
 				else
-					frameBuffer = info->frameStreamBuffer;
-				if (info->irStreamBuffer)
+					frameBuffer = info->frameStreamBuffer_;
+				if (info->irStreamBuffer_)
 					irBuffer = allocBuffer(BufferTypeIr);
 			} else {
-				irBuffer = info->irStreamBuffer;
-				if ((info->frameStreamBuffer) || (data_->rawStreamOnly_))
+				irBuffer = info->irStreamBuffer_;
+				if ((info->frameStreamBuffer_) || (data_->rawStreamOnly_))
 					frameBuffer = allocBuffer(BufferTypeFrame);
 			}
 			break;
@@ -724,8 +724,8 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 			if (data_->rawStreamOnly_)
 				frameBuffer = allocBuffer(BufferTypeFrame);
 			else
-				frameBuffer = info->frameStreamBuffer;
-			irBuffer = info->irStreamBuffer;
+				frameBuffer = info->frameStreamBuffer_;
+			irBuffer = info->irStreamBuffer_;
 			break;
 		}
 
@@ -747,20 +747,20 @@ NxpNeoFrames::Info *NxpNeoFrames::createYuv(Request *request)
 	std::unique_ptr<Info> info = std::make_unique<Info>();
 
 	/* Single context, the output buffer is provided by application. */
-	info->id = id;
-	info->request = request;
-	info->rawStreamBuffer = request->findBuffer(&data_->streamRaw_);
-	info->frameStreamBuffer = nullptr;
-	info->irStreamBuffer = nullptr;
+	info->id_ = id;
+	info->request_ = request;
+	info->rawStreamBuffer_ = request->findBuffer(&data_->streamRaw_);
+	info->frameStreamBuffer_ = nullptr;
+	info->irStreamBuffer_ = nullptr;
 
-	info->contexts.insert({ ContextTypeRgb, {} });
-	InfoContext &infoContext = info->contexts.at(ContextTypeRgb);
-	auto &buffersMap = infoContext.buffers;
-	buffersMap.insert({ BufferTypeImage0, { info->rawStreamBuffer, true } });
+	info->contexts_.insert({ ContextTypeRgb, {} });
+	InfoContext &infoContext = info->contexts_.at(ContextTypeRgb);
+	auto &buffersMap = infoContext.buffers_;
+	buffersMap.insert({ BufferTypeImage0, { info->rawStreamBuffer_, true } });
 
 	/* IPA-related operations are bypassed */
-	infoContext.paramDequeued = true;
-	infoContext.metadataProcessed = true;
+	infoContext.paramDequeued_ = true;
+	infoContext.metadataProcessed_ = true;
 
 	frameInfo_[id] = std::move(info);
 
@@ -783,8 +783,8 @@ std::pair<NxpNeoFrames::Info *, ContextType> NxpNeoFrames::find(FrameBuffer *buf
 {
 	for (auto &itInfo : frameInfo_) {
 		Info *info = itInfo.second.get();
-		for (auto &[context, infoContext] : info->contexts)
-			for (const auto &[bufferType, bufferDesc] : infoContext.buffers)
+		for (auto &[context, infoContext] : info->contexts_)
+			for (const auto &[bufferType, bufferDesc] : infoContext.buffers_)
 				if (bufferDesc.first == buffer)
 					return { info, context };
 
@@ -799,7 +799,7 @@ NxpNeoFrames::Info *NxpNeoFrames::find(Request *request) const
 {
 	for (const auto &itInfo : frameInfo_) {
 		Info *info = itInfo.second.get();
-		if (info->request == request)
+		if (info->request_ == request)
 			return info;
 	}
 
@@ -2064,7 +2064,7 @@ void NxpNeoCameraData::queuePendingRequests()
 		if (!info)
 			break;
 
-		for (const auto &[context, infoContext] : info->contexts) {
+		for (const auto &[context, infoContext] : info->contexts_) {
 			for (auto [stream, pipe] : pipes_) {
 				V4L2VideoDevice *dev = pipe->output_.get();
 				BufferType bufferType = streamToBufferType.at(stream);
@@ -2079,13 +2079,13 @@ void NxpNeoCameraData::queuePendingRequests()
 			LOG(NxpNeoPipe, Error)
 				<< "Failed to queue buffers, unbalanced queues";
 			pipe()->cancelRequest(request);
-			frameInfos_.destroy(info->id);
+			frameInfos_.destroy(info->id_);
 			pendingRequests_.pop();
 			return;
 		}
 
 		if (isRawCamera())
-			ipa_->queueRequest(info->id, request->controls());
+			ipa_->queueRequest(info->id_, request->controls());
 
 		pendingRequests_.pop();
 		processingRequests_.push_back(request);
@@ -2455,7 +2455,7 @@ int NxpNeoCameraData::allocateBuffers()
 	if (ret)
 		return ret;
 
-	frameInfos_.bufferAvailable.connect(
+	frameInfos_.bufferAvailable_.connect(
 		this, &NxpNeoCameraData::queuePendingRequests);
 	return 0;
 }
@@ -2573,7 +2573,7 @@ int NxpNeoCameraData::allocateBuffersYuv()
 
 int NxpNeoCameraData::freeBuffers()
 {
-	frameInfos_.bufferAvailable.disconnect(
+	frameInfos_.bufferAvailable_.disconnect(
 		this, &NxpNeoCameraData::queuePendingRequests);
 	frameInfos_.clear();
 
@@ -2990,14 +2990,14 @@ int NxpNeoCameraData::enumerateFormatsYuv()
  */
 void NxpNeoCameraData::clearRequest(NxpNeoFrames::Info *info)
 {
-	Request *request = info->request;
+	Request *request = info->request_;
 
 	if (processingRequests_.empty() || processingRequests_.front() != request)
 		LOG(NxpNeoPipe, Warning) << "Processing request not found";
 	else
 		processingRequests_.pop_front();
 
-	int ret = frameInfos_.destroy(info->id);
+	int ret = frameInfos_.destroy(info->id_);
 	if (ret)
 		LOG(NxpNeoPipe, Warning) << "Info frame could not be destroyed";
 }
@@ -3014,7 +3014,7 @@ void NxpNeoCameraData::clearRequest(NxpNeoFrames::Info *info)
  */
 void NxpNeoCameraData::cancelCompleteRequest(NxpNeoFrames::Info *info)
 {
-	Request *request = info->request;
+	Request *request = info->request_;
 	pipe()->cancelRequest(request);
 
 	clearRequest(info);
@@ -3032,7 +3032,7 @@ void NxpNeoCameraData::cancelCompleteRequest(NxpNeoFrames::Info *info)
  */
 void NxpNeoCameraData::tryCompleteRequest(NxpNeoFrames::Info *info)
 {
-	Request *request = info->request;
+	Request *request = info->request_;
 
 	if (!info->isFrameComplete())
 		return;
@@ -3058,7 +3058,7 @@ void NxpNeoCameraData::isiInputBufferReady(NxpNeoFrames::Info *info, ContextType
 {
 	const std::vector<BufferType>
 		inputBufferTypes = { BufferTypeImage0, BufferTypeImage1, BufferTypeEData };
-	NxpNeoFrames::InfoContext &infoContext = info->contexts.at(context);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts_.at(context);
 	if (infoContext.isBufferPending(inputBufferTypes))
 		return;
 
@@ -3084,7 +3084,7 @@ void NxpNeoCameraData::isiInputBufferReady(NxpNeoFrames::Info *info, ContextType
 	ASSERT(paramsBuffer);
 	bufferIds[ipa::nxpneo::IPABufferTypeParams] = paramsBuffer->cookie();
 
-	ipa_->computeParams(info->id,
+	ipa_->computeParams(info->id_,
 			    static_cast<ipa::nxpneo::IPAContextType>(context),
 			    bufferIds);
 }
@@ -3098,7 +3098,7 @@ void NxpNeoCameraData::isiImage0BufferReady(FrameBuffer *buffer)
 	auto [info, context] = frameInfos_.find(buffer);
 	if (!info)
 		return;
-	NxpNeoFrames::InfoContext &infoContext = info->contexts.at(context);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts_.at(context);
 	infoContext.completeBuffer(buffer);
 
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
@@ -3114,7 +3114,7 @@ void NxpNeoCameraData::isiImage0BufferReady(FrameBuffer *buffer)
 	sequence_ = seq + 1;
 
 	/* Record the sensor's timestamp in the request metadata. */
-	Request *request = info->request;
+	Request *request = info->request_;
 	request->metadata().set(controls::SensorTimestamp,
 				buffer->metadata().timestamp);
 
@@ -3125,7 +3125,7 @@ void NxpNeoCameraData::isiImage0BufferReady(FrameBuffer *buffer)
 		isiInputBufferReady(info, context);
 
 		if (!updateControlsOnIspSync())
-			delayedCtrls_[ContextTypeRgb]->applyControls(info->id);
+			delayedCtrls_[ContextTypeRgb]->applyControls(info->id_);
 	} else {
 		tryCompleteRequest(info);
 	}
@@ -3140,7 +3140,7 @@ void NxpNeoCameraData::isiImage1BufferReady(FrameBuffer *buffer)
 	auto [info, context] = frameInfos_.find(buffer);
 	if (!info)
 		return;
-	NxpNeoFrames::InfoContext &infoContext = info->contexts.at(context);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts_.at(context);
 	infoContext.completeBuffer(buffer);
 
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
@@ -3148,7 +3148,7 @@ void NxpNeoCameraData::isiImage1BufferReady(FrameBuffer *buffer)
 		return;
 	}
 
-	Request *request = info->request;
+	Request *request = info->request_;
 	(void)request;
 
 	if (request->findBuffer(&streamRaw_) == buffer)
@@ -3161,7 +3161,7 @@ void NxpNeoCameraData::isiImage1BufferReady(FrameBuffer *buffer)
 	isiInputBufferReady(info, context);
 
 	if (mode_ == ModeTypeRgbIrDual && !updateControlsOnIspSync())
-		delayedCtrls_[ContextTypeIr]->applyControls(info->id);
+		delayedCtrls_[ContextTypeIr]->applyControls(info->id_);
 }
 
 /**
@@ -3176,7 +3176,7 @@ void NxpNeoCameraData::isiEmbeddedDataBufferReady(FrameBuffer *buffer)
 	auto [info, context] = frameInfos_.find(buffer);
 	if (!info)
 		return;
-	NxpNeoFrames::InfoContext &infoContext = info->contexts.at(context);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts_.at(context);
 	infoContext.completeBuffer(buffer);
 
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
@@ -3217,7 +3217,7 @@ void NxpNeoCameraData::neoOutputBufferReady(FrameBuffer *buffer)
 	auto [info, context] = frameInfos_.find(buffer);
 	if (!info)
 		return;
-	NxpNeoFrames::InfoContext &infoContext = info->contexts.at(context);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts_.at(context);
 	infoContext.completeBuffer(buffer);
 
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
@@ -3225,7 +3225,7 @@ void NxpNeoCameraData::neoOutputBufferReady(FrameBuffer *buffer)
 		return;
 	}
 
-	Request *request = info->request;
+	Request *request = info->request_;
 	auto streamBuffers = request->buffers();
 	auto it = std::find_if(streamBuffers.begin(), streamBuffers.end(),
 			       [buffer](auto &kv) {
@@ -3246,12 +3246,12 @@ void NxpNeoCameraData::neoParamsBufferReady(FrameBuffer *buffer)
 	auto [info, context] = frameInfos_.find(buffer);
 	if (!info)
 		return;
-	NxpNeoFrames::InfoContext &infoContext = info->contexts.at(context);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts_.at(context);
 	infoContext.completeBuffer(buffer);
 
-	if (infoContext.paramDequeued)
+	if (infoContext.paramDequeued_)
 		LOG(NxpNeoPipe, Error) << "Params buffer already dequeued ";
-	infoContext.paramDequeued = true;
+	infoContext.paramDequeued_ = true;
 
 	tryCompleteRequest(info);
 }
@@ -3265,7 +3265,7 @@ void NxpNeoCameraData::neoStatsBufferReady(FrameBuffer *buffer)
 	auto [info, context] = frameInfos_.find(buffer);
 	if (!info)
 		return;
-	NxpNeoFrames::InfoContext &infoContext = info->contexts.at(context);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts_.at(context);
 	infoContext.completeBuffer(buffer);
 
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
@@ -3277,7 +3277,7 @@ void NxpNeoCameraData::neoStatsBufferReady(FrameBuffer *buffer)
 		{ ipa::nxpneo::IPABufferTypeStats, buffer->cookie() },
 	};
 
-	unsigned int sequence = info->id;
+	unsigned int sequence = info->id_;
 	ipa_->processStats(sequence,
 			   static_cast<ipa::nxpneo::IPAContextType>(context),
 			   bufferIds,
@@ -3309,9 +3309,9 @@ void NxpNeoCameraData::frameStart([[maybe_unused]] uint32_t sequence)
 			return;
 		}
 
-		for (const auto &[context, infoContext] : info->contexts) {
+		for (const auto &[context, infoContext] : info->contexts_) {
 			if (infoContext.isBufferPending({ BufferTypeStats })) {
-				delayedCtrls_[context]->applyControls(info->id);
+				delayedCtrls_[context]->applyControls(info->id_);
 				found = true;
 				break;
 			}
@@ -3334,8 +3334,8 @@ void NxpNeoCameraData::ipaParamsComputed(unsigned int id,
 		return;
 
 	ContextType _context = static_cast<ContextType>(context);
-	auto it = info->contexts.find(_context);
-	if (it == info->contexts.end()) {
+	auto it = info->contexts_.find(_context);
+	if (it == info->contexts_.end()) {
 		LOG(NxpNeoPipe, Error) << "Invalid context from IPA";
 		return;
 	}
@@ -3392,18 +3392,18 @@ void NxpNeoCameraData::ipaMetadataReady(unsigned int id,
 	if (!info)
 		return;
 
-	Request *request = info->request;
+	Request *request = info->request_;
 	request->metadata().merge(metadata);
 
-	auto it = info->contexts.find(static_cast<ContextType>(context));
-	if (it == info->contexts.end()) {
+	auto it = info->contexts_.find(static_cast<ContextType>(context));
+	if (it == info->contexts_.end()) {
 		LOG(NxpNeoPipe, Error) << "Invalid context " << context;
 		return;
 	}
 	NxpNeoFrames::InfoContext &infoContext = it->second;
-	if (infoContext.metadataProcessed)
+	if (infoContext.metadataProcessed_)
 		LOG(NxpNeoPipe, Error) << "Metadata already processed";
-	infoContext.metadataProcessed = true;
+	infoContext.metadataProcessed_ = true;
 	tryCompleteRequest(info);
 }
 
