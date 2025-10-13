@@ -187,7 +187,7 @@ public:
 		int completeBuffer(const FrameBuffer *buffer);
 		bool isBufferPending(const std::vector<BufferType> &bufferTypes) const;
 		bool isContextComplete() const;
-		FrameBuffer *buffer(BufferType, bool expected) const;
+		FrameBuffer *buffer(BufferType) const;
 
 		bool paramDequeued;
 		bool metadataProcessed;
@@ -517,7 +517,7 @@ bool NxpNeoFrames::InfoContext::isContextComplete() const
 }
 
 FrameBuffer *NxpNeoFrames::InfoContext::buffer(
-	BufferType bufferType, bool expected) const
+	BufferType bufferType) const
 {
 	FrameBuffer *buffer = nullptr;
 	auto it = buffers.find(bufferType);
@@ -525,10 +525,6 @@ FrameBuffer *NxpNeoFrames::InfoContext::buffer(
 		const auto &bufferDesc = it->second;
 		buffer = bufferDesc.first;
 	}
-
-	if (expected && !buffer)
-		LOG(NxpNeoPipe, Error)
-			<< "Expected buffer type " << bufferType;
 
 	return buffer;
 }
@@ -2072,7 +2068,7 @@ void NxpNeoCameraData::queuePendingRequests()
 			for (auto [stream, pipe] : pipes_) {
 				V4L2VideoDevice *dev = pipe->output_.get();
 				BufferType bufferType = streamToBufferType.at(stream);
-				FrameBuffer *buffer = infoContext.buffer(bufferType, false);
+				FrameBuffer *buffer = infoContext.buffer(bufferType);
 				if (!buffer)
 					continue;
 				ret |= dev->queueBuffer(buffer);
@@ -3069,22 +3065,22 @@ void NxpNeoCameraData::isiInputBufferReady(NxpNeoFrames::Info *info, ContextType
 	std::map<uint32_t, uint32_t> bufferIds;
 
 	FrameBuffer *image0Buffer =
-		infoContext.buffer(BufferTypeImage0, false);
+		infoContext.buffer(BufferTypeImage0);
 	if (image0Buffer)
 		bufferIds[ipa::nxpneo::IPABufferTypeImage0] = image0Buffer->cookie();
 
 	FrameBuffer *image1Buffer =
-		infoContext.buffer(BufferTypeImage1, false);
+		infoContext.buffer(BufferTypeImage1);
 	if (image1Buffer)
 		bufferIds[ipa::nxpneo::IPABufferTypeImage1] = image1Buffer->cookie();
 
 	FrameBuffer *edataBuffer =
-		infoContext.buffer(BufferTypeEData, false);
+		infoContext.buffer(BufferTypeEData);
 	if (edataBuffer)
 		bufferIds[ipa::nxpneo::IPABufferTypeEData] = edataBuffer->cookie();
 
 	FrameBuffer *paramsBuffer =
-		infoContext.buffer(BufferTypeParams, true);
+		infoContext.buffer(BufferTypeParams);
 	ASSERT(paramsBuffer);
 	bufferIds[ipa::nxpneo::IPABufferTypeParams] = paramsBuffer->cookie();
 
@@ -3348,31 +3344,31 @@ void NxpNeoCameraData::ipaParamsComputed(unsigned int id,
 	int ret = 0;
 	/* Queue buffers ISP output buffers */
 	FrameBuffer *frameBuffer =
-		infoContext.buffer(BufferTypeFrame, false);
+		infoContext.buffer(BufferTypeFrame);
 	if (frameBuffer)
 		ret |= neo_->frame_->queueBuffer(frameBuffer);
 	FrameBuffer *irBuffer =
-		infoContext.buffer(BufferTypeIr, false);
+		infoContext.buffer(BufferTypeIr);
 	if (irBuffer)
 		ret |= neo_->ir_->queueBuffer(irBuffer);
 
 	/* Queue ISP params and stats buffers */
 	FrameBuffer *paramsBuffer =
-		infoContext.buffer(BufferTypeParams, true);
+		infoContext.buffer(BufferTypeParams);
 	if (paramsBuffer) {
 		paramsBuffer->_d()->metadata().planes()[0].bytesused = bytesused;
 		ret |= neo_->params_->queueBuffer(paramsBuffer);
 	}
 	FrameBuffer *statsBuffer =
-		infoContext.buffer(BufferTypeStats, true);
+		infoContext.buffer(BufferTypeStats);
 	if (statsBuffer)
 		ret |= neo_->stats_->queueBuffer(statsBuffer);
 
 	/* Queue ISP input buffers */
 	FrameBuffer *image0Buffer =
-		infoContext.buffer(BufferTypeImage0, false);
+		infoContext.buffer(BufferTypeImage0);
 	FrameBuffer *image1Buffer =
-		infoContext.buffer(BufferTypeImage1, false);
+		infoContext.buffer(BufferTypeImage1);
 	if (image0Buffer)
 		ret |= neo_->input0_->queueBuffer(image0Buffer);
 	if (image1Buffer) {
