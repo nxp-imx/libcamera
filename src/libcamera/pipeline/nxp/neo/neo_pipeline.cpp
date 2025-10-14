@@ -2680,15 +2680,15 @@ int NxpNeoCameraData::configureRaw(CameraConfiguration *c)
 	configInfo.sensorControlList = sensor_->getControls(ids);
 	configInfo.sensorInfo = sensorInfo;
 
-	ipa::nxpneo::IPAColorSpace IPAcolorSpace = ipa::nxpneo::IPAColorSpace(
+	configInfo.colorSpace = ipa::nxpneo::IPAColorSpace(
 		static_cast<ipa::nxpneo::IPAPrimaries>(colorSpace.primaries),
 		static_cast<ipa::nxpneo::IPATransferFunction>(colorSpace.transferFunction),
 		static_cast<ipa::nxpneo::IPAYcbcrEncoding>(colorSpace.ycbcrEncoding),
 		static_cast<ipa::nxpneo::IPARange>(colorSpace.range));
 
-	ret = ipa_->configure(configInfo, streamConfig,
-			      static_cast<ipa::nxpneo::IPAModeType>(mode_),
-			      IPAcolorSpace, &ipaControls_);
+	configInfo.mode = static_cast<ipa::nxpneo::IPAModeType>(mode_);
+
+	ret = ipa_->configure(configInfo, streamConfig, &ipaControls_);
 	if (ret) {
 		LOG(NxpNeoPipe, Error) << "Failed to configure IPA: "
 				       << strerror(-ret);
