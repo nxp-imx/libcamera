@@ -261,9 +261,9 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	/* Update the camera controls using the new sensor settings. */
 	updateControls(info, ipaConfig.sensorControls, ipaControls);
 
-	/* \todo get image1 bpp when available from IPACameraSensorInfo. */
-	uint32_t bpp = ipaConfig.sensorInfo.bitsPerPixel;
-	context_.configuration.sensor.bpps = { bpp, bpp };
+	uint32_t bpp0 = ipaConfig.sensorInfo.bitsPerPixel;
+	uint32_t bpp1 = ipaConfig.bitsPerPixelAuxiliary;
+	context_.configuration.sensor.bpps = { bpp0, bpp1 };
 
 	/* Active streams */
 	std::map<IPAStreamType, IPAStream> &streams = context_.configuration.streams;
