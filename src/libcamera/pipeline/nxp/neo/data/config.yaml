@@ -79,4 +79,7 @@ global:
 cameras:
   - model: mx95mbcam
     controls-update: isp-sync
+  - model: os08a20
+# Uncomment the line below to enable os08a20 HDR operation
+#    streams: [image1]
 ...
