@@ -66,8 +66,6 @@ public:
 
 	int configure(const IPAConfigInfo &ipaConfig,
 		      const std::map<uint32_t, IPAStream> &streamConfig,
-		      const IPAModeType mode,
-		      const IPAColorSpace &colorSpace,
 		      ControlInfoMap *ipaControls) override;
 	void mapBuffers(const std::vector<IPABuffer> &buffers) override;
 	void unmapBuffers(const std::vector<unsigned int> &ids) override;
@@ -246,8 +244,6 @@ void IPANxpNeo::stop()
 
 int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 			 const std::map<uint32_t, IPAStream> &streamConfig,
-			 const IPAModeType mode,
-			 const IPAColorSpace &colorSpace,
 			 ControlInfoMap *ipaControls)
 {
 	/* Clear the IPA context before the streaming session. */
@@ -255,7 +251,7 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	context_.activeState = {};
 	context_.frameContexts.clear();
 
-	context_.configuration.pipelineMode = mode;
+	context_.configuration.pipelineMode = ipaConfig.mode;
 
 	const IPACameraSensorInfo &info = ipaConfig.sensorInfo;
 	sensorControlList_ = ipaConfig.sensorControlList;
@@ -274,7 +270,7 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	for (const auto &[streamType, config] : streamConfig)
 		streams[static_cast<IPAStreamType>(streamType)] = config;
 
-	context_.configuration.colorSpace = colorSpace;
+	context_.configuration.colorSpace = ipaConfig.colorSpace;
 
 	for (auto const &a : algorithms()) {
 		Algorithm *algo = static_cast<Algorithm *>(a.get());
