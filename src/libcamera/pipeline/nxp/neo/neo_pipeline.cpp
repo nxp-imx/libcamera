@@ -2688,6 +2688,11 @@ int NxpNeoCameraData::configureRaw(CameraConfiguration *c)
 
 	configInfo.mode = static_cast<ipa::nxpneo::IPAModeType>(mode_);
 
+	const PixelFormatInfo &pixelformatInfo =
+		PixelFormatInfo::info(devFormatInput1.fourcc);
+	configInfo.bitsPerPixelAuxiliary =
+		pixelformatInfo.isValid() ? pixelformatInfo.bitsPerPixel : 0;
+
 	ret = ipa_->configure(configInfo, streamConfig, &ipaControls_);
 	if (ret) {
 		LOG(NxpNeoPipe, Error) << "Failed to configure IPA: "
