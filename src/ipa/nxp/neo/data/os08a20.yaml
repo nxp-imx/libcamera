@@ -94,4 +94,25 @@ algorithms:
       # Global DRC fixed gamma. Controls the default compression curve which GDRC works with
       fixed-gamma: 180
   - GammaOutCorrection:
+  - HdrMerge:
+      # HDR tuned parameters based on following input values:
+      # - input data format of the HDR merge bloc: 12 bits
+      # - HDR ratio: 16
+      # - sensor black level: 64
+      # - low blending threshold: 30%
+      # - high blending threshold: 85%
+      obpp: 3
+      motion-fix-en: 1
+      blend-3x3: 1
+      gain-bpp: [ 3, 3 ]
+      gain-offset: [ 0, 0 ]
+      gain-scale: [ 2081, 2081]
+      gain-shift: [ 7, 3 ]
+      luma-th0: 19661
+      luma-scale: 7447
+      luma-scale-shift: 20
+      luma-scale-th-shift: 0
+      downscale: [ 0, 0 ]
+      upscale: [ 0, 0 ]
+      postscale: 0
 ...
