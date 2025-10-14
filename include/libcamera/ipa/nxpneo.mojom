@@ -63,6 +63,8 @@ struct IPAConfigInfo {
 	libcamera.ControlList sensorControlList;
 	IPAModeType mode;
 	IPAColorSpace colorSpace;
+	/* \todo remove when available from IPACameraSensorInfo */
+	uint32 bitsPerPixelAuxiliary;
 };
 
 struct DelayedControlsParams {
