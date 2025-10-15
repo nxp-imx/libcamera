@@ -70,7 +70,12 @@ private:
 	 * when distributing total exposure between long and short captures.
 	 */
 	static constexpr uint32_t kMinShortExposureLines = 1;
-	static constexpr uint32_t kMaxShortExposureLines = 32;
+	/*
+	 * A VS exposure greater than 4 can cause color distorsion
+	 * around moving object under certain light conditions.
+	 * Hence the VS exposure is limited to 4 lines maximum.
+	 */
+	static constexpr uint32_t kMaxShortExposureLines = 4;
 	static constexpr uint32_t kMinLongExposureLines = 8;
 
 	static constexpr uint32_t kRatioL2S = 16;
