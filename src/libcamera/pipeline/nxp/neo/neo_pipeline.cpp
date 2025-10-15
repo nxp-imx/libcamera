@@ -685,7 +685,7 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 		 * - RGBIr context switch: we may want to alternate capture on
 		 *   the different contexts RGB and IR
 		 * - HDR merge mode, we may want to alternate capture on long
-		 *   and short frames (image0 and image 1)
+		 *   and short frames (image0 and image1)
 		 * In other cases, the raw stream is unconditionally mapped to
 		 * the image0. If there is no raw stream enabled and so no
 		 * dedicated buffer provided by the application, then internal
