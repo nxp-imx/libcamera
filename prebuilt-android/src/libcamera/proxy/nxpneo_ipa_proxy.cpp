@@ -299,32 +299,26 @@ void IPAProxyNxpNeo::stopIPC()
 int32_t IPAProxyNxpNeo::configure(
 	const IPAConfigInfo &configInfo,
 	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
-	const IPAModeType mode,
-	const IPAColorSpace &colorSpace,
 	ControlInfoMap *ipaControls)
 {
 	if (isolate_)
-		return configureIPC(configInfo, streamConfig, mode, colorSpace, ipaControls);
+		return configureIPC(configInfo, streamConfig, ipaControls);
 	else
-		return configureThread(configInfo, streamConfig, mode, colorSpace, ipaControls);
+		return configureThread(configInfo, streamConfig, ipaControls);
 }
 
 int32_t IPAProxyNxpNeo::configureThread(
 	const IPAConfigInfo &configInfo,
 	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
-	const IPAModeType mode,
-	const IPAColorSpace &colorSpace,
 	ControlInfoMap *ipaControls)
 {
-	return ipa_->configure(configInfo, streamConfig, mode, colorSpace, ipaControls);
+	return ipa_->configure(configInfo, streamConfig, ipaControls);
 
 }
 
 int32_t IPAProxyNxpNeo::configureIPC(
 	const IPAConfigInfo &configInfo,
 	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
-	const IPAModeType mode,
-	const IPAColorSpace &colorSpace,
 	ControlInfoMap *ipaControls)
 {
 	controlSerializer_.reset();
@@ -341,22 +335,10 @@ int32_t IPAProxyNxpNeo::configureIPC(
 	std::tie(streamConfigBuf, std::ignore) =
 		IPADataSerializer<std::map<uint32_t, libcamera::IPAStream>>::serialize(streamConfig
 );
-	static_assert(sizeof(ipa::nxpneo::IPAModeType) <= 4);
-	std::vector<uint8_t> modeBuf;
-	std::tie(modeBuf, std::ignore) =
-		IPADataSerializer<uint32_t>::serialize(static_cast<uint32_t>(mode));
-	std::vector<uint8_t> colorSpaceBuf;
-	std::tie(colorSpaceBuf, std::ignore) =
-		IPADataSerializer<IPAColorSpace>::serialize(colorSpace
-);
 	appendPOD<uint32_t>(_ipcInputBuf.data(), configInfoBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), streamConfigBuf.size());
-	appendPOD<uint32_t>(_ipcInputBuf.data(), modeBuf.size());
-	appendPOD<uint32_t>(_ipcInputBuf.data(), colorSpaceBuf.size());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), configInfoBuf.begin(), configInfoBuf.end());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), streamConfigBuf.begin(), streamConfigBuf.end());
-	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), modeBuf.begin(), modeBuf.end());
-	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), colorSpaceBuf.begin(), colorSpaceBuf.end());
 
 
 	int _ret = ipc_->sendSync(_ipcInputBuf, &_ipcOutputBuf);
