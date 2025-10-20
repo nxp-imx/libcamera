@@ -31,6 +31,9 @@ namespace nxpneo {
  * \struct CameraProperties
  * \brief Camera properties defined by topology discovery or configuration file
  *
+ * This structure reports to the pipeline handler a set of properties coming
+ * from the platform configuration file and the graph discovery.
+ *
  * \var CameraProperties::image1Stream
  * \brief Camera has an image1 stream for HDR or RGBIr context switch mode
  *
@@ -65,11 +68,6 @@ namespace nxpneo {
  * horizontal and vertical flips:
  * Rotate0 (1), Rotate0Mirror (2), Rotate180 (3), Rotate180Mirror (4)
  *
- * \var CameraProperties::multiCamera
- * \brief Camera is sharing its MIPI CSI-2 port with other cameras
- *
- * This structure reports to the pipeline handler a set of properties coming
- * from the platform configuration file and the graph discovery.
  */
 
 /* -----------------------------------------------------------------------------
