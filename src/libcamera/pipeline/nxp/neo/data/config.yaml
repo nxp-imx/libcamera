@@ -24,7 +24,8 @@
 #
 # cameras           = sequence of camera-entry
 #
-# camera-entry      = mapping of {model, entity, streams, format, orientation}
+# camera-entry      = mapping of {model, entity, streams, format, orientation,
+#                                 controls-delay}
 #   model           = camera model
 #                     optional if entity is defined
 #   entity          = camera entity name
@@ -55,6 +56,11 @@
 #                     3: rotate 180
 #                     4: rotate 180 + mirror
 #                   optional - default is the camera mounting orientation
+#   controls-delay =
+#                   delay in ms applied to the front-end frame done event before
+#                   updating the camera controls, to workaround device-specific
+#                   issues (experimental)
+#                   optional - default is 0
 #
 # 'cameras' section definition example:
 #
@@ -73,4 +79,6 @@ cameras:
   - model: os08a20
 # Uncomment the line below to enable os08a20 HDR operation
 #    streams: [image1]
+  - model: mx95mbcam
+    controls-delay: 3
 ...

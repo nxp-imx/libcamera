@@ -268,6 +268,10 @@ public:
 	std::map<StreamType, ISIPipe *> &isiPipes() { return pipes_; };
 	const std::string &cameraName() const { return sensor_->entity()->name(); }
 	bool multiCamera() const { return cameraInfo_->cameraProperties().multiCamera; }
+	std::optional<utils::Duration> controlsDelay() const
+	{
+		return cameraInfo_->cameraProperties().controlsDelay;
+	}
 	bool isRawCamera() const { return isRawCamera_; };
 	const std::map<Size, std::vector<unsigned int>> &
 	formatsSizeToCodes() const { return formatsSizeToCodes_; }
@@ -317,6 +321,7 @@ private:
 	void isiImage0BufferReady(FrameBuffer *buffer);
 	void isiImage1BufferReady(FrameBuffer *buffer);
 	void isiEmbeddedDataBufferReady(FrameBuffer *buffer);
+	void applySensorControls(NxpNeoFrames::Info *info, ContextType context);
 
 	void neoInput0BufferReady(FrameBuffer *buffer);
 	void neoInput1BufferReady(FrameBuffer *buffer);
@@ -361,6 +366,8 @@ private:
 	std::map<BufferType, std::queue<FrameBuffer *>> availableBuffersMap_;
 	std::vector<std::unique_ptr<FrameBuffer>> frameBuffersPool_;
 	std::vector<std::unique_ptr<FrameBuffer>> irBuffersPool_;
+
+	std::map<ContextType, std::unique_ptr<Timer>> controlsTimers_;
 };
 
 class NxpNeoCameraConfiguration : public CameraConfiguration
@@ -1828,6 +1835,11 @@ void NxpNeoCameraData::stopDevice()
 
 	freeBuffers();
 
+	for (auto const &[context, timer] : controlsTimers_) {
+		if (timer.get())
+			timer->stop();
+	}
+
 	if (ret)
 		LOG(NxpNeoPipe, Warning) << "Failed to stop camera " << cameraName();
 }
@@ -1929,6 +1941,12 @@ int NxpNeoCameraData::init(DeviceEnumerator *enumerator)
 			mode_ = sensorIsRgbIr() ? ModeTypeRgbIr : ModeTypeStandard;
 		else
 			mode_ = sensorIsRgbIr() ? ModeTypeRgbIrDual : ModeTypeHdrMerge;
+
+		for (const auto context : { ContextTypeRgb, ContextTypeIr }) {
+			std::unique_ptr<Timer> timer =
+				controlsDelay().has_value() ? std::make_unique<Timer>() : nullptr;
+			controlsTimers_.insert({ context, std::move(timer) });
+		}
 	}
 
 	/* Initialize the camera properties. */
@@ -3097,7 +3115,7 @@ void NxpNeoCameraData::isiImage0BufferReady(FrameBuffer *buffer)
 	if (isRawCamera()) {
 		isiInputBufferReady(info, context);
 
-		delayedCtrls_[ContextTypeRgb]->applyControls(info->id_);
+		applySensorControls(info, context);
 	} else {
 		tryCompleteRequest(info);
 	}
@@ -3133,7 +3151,7 @@ void NxpNeoCameraData::isiImage1BufferReady(FrameBuffer *buffer)
 	isiInputBufferReady(info, context);
 
 	if (mode_ == ModeTypeRgbIrDual)
-		delayedCtrls_[ContextTypeIr]->applyControls(info->id_);
+		applySensorControls(info, context);
 }
 
 /**
@@ -3157,6 +3175,42 @@ void NxpNeoCameraData::isiEmbeddedDataBufferReady(FrameBuffer *buffer)
 	}
 
 	isiInputBufferReady(info, context);
+}
+
+/**
+ * \brief Apply the sensor controls update for the current request
+ * \param[in] info The frame Info object associated to the request
+ * \param[in] context The context of the sensor to be updated
+ */
+void NxpNeoCameraData::applySensorControls(NxpNeoFrames::Info *info, ContextType context)
+{
+	if (!isRawCamera())
+		return;
+
+	unsigned int id = info->id_;
+	DelayedControls *delayedControls = delayedCtrls_.at(context).get();
+
+	auto apply = [id, delayedControls]() {
+		delayedControls->applyControls(id);
+	};
+
+	if (!controlsDelay().has_value()) {
+		apply();
+		return;
+	}
+
+	Timer *timer = controlsTimers_.at(context).get();
+	if (timer->isRunning()) {
+		LOG(NxpNeoPipe, Debug) << "Controls timer is running";
+		timer->stop();
+	}
+
+	timer->timeout.disconnect();
+	timer->timeout.connect(this, apply);
+
+	std::chrono::milliseconds delay =
+		std::chrono::duration_cast<std::chrono::milliseconds>(controlsDelay().value());
+	timer->start(delay);
 }
 
 /**

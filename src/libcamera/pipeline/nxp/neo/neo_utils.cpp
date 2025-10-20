@@ -21,6 +21,8 @@
 
 #include "isi_device.h"
 
+using namespace std::chrono_literals;
+
 namespace libcamera {
 
 LOG_DECLARE_CATEGORY(NxpNeoPipe)
@@ -67,6 +69,13 @@ namespace nxpneo {
  * Orientation enum class, relevant to the ones achievable with a combination of
  * horizontal and vertical flips:
  * Rotate0 (1), Rotate0Mirror (2), Rotate180 (3), Rotate180Mirror (4)
+ *
+ * \var CameraProperties::controlsDelay
+ * \brief Delay to update the controls on front-end frame done event (optional)
+ *
+ * Camera controls update is synchronized on the front-end frame done events.
+ * For cameras having issue with that timing, this allows delaying the controls
+ * update by a user configured delay.
  *
  */
 
@@ -835,6 +844,11 @@ int PipelineConfig::parseCameras(const YamlObject &cameras)
 				LOG(NxpNeoPipe, Warning)
 					<< "Invalid orientation value " << orientation;
 		}
+
+		const YamlObject &controlsDelayObj = cameraObj["controls-delay"];
+		uint32_t controlsDelay = controlsDelayObj.get<uint32_t>().value_or(0);
+		if (controlsDelay)
+			properties.controlsDelay = controlsDelay * 1ms;
 
 		LOG(NxpNeoPipe, Debug)
 			<< "Camera entry model [" << model
