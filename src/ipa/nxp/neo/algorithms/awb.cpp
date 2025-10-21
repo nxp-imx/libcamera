@@ -265,6 +265,24 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 	if (frameContext.awb.autoEnabled)
 		frameContext.awb.gains = context.activeState.awb.gains.automatic;
 
+	updateObwbGains(frameContext, params);
+
+	/* If we have already set the CTEMP measurement parameters, return. */
+	if (frame > 0)
+		return;
+
+	configureCtempStats(context, params);
+}
+
+/**
+ * \brief Update the gains of the ISP OBWB blocks
+ *
+ * \param[in] frameContext The per-frame context
+ * \param[out] params Params of the ISP to update
+ *
+ */
+void Awb::updateObwbGains(IPAFrameContext &frameContext, NxpNeoParams *params)
+{
 	auto obwb0Config = params->block<BlockParamsType::Obwb0>();
 	auto obwb1Config = params->block<BlockParamsType::Obwb1>();
 	auto obwb2Config = params->block<BlockParamsType::Obwb2>();
@@ -309,11 +327,17 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 			config->b_ctrl_offset = 0;
 		}
 	}
+}
 
-	/* If we have already set the CTEMP measurement parameters, return. */
-	if (frame > 0)
-		return;
-
+/**
+ * \brief Configure the statistics of the ISP CTEMP block
+ *
+ * \param[in] context The global IPA context
+ * \param[out] params Params of the ISP to update
+ *
+ */
+void Awb::configureCtempStats(IPAContext &context, NxpNeoParams *params)
+{
 	auto ctempConfig = params->block<BlockParamsType::CTemp>();
 	ctempConfig.setUpdate(true);
 

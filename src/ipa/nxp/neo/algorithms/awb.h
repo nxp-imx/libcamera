@@ -40,6 +40,8 @@ public:
 		     ControlList &metadata) override;
 
 private:
+	void updateObwbGains(IPAFrameContext &frameContext, NxpNeoParams *params);
+	void configureCtempStats(IPAContext &context, NxpNeoParams *params);
 	void generateBlocks(const NxpNeoStats *stats);
 	void awbGreyWorld(IPAActiveState &activeState, IPAFrameContext &frameContext,
 			  const uint32_t frame);
