@@ -123,7 +123,7 @@ enum ModeType {
  */
 
 /**
- * \var NxpNeoFrames::InfoContext::buffers
+ * \var NxpNeoFrames::InfoContext::buffers_
  * \brief Buffers and status associated to the context image
  *
  * Each element of the map is a std::pair<BufferFrame *, bool> representing
@@ -139,10 +139,10 @@ enum ModeType {
  *    application as the buffers associated to the streams.
  * Buffers allocation and mapping is done at NxpNeoFrames::Info creation time.
  *
- * \var NxpNeoFrames::InfoContext::paramDequeued
+ * \var NxpNeoFrames::InfoContext::paramDequeued_
  * \brief Indicates that the params buffer has been consumed by the ISP
  *
- * \var NxpNeoFrames::InfoContext::metadataProcessed
+ * \var NxpNeoFrames::InfoContext::metadataProcessed_
  * \brief Indicates that the IPA produced the metadata from the ISP stats buffer
  */
 
@@ -159,72 +159,78 @@ enum ModeType {
  */
 
 /**
- * \var NxpNeoFrames::Info::id
+ * \var NxpNeoFrames::Info::id_
  * \brief Corresponds to the libcamera::Request sequence number
  *
- * \var NxpNeoFrames::Info::request
+ * \var NxpNeoFrames::Info::request_
  * \brief The libcamera::Request bundled to that frame
  *
- * \var NxpNeoFrames::Info::rawStreamBuffer
+ * \var NxpNeoFrames::Info::rawStreamBuffer_
  * \brief The application raw Stream buffer from the request - null if none
  *
- *  \var NxpNeoFrames::Info::frameStreamBuffer
+ *  \var NxpNeoFrames::Info::frameStreamBuffer_
  * \brief The application frame Stream buffer from the request - null if none
  *
- *  \var NxpNeoFrames::Info::irStreamBuffer
+ *  \var NxpNeoFrames::Info::irStreamBuffer_
  * \brief The application IR Stream buffer from the request - null if none
  *
- *  \var NxpNeoFrames::Info::contexts
+ *  \var NxpNeoFrames::Info::contexts_
  * \brief Map of one or more context instances associated to this frame
  */
 
 class NxpNeoFrames
 {
 public:
-	struct InfoContext {
-		std::map<BufferType, std::pair<FrameBuffer *, bool>> buffers;
+	class InfoContext
+	{
+	public:
+		int completeBuffer(const FrameBuffer *buffer);
+		bool isBufferPending(const std::vector<BufferType> &bufferTypes) const;
+		bool isContextComplete() const;
+		FrameBuffer *buffer(BufferType) const;
 
-		bool paramDequeued;
-		bool metadataProcessed;
+		bool paramDequeued_;
+		bool metadataProcessed_;
+
+	private:
+		friend NxpNeoFrames;
+
+		std::map<BufferType, std::pair<FrameBuffer *, bool>> buffers_;
 	};
 
-	struct Info {
-		unsigned int id;
-		Request *request;
+	class Info
+	{
+	public:
+		bool isFrameComplete() const;
 
-		FrameBuffer *rawStreamBuffer;
-		FrameBuffer *frameStreamBuffer;
-		FrameBuffer *irStreamBuffer;
+		unsigned int id_;
+		Request *request_;
+		std::map<ContextType, InfoContext> contexts_;
 
-		std::map<ContextType, InfoContext> contexts;
+	private:
+		friend NxpNeoFrames;
+
+		FrameBuffer *rawStreamBuffer_;
+		FrameBuffer *frameStreamBuffer_;
+		FrameBuffer *irStreamBuffer_;
 	};
 
 	NxpNeoFrames(NxpNeoCameraData *data);
 
 	int destroy(unsigned int id);
 	void clear();
-
 	Info *create(Request *request);
-	Info *createRaw(Request *request);
-	Info *createYuv(Request *request);
 
 	Info *find(unsigned int id) const;
 	std::pair<Info *, ContextType> find(FrameBuffer *buffer) const;
 	Info *find(Request *request) const;
 
-	int completeBuffer(Info *info, ContextType context,
-			   const FrameBuffer *buffer) const;
-	bool isBufferPending(Info *info, ContextType context,
-			     const std::vector<BufferType> &bufferTypes) const;
-	bool isContextComplete(Info *info, ContextType context) const;
-	bool isFrameComplete(Info *info) const;
-	FrameBuffer *buffer(Info *info, ContextType context,
-			    BufferType, bool expected) const;
-
-	Signal<> bufferAvailable;
+	Signal<> bufferAvailable_;
 
 private:
 	FrameBuffer *allocBuffer(BufferType bufferType);
+	Info *createRaw(Request *request);
+	Info *createYuv(Request *request);
 
 	NxpNeoCameraData *data_;
 	std::map<unsigned int, std::unique_ptr<Info>> frameInfo_;
@@ -242,8 +248,6 @@ public:
 		  frameInfos_(this){};
 
 	int configure(CameraConfiguration *c);
-	int configureRaw(CameraConfiguration *c);
-	int configureYuv(CameraConfiguration *c);
 	int exportFrameBuffers(Stream *stream,
 			       std::vector<std::unique_ptr<FrameBuffer>> *buffers);
 	int start(const ControlList *controls);
@@ -264,6 +268,10 @@ public:
 	std::map<StreamType, ISIPipe *> &isiPipes() { return pipes_; };
 	const std::string &cameraName() const { return sensor_->entity()->name(); }
 	bool multiCamera() const { return cameraInfo_->cameraProperties().multiCamera; }
+	bool updateControlsOnIspSync() const
+	{
+		return cameraInfo_->cameraProperties().updateControlsOnIspSync;
+	}
 	bool isRawCamera() const { return isRawCamera_; };
 	const std::map<Size, std::vector<unsigned int>> &
 	formatsSizeToCodes() const { return formatsSizeToCodes_; }
@@ -279,8 +287,8 @@ public:
 
 	/* Requests for which no buffer has been queued to the frontend  device yet */
 	std::queue<Request *> pendingRequests_;
-	/* Requests queued to the frontend device but not yet processed by the ISP */
-	std::queue<Request *> processingRequests_;
+	/* Requests in-flight not yet completed */
+	std::deque<Request *> processingRequests_;
 
 private:
 	friend NxpNeoFrames;
@@ -299,6 +307,9 @@ private:
 				    V4L2SubdeviceFormat &sdFormat);
 	int configureFrontEndLinks() const;
 
+	int configureRaw(CameraConfiguration *c);
+	int configureYuv(CameraConfiguration *c);
+
 	int enumerateFormatsRaw();
 	int enumerateFormatsYuv();
 
@@ -316,6 +327,7 @@ private:
 	void neoOutputBufferReady(FrameBuffer *buffer);
 	void neoParamsBufferReady(FrameBuffer *buffer);
 	void neoStatsBufferReady(FrameBuffer *buffer);
+	void frameStart(uint32_t sequence);
 
 	void ipaParamsComputed(unsigned int id, ipa::nxpneo::IPAContextType context,
 			       unsigned int bytesused);
@@ -362,13 +374,14 @@ public:
 	NxpNeoCameraConfiguration(Camera *camera, NxpNeoCameraData *data);
 
 	Status validate() override;
-	Status validateRaw();
-	Status validateYuv();
 
 	const V4L2SubdeviceFormat &sensorFormat() { return sensorFormat_; }
 	const Transform &combinedTransform() { return combinedTransform_; }
 
 private:
+	Status validateRaw();
+	Status validateYuv();
+
 	/*
 	 * The NxpNeoCameraData instance is guaranteed to be valid as long as the
 	 * corresponding Camera instance is valid. In order to borrow a
@@ -389,10 +402,6 @@ public:
 
 	std::unique_ptr<CameraConfiguration> generateConfiguration(Camera *camera,
 								   Span<const StreamRole> roles) override;
-	std::unique_ptr<CameraConfiguration> generateRawConfiguration(Camera *camera,
-								      Span<const StreamRole> roles);
-	std::unique_ptr<CameraConfiguration> generateYuvConfiguration(Camera *camera,
-								      Span<const StreamRole> roles);
 
 	int configure(Camera *camera, CameraConfiguration *config) override;
 
@@ -422,6 +431,11 @@ private:
 
 	int createCamera(MediaEntity *sensorEntity, DeviceEnumerator *enumerator);
 
+	std::unique_ptr<CameraConfiguration> generateConfigurationRaw(
+		Camera *camera, Span<const StreamRole> roles);
+	std::unique_ptr<CameraConfiguration> generateConfigurationYuv(
+		Camera *camera, Span<const StreamRole> roles);
+
 	int setupRouting() const;
 	int setupCameraGraphs();
 	int loadPipelineConfig();
@@ -448,6 +462,85 @@ const std::map<StreamType, BufferType> streamToBufferType = {
 
 }
 
+int NxpNeoFrames::InfoContext::completeBuffer(const FrameBuffer *buffer)
+{
+	auto it = std::find_if(buffers_.begin(), buffers_.end(),
+			       [buffer](const auto &entry) {
+				       const auto &bufferDesc = entry.second;
+				       return bufferDesc.first == buffer;
+			       });
+
+	if (it == buffers_.end()) {
+		LOG(NxpNeoPipe, Error) << "Buffer to complete not found in Info";
+		return -ENOENT;
+	}
+
+	auto &bufferDesc = it->second;
+	if (!bufferDesc.second) {
+		LOG(NxpNeoPipe, Error) << "Buffer already completed";
+		return -EINVAL;
+	}
+
+	bufferDesc.second = false;
+	return 0;
+}
+
+bool NxpNeoFrames::InfoContext::isBufferPending(
+	const std::vector<BufferType> &bufferTypes) const
+{
+	for (BufferType bufferType : bufferTypes) {
+		auto it = buffers_.find(bufferType);
+		if (it == buffers_.end())
+			continue;
+		const auto &bufferDesc = it->second;
+		if (bufferDesc.second)
+			return true;
+	}
+
+	return false;
+}
+
+bool NxpNeoFrames::InfoContext::isContextComplete() const
+{
+	const std::vector<BufferType> allBufferTypes = {
+		BufferTypeImage0,
+		BufferTypeImage1,
+		BufferTypeEData,
+		BufferTypeParams,
+		BufferTypeStats,
+		BufferTypeFrame,
+		BufferTypeIr,
+	};
+	bool buffersComplete = !isBufferPending(allBufferTypes);
+	bool complete = buffersComplete &&
+			metadataProcessed_ && paramDequeued_;
+
+	return complete;
+}
+
+FrameBuffer *NxpNeoFrames::InfoContext::buffer(
+	BufferType bufferType) const
+{
+	FrameBuffer *buffer = nullptr;
+	auto it = buffers_.find(bufferType);
+	if (it != buffers_.end()) {
+		const auto &bufferDesc = it->second;
+		buffer = bufferDesc.first;
+	}
+
+	return buffer;
+}
+
+bool NxpNeoFrames::Info::isFrameComplete() const
+{
+	for (const auto &[context, infoContext] : contexts_) {
+		if (!infoContext.isContextComplete())
+			return false;
+	}
+
+	return true;
+}
+
 NxpNeoFrames::NxpNeoFrames(NxpNeoCameraData *data)
 	: data_(data)
 {
@@ -460,21 +553,21 @@ int NxpNeoFrames::destroy(unsigned int id)
 		return -ENOENT;
 
 	/* Return internal buffers for reuse. */
-	for (const auto &[context, infoContext] : info->contexts) {
-		for (const auto &[bufferType, bufferDesc] : infoContext.buffers) {
+	for (const auto &[context, infoContext] : info->contexts_) {
+		for (const auto &[bufferType, bufferDesc] : infoContext.buffers_) {
 			FrameBuffer *buffer = bufferDesc.first;
-			if (buffer == info->rawStreamBuffer ||
-			    buffer == info->frameStreamBuffer ||
-			    buffer == info->irStreamBuffer)
+			if (buffer == info->rawStreamBuffer_ ||
+			    buffer == info->frameStreamBuffer_ ||
+			    buffer == info->irStreamBuffer_)
 				continue;
 			data_->availableBuffersMap_[bufferType].push(buffer);
 		}
 	}
 
 	/* Delete the extended frame information. */
-	frameInfo_.erase(info->id);
+	frameInfo_.erase(info->id_);
 
-	bufferAvailable.emit();
+	bufferAvailable_.emit();
 
 	return 0;
 }
@@ -490,6 +583,62 @@ NxpNeoFrames::Info *NxpNeoFrames::create(Request *request)
 		return createRaw(request);
 	else
 		return createYuv(request);
+}
+
+NxpNeoFrames::Info *NxpNeoFrames::find(unsigned int id) const
+{
+	const auto &itInfo = frameInfo_.find(id);
+
+	if (itInfo != frameInfo_.end())
+		return itInfo->second.get();
+
+	LOG(NxpNeoPipe, Debug) << "Can't find tracking information for frame " << id;
+
+	return nullptr;
+}
+
+std::pair<NxpNeoFrames::Info *, ContextType> NxpNeoFrames::find(FrameBuffer *buffer) const
+{
+	for (auto &itInfo : frameInfo_) {
+		Info *info = itInfo.second.get();
+		for (auto &[context, infoContext] : info->contexts_)
+			for (const auto &[bufferType, bufferDesc] : infoContext.buffers_)
+				if (bufferDesc.first == buffer)
+					return { info, context };
+	}
+
+	LOG(NxpNeoPipe, Debug) << "Can't find tracking information from buffer";
+
+	return { nullptr, ContextTypeRgb };
+}
+
+NxpNeoFrames::Info *NxpNeoFrames::find(Request *request) const
+{
+	for (const auto &itInfo : frameInfo_) {
+		Info *info = itInfo.second.get();
+		if (info->request_ == request)
+			return info;
+	}
+
+	LOG(NxpNeoPipe, Debug) << "Can't find tracking information from request";
+
+	return nullptr;
+}
+
+FrameBuffer *NxpNeoFrames::allocBuffer(BufferType bufferType)
+{
+	auto &buffersMap = data_->availableBuffersMap_;
+	auto it = buffersMap.find(bufferType);
+	if (it == buffersMap.end()) {
+		LOG(NxpNeoPipe, Error) << " No buffers for type " << bufferType;
+		return nullptr;
+	}
+
+	std::queue<FrameBuffer *> &queue = it->second;
+	ASSERT(!queue.empty());
+	FrameBuffer *buffer = queue.front();
+	queue.pop();
+	return buffer;
 }
 
 NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
@@ -517,17 +666,17 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 	/* \todo Remove the dynamic allocation of Info */
 	std::unique_ptr<Info> info = std::make_unique<Info>();
 
-	info->id = id;
-	info->request = request;
-	info->rawStreamBuffer = request->findBuffer(&data_->streamRaw_);
-	info->frameStreamBuffer = request->findBuffer(&data_->streamFrame_);
-	info->irStreamBuffer = request->findBuffer(&data_->streamIr_);
-	info->contexts.insert({ ContextTypeRgb, {} });
+	info->id_ = id;
+	info->request_ = request;
+	info->rawStreamBuffer_ = request->findBuffer(&data_->streamRaw_);
+	info->frameStreamBuffer_ = request->findBuffer(&data_->streamFrame_);
+	info->irStreamBuffer_ = request->findBuffer(&data_->streamIr_);
+	info->contexts_.insert({ ContextTypeRgb, {} });
 	if (data_->mode_ == ModeTypeRgbIrDual)
-		info->contexts.insert({ ContextTypeIr, {} });
+		info->contexts_.insert({ ContextTypeIr, {} });
 
 	bool evenRequest = (id % 2 == 0);
-	for (auto &[context, infoContext] : info->contexts) {
+	for (auto &[context, infoContext] : info->contexts_) {
 		/*
 		 * Map the ISP input buffers that are typically internal buffers
 		 * unless the raw stream is active in which case the raw buffer
@@ -536,7 +685,7 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 		 * - RGBIr context switch: we may want to alternate capture on
 		 *   the different contexts RGB and IR
 		 * - HDR merge mode, we may want to alternate capture on long
-		 *   and short frames (image0 and image 1)
+		 *   and short frames (image0 and image1)
 		 * In other cases, the raw stream is unconditionally mapped to
 		 * the image0. If there is no raw stream enabled and so no
 		 * dedicated buffer provided by the application, then internal
@@ -551,28 +700,28 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 				  (mode == ModeTypeRgbIrDual && context == ContextTypeIr));
 
 		bool alternatedRawStream = data_->alternatedRawStream_;
-		if (info->rawStreamBuffer) {
+		if (info->rawStreamBuffer_) {
 			if (alternatedRawStream && mode == ModeTypeRgbIrDual) {
 				unsigned int rawContext = evenRequest ? ContextTypeRgb : ContextTypeIr;
 				if (context == rawContext) {
 					if (hasImage0)
-						image0Buffer = info->rawStreamBuffer;
+						image0Buffer = info->rawStreamBuffer_;
 					else
-						image1Buffer = info->rawStreamBuffer;
+						image1Buffer = info->rawStreamBuffer_;
 				}
 			} else if (alternatedRawStream && mode == ModeTypeHdrMerge) {
 				if (evenRequest)
-					image0Buffer = info->rawStreamBuffer;
+					image0Buffer = info->rawStreamBuffer_;
 				else
-					image1Buffer = info->rawStreamBuffer;
+					image1Buffer = info->rawStreamBuffer_;
 
 			} else {
 				if (hasImage0)
-					image0Buffer = info->rawStreamBuffer;
+					image0Buffer = info->rawStreamBuffer_;
 			}
 		}
 
-		auto &buffersMap = infoContext.buffers;
+		auto &buffersMap = infoContext.buffers_;
 		if (hasImage0 && !image0Buffer)
 			image0Buffer = allocBuffer(BufferTypeImage0);
 		if (image0Buffer)
@@ -596,8 +745,8 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 		FrameBuffer *statsBuffer = allocBuffer(BufferTypeStats);
 		buffersMap.insert({ BufferTypeStats, { statsBuffer, true } });
 
-		infoContext.paramDequeued = false;
-		infoContext.metadataProcessed = false;
+		infoContext.paramDequeued_ = false;
+		infoContext.metadataProcessed_ = false;
 
 		/*
 		 * Map the ISP frame and infrared output buffer of the ISP. They
@@ -616,12 +765,12 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 				if (data_->rawStreamOnly_)
 					frameBuffer = allocBuffer(BufferTypeFrame);
 				else
-					frameBuffer = info->frameStreamBuffer;
-				if (info->irStreamBuffer)
+					frameBuffer = info->frameStreamBuffer_;
+				if (info->irStreamBuffer_)
 					irBuffer = allocBuffer(BufferTypeIr);
 			} else {
-				irBuffer = info->irStreamBuffer;
-				if ((info->frameStreamBuffer) || (data_->rawStreamOnly_))
+				irBuffer = info->irStreamBuffer_;
+				if ((info->frameStreamBuffer_) || (data_->rawStreamOnly_))
 					frameBuffer = allocBuffer(BufferTypeFrame);
 			}
 			break;
@@ -633,8 +782,8 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 			if (data_->rawStreamOnly_)
 				frameBuffer = allocBuffer(BufferTypeFrame);
 			else
-				frameBuffer = info->frameStreamBuffer;
-			irBuffer = info->irStreamBuffer;
+				frameBuffer = info->frameStreamBuffer_;
+			irBuffer = info->irStreamBuffer_;
 			break;
 		}
 
@@ -656,185 +805,24 @@ NxpNeoFrames::Info *NxpNeoFrames::createYuv(Request *request)
 	std::unique_ptr<Info> info = std::make_unique<Info>();
 
 	/* Single context, the output buffer is provided by application. */
-	info->id = id;
-	info->request = request;
-	info->rawStreamBuffer = request->findBuffer(&data_->streamRaw_);
-	info->frameStreamBuffer = nullptr;
-	info->irStreamBuffer = nullptr;
+	info->id_ = id;
+	info->request_ = request;
+	info->rawStreamBuffer_ = request->findBuffer(&data_->streamRaw_);
+	info->frameStreamBuffer_ = nullptr;
+	info->irStreamBuffer_ = nullptr;
 
-	info->contexts.insert({ ContextTypeRgb, {} });
-	InfoContext &infoContext = info->contexts.at(ContextTypeRgb);
-	auto &buffersMap = infoContext.buffers;
-	buffersMap.insert({ BufferTypeImage0, { info->rawStreamBuffer, true } });
+	info->contexts_.insert({ ContextTypeRgb, {} });
+	InfoContext &infoContext = info->contexts_.at(ContextTypeRgb);
+	auto &buffersMap = infoContext.buffers_;
+	buffersMap.insert({ BufferTypeImage0, { info->rawStreamBuffer_, true } });
 
 	/* IPA-related operations are bypassed */
-	infoContext.paramDequeued = true;
-	infoContext.metadataProcessed = true;
+	infoContext.paramDequeued_ = true;
+	infoContext.metadataProcessed_ = true;
 
 	frameInfo_[id] = std::move(info);
 
 	return frameInfo_[id].get();
-}
-
-NxpNeoFrames::Info *NxpNeoFrames::find(unsigned int id) const
-{
-	const auto &itInfo = frameInfo_.find(id);
-
-	if (itInfo != frameInfo_.end())
-		return itInfo->second.get();
-
-	LOG(NxpNeoPipe, Debug) << "Can't find tracking information for frame " << id;
-
-	return nullptr;
-}
-
-std::pair<NxpNeoFrames::Info *, ContextType> NxpNeoFrames::find(FrameBuffer *buffer) const
-{
-	for (auto &itInfo : frameInfo_) {
-		Info *info = itInfo.second.get();
-		for (auto &[context, infoContext] : info->contexts)
-			for (const auto &[bufferType, bufferDesc] : infoContext.buffers)
-				if (bufferDesc.first == buffer)
-					return { info, context };
-
-	}
-
-	LOG(NxpNeoPipe, Debug) << "Can't find tracking information from buffer";
-
-	return { nullptr, ContextTypeRgb };
-}
-
-NxpNeoFrames::Info *NxpNeoFrames::find(Request *request) const
-{
-	for (const auto &itInfo : frameInfo_) {
-		Info *info = itInfo.second.get();
-		if (info->request == request)
-			return info;
-	}
-
-	LOG(NxpNeoPipe, Debug) << "Can't find tracking information from request";
-
-	return nullptr;
-}
-
-int NxpNeoFrames::completeBuffer(Info *info, ContextType context,
-				 const FrameBuffer *buffer) const
-{
-	auto itContext = info->contexts.find(context);
-	if (itContext == info->contexts.end()) {
-		LOG(NxpNeoPipe, Error) << "Context does not exist " << context;
-		return -EINVAL;
-	}
-	InfoContext &infoContext = itContext->second;
-	for (auto &[bufferType, bufferDesc] : infoContext.buffers) {
-		if (bufferDesc.first != buffer)
-			continue;
-		if (!bufferDesc.second) {
-			LOG(NxpNeoPipe, Error) << "Buffer already completed";
-			return -EINVAL;
-		}
-		bufferDesc.second = false;
-		return 0;
-	}
-
-	LOG(NxpNeoPipe, Error) << "Buffer to complete not found in Info";
-
-	return -ENOENT;
-}
-
-bool NxpNeoFrames::isBufferPending(Info *info, ContextType context,
-				   const std::vector<BufferType> &bufferTypes) const
-{
-	auto itContext = info->contexts.find(context);
-	if (itContext == info->contexts.end()) {
-		LOG(NxpNeoPipe, Error) << "Context does not exist " << context;
-		return false;
-	}
-	const InfoContext &infoContext = itContext->second;
-	for (BufferType bufferType : bufferTypes) {
-		auto it = infoContext.buffers.find(bufferType);
-		if (it == infoContext.buffers.end())
-			continue;
-		const auto &bufferDesc = it->second;
-		if (bufferDesc.second)
-			return true;
-	}
-
-	return false;
-}
-
-bool NxpNeoFrames::isContextComplete(Info *info, ContextType context) const
-{
-	auto itContext = info->contexts.find(context);
-	if (itContext == info->contexts.end()) {
-		LOG(NxpNeoPipe, Error) << "Context does not exist " << context;
-		return false;
-	}
-	const InfoContext &infoContext = itContext->second;
-
-	const std::vector<BufferType> allBufferTypes = {
-		BufferTypeImage0,
-		BufferTypeImage1,
-		BufferTypeEData,
-		BufferTypeParams,
-		BufferTypeStats,
-		BufferTypeFrame,
-		BufferTypeIr,
-	};
-	bool buffersComplete = !isBufferPending(info, context, allBufferTypes);
-	bool complete = buffersComplete &&
-			infoContext.metadataProcessed && infoContext.paramDequeued;
-
-	return complete;
-}
-
-bool NxpNeoFrames::isFrameComplete(Info *info) const
-{
-	for (const auto &[context, infoContext] : info->contexts) {
-		if (!isContextComplete(info, context))
-			return false;
-	}
-
-	return true;
-}
-
-FrameBuffer *NxpNeoFrames::buffer(Info *info, ContextType context,
-				  BufferType bufferType, bool expected) const
-{
-	auto itContext = info->contexts.find(context);
-	if (itContext == info->contexts.end()) {
-		LOG(NxpNeoPipe, Error) << "Context does not exist " << context;
-		return nullptr;
-	}
-	const InfoContext &infoContext = itContext->second;
-
-	FrameBuffer *buffer = nullptr;
-	auto it = infoContext.buffers.find(bufferType);
-	if (it != infoContext.buffers.end()) {
-		auto &bufferDesc = it->second;
-		buffer = bufferDesc.first;
-	}
-
-	if (expected && !buffer)
-		LOG(NxpNeoPipe, Error)
-			<< "Expected buffer type " << bufferType;
-	return buffer;
-}
-
-FrameBuffer *NxpNeoFrames::allocBuffer(BufferType bufferType)
-{
-	auto &buffersMap = data_->availableBuffersMap_;
-	auto it = buffersMap.find(bufferType);
-	if (it == buffersMap.end()) {
-		LOG(NxpNeoPipe, Error) << " No buffers for type " << bufferType;
-		return nullptr;
-	}
-
-	std::queue<FrameBuffer *> &queue = it->second;
-	ASSERT(!queue.empty());
-	FrameBuffer *buffer = queue.front();
-	queue.pop();
-	return buffer;
 }
 
 NxpNeoCameraConfiguration::NxpNeoCameraConfiguration(Camera *camera,
@@ -1194,226 +1182,9 @@ PipelineHandlerNxpNeo::generateConfiguration(Camera *camera,
 {
 	NxpNeoCameraData *data = cameraData(camera);
 	if (data->isRawCamera())
-		return generateRawConfiguration(camera, roles);
+		return generateConfigurationRaw(camera, roles);
 	else
-		return generateYuvConfiguration(camera, roles);
-}
-
-std::unique_ptr<CameraConfiguration>
-PipelineHandlerNxpNeo::generateRawConfiguration(Camera *camera,
-						Span<const StreamRole> roles)
-{
-	NxpNeoCameraData *data = cameraData(camera);
-	std::unique_ptr<NxpNeoCameraConfiguration> config =
-		std::make_unique<NxpNeoCameraConfiguration>(camera, data);
-
-	LOG(NxpNeoPipe, Debug) << "Generate raw configuration " << data->cameraName();
-
-	if (roles.empty())
-		return config;
-
-	bool frameOutputAvailable = true;
-	bool irOutputAvailable = data->sensorIsRgbIr();
-	bool rawOutputAvailable = true;
-
-	std::optional<ColorSpace> colorSpace;
-
-	/*
-	 * Top embedded data from sensor are cropped before being fed to ISP
-	 * Cropped sensor sizes are used as proposed range for the ISP-decoded
-	 * streams. Conversely, the raw stream uses uncropped sensor sizes.
-	 */
-	const std::map<Size, std::vector<unsigned int>> &sizeToCodes =
-		data->formatsSizeToCodes();
-	const std::vector<Size> sensorSizes = utils::map_keys(sizeToCodes);
-	std::vector<Size> pixelSizes(sensorSizes);
-	for (Size &size : pixelSizes)
-		data->adjustTopLinesSize(&size);
-	std::vector<SizeRange> pixelRanges;
-	for (const Size &size : pixelSizes)
-		pixelRanges.emplace_back(size);
-
-	for (const StreamRole role : roles) {
-		std::map<PixelFormat, std::vector<SizeRange>> streamFormats;
-		PixelFormat pixelFormat;
-		Size cfgSize;
-
-		switch (role) {
-		case StreamRole::StillCapture:
-		case StreamRole::Viewfinder:
-		case StreamRole::VideoRecording: {
-			/*
-			 * Propose the resolutions supported by the sensor with
-			 * all output formats supported by the ISP, including
-			 * Infrared (gray) if supported by the sensor.
-			 */
-			const std::vector<V4L2PixelFormat> &frameFormats =
-				NeoDevice::frameFormats();
-			pixelFormat = frameFormats[0].toPixelFormat();
-			for (const V4L2PixelFormat &format : frameFormats)
-				streamFormats[format.toPixelFormat()] = pixelRanges;
-
-			const std::vector<V4L2PixelFormat> &irFormats =
-				NeoDevice::irFormats();
-			if (data->sensorIsRgbIr()) {
-				for (const V4L2PixelFormat &format : irFormats)
-					streamFormats[format.toPixelFormat()] = pixelRanges;
-			}
-
-			/*
-			 * Select only one format per ISP capture node so that
-			 * the resulting stream configuration passes validate()
-			 * check.
-			 */
-			if (frameOutputAvailable) {
-				pixelFormat = frameFormats[0].toPixelFormat();
-				colorSpace = ColorSpace::Sycc;
-				frameOutputAvailable = false;
-			} else if (irOutputAvailable) {
-				pixelFormat = irFormats[0].toPixelFormat();
-				colorSpace = ColorSpace::Raw;
-				irOutputAvailable = false;
-			} else {
-				LOG(NxpNeoPipe, Error) << "Too many yuv/rgb streams";
-				return nullptr;
-			}
-			ASSERT(pixelSizes.size());
-			cfgSize = pixelSizes.back();
-
-			break;
-		}
-
-		case StreamRole::Raw: {
-			/*
-			 * Expose the resolutions associated to each mbus code
-			 * available from the different sensor modes.
-			 */
-			if (!rawOutputAvailable) {
-				LOG(NxpNeoPipe, Error) << "Too many raw streams";
-				return nullptr;
-			}
-
-			const std::map<unsigned int, std::vector<Size>> &codeToSizes =
-				data->formatsCodeToSizes();
-			for (const auto &[code, sizes] : codeToSizes) {
-				std::vector<SizeRange> sensorRanges;
-				const BayerFormat &bayerFormat =
-					BayerFormat::fromMbusCode(code);
-				pixelFormat = bayerFormat.toPixelFormat();
-				for (const Size &size : sizes)
-					sensorRanges.emplace_back(size);
-				streamFormats[pixelFormat] = sensorRanges;
-				ASSERT(sizes.size());
-				cfgSize = sizes.back();
-			}
-
-			colorSpace = ColorSpace::Raw;
-			rawOutputAvailable = false;
-			break;
-		}
-
-		default:
-			LOG(NxpNeoPipe, Error)
-				<< "Requested stream role not supported: " << role;
-			return nullptr;
-		}
-
-		StreamFormats formats(streamFormats);
-		StreamConfiguration cfg(formats);
-		cfg.size = cfgSize;
-		cfg.pixelFormat = pixelFormat;
-		cfg.colorSpace = colorSpace;
-		const GlobalInfo &globalInfo =
-			data->pipe()->pipelineConfig()->globalInfo();
-		cfg.bufferCount = globalInfo.bufferCount;
-
-		config->addConfiguration(cfg);
-		LOG(NxpNeoPipe, Debug)
-			<< "Generated configuration " << cfg.toString()
-			<< " for role " << role;
-	}
-
-	if (data->defaultOrientation().has_value())
-		config->orientation = data->defaultOrientation().value();
-
-	if (config->validate() == CameraConfiguration::Invalid)
-		return {};
-
-	return config;
-}
-
-std::unique_ptr<CameraConfiguration>
-PipelineHandlerNxpNeo::generateYuvConfiguration(Camera *camera,
-						Span<const StreamRole> roles)
-{
-	NxpNeoCameraData *data = cameraData(camera);
-	std::unique_ptr<NxpNeoCameraConfiguration> config =
-		std::make_unique<NxpNeoCameraConfiguration>(camera, data);
-
-	LOG(NxpNeoPipe, Debug) << "Generate YUV configuration " << data->cameraName();
-
-	if (roles.empty())
-		return config;
-
-	/* \todo: Add multistream support */
-	if (roles.size() > 1) {
-		LOG(NxpNeoPipe, Error) << "Single stream supported";
-		return nullptr;
-	}
-
-	const StreamRole &role = roles[0];
-	std::map<PixelFormat, std::vector<SizeRange>> streamFormats;
-	const std::map<Size, std::vector<unsigned int>> &sizeToCodes =
-		data->formatsSizeToCodes();
-	const std::vector<Size> sensorSizes = utils::map_keys(sizeToCodes);
-
-	switch (role) {
-	case StreamRole::StillCapture:
-	case StreamRole::Viewfinder:
-	case StreamRole::VideoRecording: {
-		/*
-		 * Sensor formats were screened to be compatible with ISI
-		 * channel processed mode. Provide all the RGB/YUV processed
-		 * formats with the sensor native size.
-		 * \todo Add channel rescaling support
-		 */
-		std::vector<SizeRange> sensorRanges;
-		for (const Size &size : sensorSizes)
-			sensorRanges.emplace_back(size);
-
-		std::vector<PixelFormat> pixelFormats =
-			ISIPipe::pixelFormatsProcessed();
-		for (const PixelFormat &format : pixelFormats)
-			streamFormats[format] = sensorRanges;
-		break;
-	}
-
-	default:
-		LOG(NxpNeoPipe, Error) << "Stream role not supported " << role;
-		return nullptr;
-	}
-
-	StreamFormats formats(streamFormats);
-	StreamConfiguration cfg(formats);
-	cfg.pixelFormat = formats::YUYV;
-	cfg.size = sensorSizes.back();
-
-	const GlobalInfo &globalInfo =
-		data->pipe()->pipelineConfig()->globalInfo();
-	cfg.bufferCount = globalInfo.bufferCount;
-
-	config->addConfiguration(cfg);
-	LOG(NxpNeoPipe, Debug)
-		<< "Generated configuration " << cfg.toString()
-		<< " for role " << role;
-
-	if (data->defaultOrientation().has_value())
-		config->orientation = data->defaultOrientation().value();
-
-	if (config->validate() == CameraConfiguration::Invalid)
-		return {};
-
-	return config;
+		return generateConfigurationYuv(camera, roles);
 }
 
 int PipelineHandlerNxpNeo::configure(Camera *camera, CameraConfiguration *c)
@@ -1578,6 +1349,223 @@ int PipelineHandlerNxpNeo::createCamera(MediaEntity *sensorEntity,
 	return 0;
 }
 
+std::unique_ptr<CameraConfiguration>
+PipelineHandlerNxpNeo::generateConfigurationRaw(Camera *camera,
+						Span<const StreamRole> roles)
+{
+	NxpNeoCameraData *data = cameraData(camera);
+	std::unique_ptr<NxpNeoCameraConfiguration> config =
+		std::make_unique<NxpNeoCameraConfiguration>(camera, data);
+
+	LOG(NxpNeoPipe, Debug) << "Generate raw configuration " << data->cameraName();
+
+	if (roles.empty())
+		return config;
+
+	bool frameOutputAvailable = true;
+	bool irOutputAvailable = data->sensorIsRgbIr();
+	bool rawOutputAvailable = true;
+
+	std::optional<ColorSpace> colorSpace;
+
+	/*
+	 * Top embedded data from sensor are cropped before being fed to ISP
+	 * Cropped sensor sizes are used as proposed range for the ISP-decoded
+	 * streams. Conversely, the raw stream uses uncropped sensor sizes.
+	 */
+	const std::map<Size, std::vector<unsigned int>> &sizeToCodes =
+		data->formatsSizeToCodes();
+	const std::vector<Size> sensorSizes = utils::map_keys(sizeToCodes);
+	std::vector<Size> pixelSizes(sensorSizes);
+	for (Size &size : pixelSizes)
+		data->adjustTopLinesSize(&size);
+	std::vector<SizeRange> pixelRanges;
+	for (const Size &size : pixelSizes)
+		pixelRanges.emplace_back(size);
+
+	for (const StreamRole role : roles) {
+		std::map<PixelFormat, std::vector<SizeRange>> streamFormats;
+		PixelFormat pixelFormat;
+		Size cfgSize;
+
+		switch (role) {
+		case StreamRole::StillCapture:
+		case StreamRole::Viewfinder:
+		case StreamRole::VideoRecording: {
+			/*
+			 * Propose the resolutions supported by the sensor with
+			 * all output formats supported by the ISP, including
+			 * Infrared (gray) if supported by the sensor.
+			 */
+			const std::vector<V4L2PixelFormat> &frameFormats =
+				NeoDevice::frameFormats();
+			pixelFormat = frameFormats[0].toPixelFormat();
+			for (const V4L2PixelFormat &format : frameFormats)
+				streamFormats[format.toPixelFormat()] = pixelRanges;
+
+			const std::vector<V4L2PixelFormat> &irFormats =
+				NeoDevice::irFormats();
+			if (data->sensorIsRgbIr()) {
+				for (const V4L2PixelFormat &format : irFormats)
+					streamFormats[format.toPixelFormat()] = pixelRanges;
+			}
+
+			/*
+			 * Select only one format per ISP capture node so that
+			 * the resulting stream configuration passes validate()
+			 * check.
+			 */
+			if (frameOutputAvailable) {
+				pixelFormat = frameFormats[0].toPixelFormat();
+				colorSpace = ColorSpace::Sycc;
+				frameOutputAvailable = false;
+			} else if (irOutputAvailable) {
+				pixelFormat = irFormats[0].toPixelFormat();
+				colorSpace = ColorSpace::Raw;
+				irOutputAvailable = false;
+			} else {
+				LOG(NxpNeoPipe, Error) << "Too many yuv/rgb streams";
+				return nullptr;
+			}
+			ASSERT(pixelSizes.size());
+			cfgSize = pixelSizes.back();
+
+			break;
+		}
+
+		case StreamRole::Raw: {
+			/*
+			 * Expose the resolutions associated to each mbus code
+			 * available from the different sensor modes.
+			 */
+			if (!rawOutputAvailable) {
+				LOG(NxpNeoPipe, Error) << "Too many raw streams";
+				return nullptr;
+			}
+
+			const std::map<unsigned int, std::vector<Size>> &codeToSizes =
+				data->formatsCodeToSizes();
+			for (const auto &[code, sizes] : codeToSizes) {
+				std::vector<SizeRange> sensorRanges;
+				const BayerFormat &bayerFormat =
+					BayerFormat::fromMbusCode(code);
+				pixelFormat = bayerFormat.toPixelFormat();
+				for (const Size &size : sizes)
+					sensorRanges.emplace_back(size);
+				streamFormats[pixelFormat] = sensorRanges;
+				ASSERT(sizes.size());
+				cfgSize = sizes.back();
+			}
+
+			colorSpace = ColorSpace::Raw;
+			rawOutputAvailable = false;
+			break;
+		}
+
+		default:
+			LOG(NxpNeoPipe, Error)
+				<< "Requested stream role not supported: " << role;
+			return nullptr;
+		}
+
+		StreamFormats formats(streamFormats);
+		StreamConfiguration cfg(formats);
+		cfg.size = cfgSize;
+		cfg.pixelFormat = pixelFormat;
+		cfg.colorSpace = colorSpace;
+		const GlobalInfo &globalInfo =
+			data->pipe()->pipelineConfig()->globalInfo();
+		cfg.bufferCount = globalInfo.bufferCount;
+
+		config->addConfiguration(cfg);
+		LOG(NxpNeoPipe, Debug)
+			<< "Generated configuration " << cfg.toString()
+			<< " for role " << role;
+	}
+
+	if (data->defaultOrientation().has_value())
+		config->orientation = data->defaultOrientation().value();
+
+	if (config->validate() == CameraConfiguration::Invalid)
+		return {};
+
+	return config;
+}
+
+std::unique_ptr<CameraConfiguration>
+PipelineHandlerNxpNeo::generateConfigurationYuv(Camera *camera,
+						Span<const StreamRole> roles)
+{
+	NxpNeoCameraData *data = cameraData(camera);
+	std::unique_ptr<NxpNeoCameraConfiguration> config =
+		std::make_unique<NxpNeoCameraConfiguration>(camera, data);
+
+	LOG(NxpNeoPipe, Debug) << "Generate YUV configuration " << data->cameraName();
+
+	if (roles.empty())
+		return config;
+
+	/* \todo: Add multistream support */
+	if (roles.size() > 1) {
+		LOG(NxpNeoPipe, Error) << "Single stream supported";
+		return nullptr;
+	}
+
+	const StreamRole &role = roles[0];
+	std::map<PixelFormat, std::vector<SizeRange>> streamFormats;
+	const std::map<Size, std::vector<unsigned int>> &sizeToCodes =
+		data->formatsSizeToCodes();
+	const std::vector<Size> sensorSizes = utils::map_keys(sizeToCodes);
+
+	switch (role) {
+	case StreamRole::StillCapture:
+	case StreamRole::Viewfinder:
+	case StreamRole::VideoRecording: {
+		/*
+		 * Sensor formats were screened to be compatible with ISI
+		 * channel processed mode. Provide all the RGB/YUV processed
+		 * formats with the sensor native size.
+		 * \todo Add channel rescaling support
+		 */
+		std::vector<SizeRange> sensorRanges;
+		for (const Size &size : sensorSizes)
+			sensorRanges.emplace_back(size);
+
+		std::vector<PixelFormat> pixelFormats =
+			ISIPipe::pixelFormatsProcessed();
+		for (const PixelFormat &format : pixelFormats)
+			streamFormats[format] = sensorRanges;
+		break;
+	}
+
+	default:
+		LOG(NxpNeoPipe, Error) << "Stream role not supported " << role;
+		return nullptr;
+	}
+
+	StreamFormats formats(streamFormats);
+	StreamConfiguration cfg(formats);
+	cfg.pixelFormat = formats::YUYV;
+	cfg.size = sensorSizes.back();
+
+	const GlobalInfo &globalInfo =
+		data->pipe()->pipelineConfig()->globalInfo();
+	cfg.bufferCount = globalInfo.bufferCount;
+
+	config->addConfiguration(cfg);
+	LOG(NxpNeoPipe, Debug)
+		<< "Generated configuration " << cfg.toString()
+		<< " for role " << role;
+
+	if (data->defaultOrientation().has_value())
+		config->orientation = data->defaultOrientation().value();
+
+	if (config->validate() == CameraConfiguration::Invalid)
+		return {};
+
+	return config;
+}
+
 /**
  * \brief Configure the V4L2 subdevices routing
  *
@@ -1725,219 +1713,6 @@ int NxpNeoCameraData::configure(CameraConfiguration *c)
 		return configureYuv(c);
 }
 
-int NxpNeoCameraData::configureRaw(CameraConfiguration *c)
-{
-	NxpNeoCameraConfiguration *config =
-		static_cast<NxpNeoCameraConfiguration *>(c);
-	int ret = 0;
-
-	LOG(NxpNeoPipe, Debug) << "Configure " << cameraName();
-
-	/*
-	 * Camera front-end graph reconfiguration is only applicable to the
-	 * single camera case. For multi-camera case, front-end was statically
-	 * configured at camera acquisition time.
-	 * Only the ISI pipes at the very end of the front-end can be
-	 * configured without multi-camera consideration. The pipe subdevice
-	 * format comes from the front-end configuration.
-	 */
-	if (!multiCamera()) {
-		V4L2SubdeviceFormat sensorFormat = config->sensorFormat();
-		ret = configureFrontEndFormat(sensorFormat,
-					      config->combinedTransform());
-		if (ret)
-			return ret;
-	}
-	std::map<StreamType, V4L2DeviceFormat> pipesDevFormats;
-	for (auto [stream, pipe] : pipes_) {
-		V4L2SubdeviceFormat &subdevFormat = pipesSubDevFormats_[stream];
-		V4L2DeviceFormat &deviceFormat = pipesDevFormats[stream];
-		deviceFormat = {};
-		ret |= pipe->configure(subdevFormat, deviceFormat);
-	}
-	if (ret)
-		return ret;
-
-	/* ISP configuration. */
-	V4L2DeviceFormat devFormatFrame = {};
-	V4L2DeviceFormat devFormatIr = {};
-
-	V4L2DeviceFormat &devFormatInput0 =
-		pipesDevFormats[StreamTypeImage0];
-	V4L2DeviceFormat devFormatInput1None = {};
-	V4L2DeviceFormat &devFormatInput1 =
-		mode_ == ModeTypeHdrMerge
-			? pipesDevFormats[StreamTypeImage1]
-			: devFormatInput1None;
-
-	rawStreamOnly_ = ((config->size() == 1) &&
-			  ((*config)[0].stream() == &streamRaw_));
-
-	if (!rawStreamOnly_) {
-		for (unsigned int i = 0; i < config->size(); ++i) {
-			StreamConfiguration &cfg = (*config)[i];
-			Stream *stream = cfg.stream();
-
-			if (stream == &streamRaw_)
-				continue;
-
-			V4L2DeviceFormat *deviceFormat;
-			V4L2VideoDevice *videoDevice;
-			if (stream == &streamFrame_) {
-				deviceFormat = &devFormatFrame;
-				videoDevice = neo_->frame_.get();
-			} else {
-				deviceFormat = &devFormatIr;
-				videoDevice = neo_->ir_.get();
-			}
-
-			V4L2PixelFormat pixelFormat =
-				videoDevice->toV4L2PixelFormat(cfg.pixelFormat);
-			deviceFormat->fourcc = pixelFormat;
-
-			deviceFormat->size = cfg.size;
-
-			/*
-			 * Use libcamera sYCC colorspace definition that maps
-			 * to a v4l2 sRGB colorspace equivalent.
-			 */
-			std::optional<ColorSpace> colorSpace = cfg.colorSpace;
-			if (colorSpace && colorSpace.value() == ColorSpace::Srgb)
-				colorSpace = ColorSpace::Sycc;
-			deviceFormat->colorSpace = colorSpace;
-		}
-	} else {
-		/*
-		 * ISP driver requires at least one of the output video nodes to
-		 * be enabled. During raw-stream only mode of operation, there
-		 * is no buffer provided by the application for the outputs.
-		 * Thus, configure the frame output with an arbitrary format.
-		 * Internal buffers will be allocated and provided to the ISP.
-		 */
-		devFormatFrame.size = devFormatInput0.size;
-		adjustTopLinesSize(&devFormatFrame.size);
-		devFormatFrame.fourcc = V4L2PixelFormat(V4L2_PIX_FMT_NV12);
-		devFormatFrame.colorSpace = ColorSpace::Sycc;
-	}
-
-	NeoDevice::PipeConfig pipeConfig = {};
-	pipeConfig.topLines = embeddedTopLines_;
-	ret = neo_->configure(pipeConfig,
-			      &devFormatInput0, &devFormatInput1,
-			      &devFormatFrame, &devFormatIr);
-	if (ret)
-		return ret;
-
-	/*
-	 * Raw stream is mapped alternately on image0 and image1 for cases
-	 *  - RGBIr dual context to capture both contexts
-	 *  - HDR Merge to capture long and short images if they share the same
-	 *    format
-	 */
-	if (mode_ == ModeTypeRgbIrDual)
-		alternatedRawStream_ = true;
-	else if (mode_ == ModeTypeHdrMerge)
-		alternatedRawStream_ =
-			(devFormatInput0.fourcc == devFormatInput1.fourcc &&
-			 devFormatInput0.size == devFormatInput1.size);
-	else
-		alternatedRawStream_ = false;
-
-	LOG(NxpNeoPipe, Debug) << "alternated raw streams " << alternatedRawStream_;
-
-	/*
-	 * IPA configuration
-	 */
-	IPACameraSensorInfo sensorInfo;
-	ret = sensor_->sensorInfo(&sensorInfo);
-	if (ret)
-		return ret;
-	adjustTopLinesSize(&sensorInfo.outputSize);
-
-	std::map<unsigned int, IPAStream> streamConfig;
-
-	ColorSpace colorSpace = ColorSpace::Raw;
-	for (unsigned int i = 0; i < config->size(); ++i) {
-		StreamConfiguration &cfg = (*config)[i];
-		Stream *stream = cfg.stream();
-
-		if (stream == &streamFrame_) {
-			streamConfig[ipa::nxpneo::IPAStreamTypeFrame] = IPAStream(cfg.pixelFormat,
-										  cfg.size);
-			/*
-			 * Take color space from the frame if it exists,
-			 * or default to raw (IR only stream case).
-			 */
-			colorSpace = cfg.colorSpace.value_or(ColorSpace::Raw);
-		} else if (stream == &streamIr_) {
-			streamConfig[ipa::nxpneo::IPAStreamTypeIr] = IPAStream(cfg.pixelFormat,
-									       cfg.size);
-		}
-	}
-
-	ipa::nxpneo::IPAConfigInfo configInfo;
-	std::vector<uint32_t> ids = utils::map_keys(sensor_->controls().idmap());
-	configInfo.sensorControls = sensor_->controls();
-	configInfo.sensorControlList = sensor_->getControls(ids);
-	configInfo.sensorInfo = sensorInfo;
-
-	ipa::nxpneo::IPAColorSpace IPAcolorSpace = ipa::nxpneo::IPAColorSpace(
-		static_cast<ipa::nxpneo::IPAPrimaries>(colorSpace.primaries),
-		static_cast<ipa::nxpneo::IPATransferFunction>(colorSpace.transferFunction),
-		static_cast<ipa::nxpneo::IPAYcbcrEncoding>(colorSpace.ycbcrEncoding),
-		static_cast<ipa::nxpneo::IPARange>(colorSpace.range));
-
-	ret = ipa_->configure(configInfo, streamConfig,
-			      static_cast<ipa::nxpneo::IPAModeType>(mode_),
-			      IPAcolorSpace, &ipaControls_);
-	if (ret) {
-		LOG(NxpNeoPipe, Error) << "Failed to configure IPA: "
-				       << strerror(-ret);
-		return ret;
-	}
-
-	ret = updateControls();
-	return ret;
-}
-
-int NxpNeoCameraData::configureYuv(CameraConfiguration *c)
-{
-	NxpNeoCameraConfiguration *config =
-		static_cast<NxpNeoCameraConfiguration *>(c);
-	int ret;
-	LOG(NxpNeoPipe, Debug) << "Configure " << cameraName();
-
-	/*
-	 * Camera front-end graph reconfiguration is only applicable to the
-	 * single camera case. For multi-camera case, front-end was statically
-	 * configured at camera acquisition time.
-	 * Only the ISI pipes at the very end of the front-end can be
-	 * configured without multi-camera consideration. The pipe subdevice
-	 * format comes from the front-end configuration.
-	 */
-	if (!multiCamera()) {
-		V4L2SubdeviceFormat sensorFormat = config->sensorFormat();
-		ret = configureFrontEndFormat(sensorFormat,
-					      config->combinedTransform());
-		if (ret)
-			return ret;
-	}
-	/* \todo support multistream */
-	ISIPipe *pipe = pipes_.at(StreamTypeImage0);
-	StreamConfiguration &streamConfig = c->at(0);
-
-	V4L2SubdeviceFormat &subdevFormat = pipesSubDevFormats_[StreamTypeImage0];
-	V4L2DeviceFormat deviceFormat = {};
-	V4L2VideoDevice *videoDevice = pipe->output_.get();
-	deviceFormat.fourcc =
-		videoDevice->toV4L2PixelFormat(streamConfig.pixelFormat);
-	deviceFormat.size = streamConfig.size;
-	deviceFormat.colorSpace = streamConfig.colorSpace;
-
-	ret = pipe->configure(subdevFormat, deviceFormat);
-	return ret;
-}
-
 int NxpNeoCameraData::exportFrameBuffers(Stream *stream,
 					 std::vector<std::unique_ptr<FrameBuffer>> *buffers)
 {
@@ -2077,12 +1852,11 @@ void NxpNeoCameraData::queuePendingRequests()
 		if (!info)
 			break;
 
-		for (const auto context : utils::map_keys(info->contexts)) {
+		for (const auto &[context, infoContext] : info->contexts_) {
 			for (auto [stream, pipe] : pipes_) {
 				V4L2VideoDevice *dev = pipe->output_.get();
 				BufferType bufferType = streamToBufferType.at(stream);
-				FrameBuffer *buffer =
-					frameInfos_.buffer(info, context, bufferType, false);
+				FrameBuffer *buffer = infoContext.buffer(bufferType);
 				if (!buffer)
 					continue;
 				ret |= dev->queueBuffer(buffer);
@@ -2093,16 +1867,16 @@ void NxpNeoCameraData::queuePendingRequests()
 			LOG(NxpNeoPipe, Error)
 				<< "Failed to queue buffers, unbalanced queues";
 			pipe()->cancelRequest(request);
-			frameInfos_.destroy(info->id);
+			frameInfos_.destroy(info->id_);
 			pendingRequests_.pop();
 			return;
 		}
 
 		if (isRawCamera())
-			ipa_->queueRequest(info->id, request->controls());
+			ipa_->queueRequest(info->id_, request->controls());
 
 		pendingRequests_.pop();
-		processingRequests_.push(request);
+		processingRequests_.push_back(request);
 	}
 
 	return;
@@ -2241,6 +2015,10 @@ int NxpNeoCameraData::init(DeviceEnumerator *enumerator)
 			this, &NxpNeoCameraData::neoParamsBufferReady);
 		neo_->stats_->bufferReady.connect(
 			this, &NxpNeoCameraData::neoStatsBufferReady);
+		if (updateControlsOnIspSync()) {
+			neo_->isp_->frameStart.connect(
+				this, &NxpNeoCameraData::frameStart);
+		}
 	}
 
 	return 0;
@@ -2399,7 +2177,8 @@ int NxpNeoCameraData::loadIPA()
 	ipa::nxpneo::SensorConfig sensorConfig;
 	const MediaEntity *entity = sensor->entity();
 	std::vector<uint32_t> ids = utils::map_keys(sensor_->controls().idmap());
-	ipa::nxpneo::InitParams initParams = { hwRevision, neo_->apiVersion(),
+	ipa::nxpneo::InitParams initParams = { hwRevision, neo_->hwCapabilities(),
+					       neo_->apiVersion(),
 					       entity->name(), sensorInfo,
 					       sensor->controls(),
 					       sensor_->getControls(ids) };
@@ -2465,7 +2244,7 @@ int NxpNeoCameraData::allocateBuffers()
 	if (ret)
 		return ret;
 
-	frameInfos_.bufferAvailable.connect(
+	frameInfos_.bufferAvailable_.connect(
 		this, &NxpNeoCameraData::queuePendingRequests);
 	return 0;
 }
@@ -2583,7 +2362,7 @@ int NxpNeoCameraData::allocateBuffersYuv()
 
 int NxpNeoCameraData::freeBuffers()
 {
-	frameInfos_.bufferAvailable.disconnect(
+	frameInfos_.bufferAvailable_.disconnect(
 		this, &NxpNeoCameraData::queuePendingRequests);
 	frameInfos_.clear();
 
@@ -2744,6 +2523,224 @@ int NxpNeoCameraData::configureFrontEndLinks() const
 	}
 
 	return 0;
+}
+
+int NxpNeoCameraData::configureRaw(CameraConfiguration *c)
+{
+	NxpNeoCameraConfiguration *config =
+		static_cast<NxpNeoCameraConfiguration *>(c);
+	int ret = 0;
+
+	LOG(NxpNeoPipe, Debug) << "Configure " << cameraName();
+
+	/*
+	 * Camera front-end graph reconfiguration is only applicable to the
+	 * single camera case. For multi-camera case, front-end was statically
+	 * configured at camera acquisition time.
+	 * Only the ISI pipes at the very end of the front-end can be
+	 * configured without multi-camera consideration. The pipe subdevice
+	 * format comes from the front-end configuration.
+	 */
+	if (!multiCamera()) {
+		V4L2SubdeviceFormat sensorFormat = config->sensorFormat();
+		ret = configureFrontEndFormat(sensorFormat,
+					      config->combinedTransform());
+		if (ret)
+			return ret;
+	}
+	std::map<StreamType, V4L2DeviceFormat> pipesDevFormats;
+	for (auto [stream, pipe] : pipes_) {
+		V4L2SubdeviceFormat &subdevFormat = pipesSubDevFormats_[stream];
+		V4L2DeviceFormat &deviceFormat = pipesDevFormats[stream];
+		deviceFormat = {};
+		ret |= pipe->configure(subdevFormat, deviceFormat);
+	}
+	if (ret)
+		return ret;
+
+	/* ISP configuration. */
+	V4L2DeviceFormat devFormatFrame = {};
+	V4L2DeviceFormat devFormatIr = {};
+
+	V4L2DeviceFormat &devFormatInput0 =
+		pipesDevFormats[StreamTypeImage0];
+	V4L2DeviceFormat devFormatInput1None = {};
+	V4L2DeviceFormat &devFormatInput1 =
+		mode_ == ModeTypeHdrMerge
+			? pipesDevFormats[StreamTypeImage1]
+			: devFormatInput1None;
+
+	rawStreamOnly_ = ((config->size() == 1) &&
+			  ((*config)[0].stream() == &streamRaw_));
+
+	if (!rawStreamOnly_) {
+		for (unsigned int i = 0; i < config->size(); ++i) {
+			StreamConfiguration &cfg = (*config)[i];
+			Stream *stream = cfg.stream();
+
+			if (stream == &streamRaw_)
+				continue;
+
+			V4L2DeviceFormat *deviceFormat;
+			V4L2VideoDevice *videoDevice;
+			if (stream == &streamFrame_) {
+				deviceFormat = &devFormatFrame;
+				videoDevice = neo_->frame_.get();
+			} else {
+				deviceFormat = &devFormatIr;
+				videoDevice = neo_->ir_.get();
+			}
+
+			V4L2PixelFormat pixelFormat =
+				videoDevice->toV4L2PixelFormat(cfg.pixelFormat);
+			deviceFormat->fourcc = pixelFormat;
+
+			deviceFormat->size = cfg.size;
+
+			/*
+			 * Use libcamera sYCC colorspace definition that maps
+			 * to a v4l2 sRGB colorspace equivalent.
+			 */
+			std::optional<ColorSpace> colorSpace = cfg.colorSpace;
+			if (colorSpace && colorSpace.value() == ColorSpace::Srgb)
+				colorSpace = ColorSpace::Sycc;
+			deviceFormat->colorSpace = colorSpace;
+		}
+	} else {
+		/*
+		 * ISP driver requires at least one of the output video nodes to
+		 * be enabled. During raw-stream only mode of operation, there
+		 * is no buffer provided by the application for the outputs.
+		 * Thus, configure the frame output with an arbitrary format.
+		 * Internal buffers will be allocated and provided to the ISP.
+		 */
+		devFormatFrame.size = devFormatInput0.size;
+		adjustTopLinesSize(&devFormatFrame.size);
+		devFormatFrame.fourcc = V4L2PixelFormat(V4L2_PIX_FMT_NV12);
+		devFormatFrame.colorSpace = ColorSpace::Sycc;
+	}
+
+	NeoDevice::PipeConfig pipeConfig = {};
+	pipeConfig.topLines = embeddedTopLines_;
+	ret = neo_->configure(pipeConfig,
+			      &devFormatInput0, &devFormatInput1,
+			      &devFormatFrame, &devFormatIr);
+	if (ret)
+		return ret;
+
+	/*
+	 * Raw stream is mapped alternately on image0 and image1 for cases
+	 *  - RGBIr dual context to capture both contexts
+	 *  - HDR Merge to capture long and short images if they share the same
+	 *    format
+	 */
+	if (mode_ == ModeTypeRgbIrDual)
+		alternatedRawStream_ = true;
+	else if (mode_ == ModeTypeHdrMerge)
+		alternatedRawStream_ =
+			(devFormatInput0.fourcc == devFormatInput1.fourcc &&
+			 devFormatInput0.size == devFormatInput1.size);
+	else
+		alternatedRawStream_ = false;
+
+	LOG(NxpNeoPipe, Debug) << "alternated raw streams " << alternatedRawStream_;
+
+	/*
+	 * IPA configuration
+	 */
+	IPACameraSensorInfo sensorInfo;
+	ret = sensor_->sensorInfo(&sensorInfo);
+	if (ret)
+		return ret;
+	adjustTopLinesSize(&sensorInfo.outputSize);
+
+	std::map<unsigned int, IPAStream> streamConfig;
+
+	ColorSpace colorSpace = ColorSpace::Raw;
+	for (unsigned int i = 0; i < config->size(); ++i) {
+		StreamConfiguration &cfg = (*config)[i];
+		Stream *stream = cfg.stream();
+
+		if (stream == &streamFrame_) {
+			streamConfig[ipa::nxpneo::IPAStreamTypeFrame] = IPAStream(cfg.pixelFormat,
+										  cfg.size);
+			/*
+			 * Take color space from the frame if it exists,
+			 * or default to raw (IR only stream case).
+			 */
+			colorSpace = cfg.colorSpace.value_or(ColorSpace::Raw);
+		} else if (stream == &streamIr_) {
+			streamConfig[ipa::nxpneo::IPAStreamTypeIr] = IPAStream(cfg.pixelFormat,
+									       cfg.size);
+		}
+	}
+
+	ipa::nxpneo::IPAConfigInfo configInfo;
+	std::vector<uint32_t> ids = utils::map_keys(sensor_->controls().idmap());
+	configInfo.sensorControls = sensor_->controls();
+	configInfo.sensorControlList = sensor_->getControls(ids);
+	configInfo.sensorInfo = sensorInfo;
+
+	configInfo.colorSpace = ipa::nxpneo::IPAColorSpace(
+		static_cast<ipa::nxpneo::IPAPrimaries>(colorSpace.primaries),
+		static_cast<ipa::nxpneo::IPATransferFunction>(colorSpace.transferFunction),
+		static_cast<ipa::nxpneo::IPAYcbcrEncoding>(colorSpace.ycbcrEncoding),
+		static_cast<ipa::nxpneo::IPARange>(colorSpace.range));
+
+	configInfo.mode = static_cast<ipa::nxpneo::IPAModeType>(mode_);
+
+	const PixelFormatInfo &pixelformatInfo =
+		PixelFormatInfo::info(devFormatInput1.fourcc);
+	configInfo.bitsPerPixelAuxiliary =
+		pixelformatInfo.isValid() ? pixelformatInfo.bitsPerPixel : 0;
+
+	ret = ipa_->configure(configInfo, streamConfig, &ipaControls_);
+	if (ret) {
+		LOG(NxpNeoPipe, Error) << "Failed to configure IPA: "
+				       << strerror(-ret);
+		return ret;
+	}
+
+	ret = updateControls();
+	return ret;
+}
+
+int NxpNeoCameraData::configureYuv(CameraConfiguration *c)
+{
+	NxpNeoCameraConfiguration *config =
+		static_cast<NxpNeoCameraConfiguration *>(c);
+	int ret;
+	LOG(NxpNeoPipe, Debug) << "Configure " << cameraName();
+
+	/*
+	 * Camera front-end graph reconfiguration is only applicable to the
+	 * single camera case. For multi-camera case, front-end was statically
+	 * configured at camera acquisition time.
+	 * Only the ISI pipes at the very end of the front-end can be
+	 * configured without multi-camera consideration. The pipe subdevice
+	 * format comes from the front-end configuration.
+	 */
+	if (!multiCamera()) {
+		V4L2SubdeviceFormat sensorFormat = config->sensorFormat();
+		ret = configureFrontEndFormat(sensorFormat,
+					      config->combinedTransform());
+		if (ret)
+			return ret;
+	}
+	/* \todo support multistream */
+	ISIPipe *pipe = pipes_.at(StreamTypeImage0);
+	StreamConfiguration &streamConfig = c->at(0);
+
+	V4L2SubdeviceFormat &subdevFormat = pipesSubDevFormats_[StreamTypeImage0];
+	V4L2DeviceFormat deviceFormat = {};
+	V4L2VideoDevice *videoDevice = pipe->output_.get();
+	deviceFormat.fourcc =
+		videoDevice->toV4L2PixelFormat(streamConfig.pixelFormat);
+	deviceFormat.size = streamConfig.size;
+	deviceFormat.colorSpace = streamConfig.colorSpace;
+
+	ret = pipe->configure(subdevFormat, deviceFormat);
+	return ret;
 }
 
 /**
@@ -3000,15 +2997,14 @@ int NxpNeoCameraData::enumerateFormatsYuv()
  */
 void NxpNeoCameraData::clearRequest(NxpNeoFrames::Info *info)
 {
-	Request *request = info->request;
+	Request *request = info->request_;
 
-	std::queue<Request *> &queue = processingRequests_;
-	if (queue.empty() || queue.front() != request)
+	if (processingRequests_.empty() || processingRequests_.front() != request)
 		LOG(NxpNeoPipe, Warning) << "Processing request not found";
 	else
-		queue.pop();
+		processingRequests_.pop_front();
 
-	int ret = frameInfos_.destroy(info->id);
+	int ret = frameInfos_.destroy(info->id_);
 	if (ret)
 		LOG(NxpNeoPipe, Warning) << "Info frame could not be destroyed";
 }
@@ -3025,7 +3021,7 @@ void NxpNeoCameraData::clearRequest(NxpNeoFrames::Info *info)
  */
 void NxpNeoCameraData::cancelCompleteRequest(NxpNeoFrames::Info *info)
 {
-	Request *request = info->request;
+	Request *request = info->request_;
 	pipe()->cancelRequest(request);
 
 	clearRequest(info);
@@ -3043,9 +3039,9 @@ void NxpNeoCameraData::cancelCompleteRequest(NxpNeoFrames::Info *info)
  */
 void NxpNeoCameraData::tryCompleteRequest(NxpNeoFrames::Info *info)
 {
-	Request *request = info->request;
+	Request *request = info->request_;
 
-	if (!frameInfos_.isFrameComplete(info))
+	if (!info->isFrameComplete())
 		return;
 
 	pipe()->completeRequest(request);
@@ -3069,32 +3065,33 @@ void NxpNeoCameraData::isiInputBufferReady(NxpNeoFrames::Info *info, ContextType
 {
 	const std::vector<BufferType>
 		inputBufferTypes = { BufferTypeImage0, BufferTypeImage1, BufferTypeEData };
-	if (frameInfos_.isBufferPending(info, context, inputBufferTypes))
+	NxpNeoFrames::InfoContext &infoContext = info->contexts_.at(context);
+	if (infoContext.isBufferPending(inputBufferTypes))
 		return;
 
 	std::map<uint32_t, uint32_t> bufferIds;
 
 	FrameBuffer *image0Buffer =
-		frameInfos_.buffer(info, context, BufferTypeImage0, false);
+		infoContext.buffer(BufferTypeImage0);
 	if (image0Buffer)
 		bufferIds[ipa::nxpneo::IPABufferTypeImage0] = image0Buffer->cookie();
 
 	FrameBuffer *image1Buffer =
-		frameInfos_.buffer(info, context, BufferTypeImage1, false);
+		infoContext.buffer(BufferTypeImage1);
 	if (image1Buffer)
 		bufferIds[ipa::nxpneo::IPABufferTypeImage1] = image1Buffer->cookie();
 
 	FrameBuffer *edataBuffer =
-		frameInfos_.buffer(info, context, BufferTypeEData, false);
+		infoContext.buffer(BufferTypeEData);
 	if (edataBuffer)
 		bufferIds[ipa::nxpneo::IPABufferTypeEData] = edataBuffer->cookie();
 
 	FrameBuffer *paramsBuffer =
-		frameInfos_.buffer(info, context, BufferTypeParams, true);
+		infoContext.buffer(BufferTypeParams);
 	ASSERT(paramsBuffer);
 	bufferIds[ipa::nxpneo::IPABufferTypeParams] = paramsBuffer->cookie();
 
-	ipa_->computeParams(info->id,
+	ipa_->computeParams(info->id_,
 			    static_cast<ipa::nxpneo::IPAContextType>(context),
 			    bufferIds);
 }
@@ -3108,7 +3105,8 @@ void NxpNeoCameraData::isiImage0BufferReady(FrameBuffer *buffer)
 	auto [info, context] = frameInfos_.find(buffer);
 	if (!info)
 		return;
-	frameInfos_.completeBuffer(info, context, buffer);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts_.at(context);
+	infoContext.completeBuffer(buffer);
 
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
 		cancelCompleteRequest(info);
@@ -3123,7 +3121,7 @@ void NxpNeoCameraData::isiImage0BufferReady(FrameBuffer *buffer)
 	sequence_ = seq + 1;
 
 	/* Record the sensor's timestamp in the request metadata. */
-	Request *request = info->request;
+	Request *request = info->request_;
 	request->metadata().set(controls::SensorTimestamp,
 				buffer->metadata().timestamp);
 
@@ -3133,7 +3131,8 @@ void NxpNeoCameraData::isiImage0BufferReady(FrameBuffer *buffer)
 	if (isRawCamera()) {
 		isiInputBufferReady(info, context);
 
-		delayedCtrls_[ContextTypeRgb]->applyControls(info->id);
+		if (!updateControlsOnIspSync())
+			delayedCtrls_[ContextTypeRgb]->applyControls(info->id_);
 	} else {
 		tryCompleteRequest(info);
 	}
@@ -3148,27 +3147,28 @@ void NxpNeoCameraData::isiImage1BufferReady(FrameBuffer *buffer)
 	auto [info, context] = frameInfos_.find(buffer);
 	if (!info)
 		return;
-	frameInfos_.completeBuffer(info, context, buffer);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts_.at(context);
+	infoContext.completeBuffer(buffer);
 
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
 		cancelCompleteRequest(info);
 		return;
 	}
 
-	Request *request = info->request;
+	Request *request = info->request_;
 	(void)request;
 
 	if (request->findBuffer(&streamRaw_) == buffer)
 		pipe()->completeBuffer(request, buffer);
 
 	if (mode_ == ModeTypeHdrMerge &&
-	    frameInfos_.isBufferPending(info, context, { BufferTypeImage0 }))
+	    infoContext.isBufferPending({ BufferTypeImage0 }))
 		LOG(NxpNeoPipe, Warning) << "Out of order input frame receipt";
 
 	isiInputBufferReady(info, context);
 
-	if (mode_ == ModeTypeRgbIrDual)
-		delayedCtrls_[ContextTypeIr]->applyControls(info->id);
+	if (mode_ == ModeTypeRgbIrDual && !updateControlsOnIspSync())
+		delayedCtrls_[ContextTypeIr]->applyControls(info->id_);
 }
 
 /**
@@ -3183,7 +3183,8 @@ void NxpNeoCameraData::isiEmbeddedDataBufferReady(FrameBuffer *buffer)
 	auto [info, context] = frameInfos_.find(buffer);
 	if (!info)
 		return;
-	frameInfos_.completeBuffer(info, context, buffer);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts_.at(context);
+	infoContext.completeBuffer(buffer);
 
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
 		cancelCompleteRequest(info);
@@ -3223,14 +3224,15 @@ void NxpNeoCameraData::neoOutputBufferReady(FrameBuffer *buffer)
 	auto [info, context] = frameInfos_.find(buffer);
 	if (!info)
 		return;
-	frameInfos_.completeBuffer(info, context, buffer);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts_.at(context);
+	infoContext.completeBuffer(buffer);
 
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
 		cancelCompleteRequest(info);
 		return;
 	}
 
-	Request *request = info->request;
+	Request *request = info->request_;
 	auto streamBuffers = request->buffers();
 	auto it = std::find_if(streamBuffers.begin(), streamBuffers.end(),
 			       [buffer](auto &kv) {
@@ -3251,14 +3253,12 @@ void NxpNeoCameraData::neoParamsBufferReady(FrameBuffer *buffer)
 	auto [info, context] = frameInfos_.find(buffer);
 	if (!info)
 		return;
-	frameInfos_.completeBuffer(info, context, buffer);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts_.at(context);
+	infoContext.completeBuffer(buffer);
 
-	auto it = info->contexts.find(context);
-	ASSERT(it != info->contexts.end());
-	NxpNeoFrames::InfoContext &infoContext = it->second;
-	if (infoContext.paramDequeued)
+	if (infoContext.paramDequeued_)
 		LOG(NxpNeoPipe, Error) << "Params buffer already dequeued ";
-	infoContext.paramDequeued = true;
+	infoContext.paramDequeued_ = true;
 
 	tryCompleteRequest(info);
 }
@@ -3272,7 +3272,8 @@ void NxpNeoCameraData::neoStatsBufferReady(FrameBuffer *buffer)
 	auto [info, context] = frameInfos_.find(buffer);
 	if (!info)
 		return;
-	frameInfos_.completeBuffer(info, context, buffer);
+	NxpNeoFrames::InfoContext &infoContext = info->contexts_.at(context);
+	infoContext.completeBuffer(buffer);
 
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled) {
 		cancelCompleteRequest(info);
@@ -3283,13 +3284,52 @@ void NxpNeoCameraData::neoStatsBufferReady(FrameBuffer *buffer)
 		{ ipa::nxpneo::IPABufferTypeStats, buffer->cookie() },
 	};
 
-	unsigned int sequence = info->id;
+	unsigned int sequence = info->id_;
 	ipa_->processStats(sequence,
 			   static_cast<ipa::nxpneo::IPAContextType>(context),
 			   bufferIds,
 			   delayedCtrls_[context]->get(sequence));
 
 	tryCompleteRequest(info);
+}
+
+/*
+ * \brief Handle the start of frame exposure signal
+ * \param[in] sequence The sequence number of frame
+ */
+void NxpNeoCameraData::frameStart([[maybe_unused]] uint32_t sequence)
+{
+	if (!updateControlsOnIspSync())
+		return;
+
+	/*
+	 * Event is used as the trigger to update the camera controls. The
+	 * requests in the processing queue are served in order. Iterate through
+	 * the active requests to find the first one having a context running in
+	 * the ISP, identified as having no stats buffer produced yet.
+	 */
+	bool found = false;
+	for (Request *request : processingRequests_) {
+		NxpNeoFrames::Info *info = frameInfos_.find(request);
+		if (!info) {
+			LOG(NxpNeoPipe, Error) << "No info found for request";
+			return;
+		}
+
+		for (const auto &[context, infoContext] : info->contexts_) {
+			if (infoContext.isBufferPending({ BufferTypeStats })) {
+				delayedCtrls_[context]->applyControls(info->id_);
+				found = true;
+				break;
+			}
+		}
+
+		if (found)
+			break;
+	}
+
+	if (!found)
+		LOG(NxpNeoPipe, Error) << "No context found for controls update";
 }
 
 void NxpNeoCameraData::ipaParamsComputed(unsigned int id,
@@ -3301,35 +3341,41 @@ void NxpNeoCameraData::ipaParamsComputed(unsigned int id,
 		return;
 
 	ContextType _context = static_cast<ContextType>(context);
+	auto it = info->contexts_.find(_context);
+	if (it == info->contexts_.end()) {
+		LOG(NxpNeoPipe, Error) << "Invalid context from IPA";
+		return;
+	}
+	NxpNeoFrames::InfoContext &infoContext = it->second;
 
 	int ret = 0;
 	/* Queue buffers ISP output buffers */
 	FrameBuffer *frameBuffer =
-		frameInfos_.buffer(info, _context, BufferTypeFrame, false);
+		infoContext.buffer(BufferTypeFrame);
 	if (frameBuffer)
 		ret |= neo_->frame_->queueBuffer(frameBuffer);
 	FrameBuffer *irBuffer =
-		frameInfos_.buffer(info, _context, BufferTypeIr, false);
+		infoContext.buffer(BufferTypeIr);
 	if (irBuffer)
 		ret |= neo_->ir_->queueBuffer(irBuffer);
 
 	/* Queue ISP params and stats buffers */
 	FrameBuffer *paramsBuffer =
-		frameInfos_.buffer(info, _context, BufferTypeParams, true);
+		infoContext.buffer(BufferTypeParams);
 	if (paramsBuffer) {
 		paramsBuffer->_d()->metadata().planes()[0].bytesused = bytesused;
 		ret |= neo_->params_->queueBuffer(paramsBuffer);
 	}
 	FrameBuffer *statsBuffer =
-		frameInfos_.buffer(info, _context, BufferTypeStats, true);
+		infoContext.buffer(BufferTypeStats);
 	if (statsBuffer)
 		ret |= neo_->stats_->queueBuffer(statsBuffer);
 
 	/* Queue ISP input buffers */
 	FrameBuffer *image0Buffer =
-		frameInfos_.buffer(info, _context, BufferTypeImage0, false);
+		infoContext.buffer(BufferTypeImage0);
 	FrameBuffer *image1Buffer =
-		frameInfos_.buffer(info, _context, BufferTypeImage1, false);
+		infoContext.buffer(BufferTypeImage1);
 	if (image0Buffer)
 		ret |= neo_->input0_->queueBuffer(image0Buffer);
 	if (image1Buffer) {
@@ -3353,18 +3399,18 @@ void NxpNeoCameraData::ipaMetadataReady(unsigned int id,
 	if (!info)
 		return;
 
-	Request *request = info->request;
+	Request *request = info->request_;
 	request->metadata().merge(metadata);
 
-	auto it = info->contexts.find(static_cast<ContextType>(context));
-	if (it == info->contexts.end()) {
+	auto it = info->contexts_.find(static_cast<ContextType>(context));
+	if (it == info->contexts_.end()) {
 		LOG(NxpNeoPipe, Error) << "Invalid context " << context;
 		return;
 	}
 	NxpNeoFrames::InfoContext &infoContext = it->second;
-	if (infoContext.metadataProcessed)
+	if (infoContext.metadataProcessed_)
 		LOG(NxpNeoPipe, Error) << "Metadata already processed";
-	infoContext.metadataProcessed = true;
+	infoContext.metadataProcessed_ = true;
 	tryCompleteRequest(info);
 }
 

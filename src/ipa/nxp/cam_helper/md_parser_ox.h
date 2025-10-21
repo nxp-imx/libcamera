@@ -17,7 +17,19 @@ using MdParser = RPiController::MdParser;
 class MdParserOmniOx : public MdParser
 {
 public:
-	MdParserOmniOx(std::initializer_list<uint32_t> registerList);
+	enum CrcType {
+		CrcNone,
+		Crc32Le,
+	};
+
+	struct CrcParams {
+		CrcType type;
+		uint32_t polynomial;
+		uint32_t check;
+	};
+
+	MdParserOmniOx(std::initializer_list<uint32_t> registerList,
+		       CrcParams &crcParams);
 	MdParser::Status parse(libcamera::Span<const uint8_t> buffer,
 			       RegisterMap &registers) override;
 
@@ -28,6 +40,10 @@ private:
 	static constexpr unsigned int kTag = 0xda;
 	std::vector<uint32_t> registerList_;
 	uint32_t registerCount_;
+
+	CrcParams crcParams_;
+	uint32_t crc32Le(uint32_t crc32, uint8_t byte) const;
+	const std::array<uint32_t, 256> &crc32LeLut() const;
 };
 
 } /* namespace nxp */

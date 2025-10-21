@@ -66,28 +66,23 @@ namespace ipa::nxpneo::algorithms {
  * INALIGN0/1 configures, for the 10, 12, 14 and 20-bit pixel formats, if the
  * significant bits should be fetched MSB or LSB-aligned from the 16-bit aligned
  * words in the DDR buffer. On i.MX95 SoC, the DDR buffers produced by the ISI
- * device have the significant data bits MSB-aligned because of an hardware
+ * device have the significant data bits MSB-aligned because of a hardware
  * limitation.
  * INALIGN0/1 are currently not exposed to the calibration file as they are
  * related to the underlying SoC - as of now, intent is to keep the calibration
  * file independent from the hardware.
  *
  * LPALIGN0/1 configure for each input path how the N-bit pixel data fetched
- * from the DDR buffer will be stored into the ISP internal pipeline. When using
- * LPALIGN0/1=0, pixel data are stored internally the same as fetched.
+ * from the DDR buffer will be stored into the ISP internal pipeline.
+ * When using LPALIGN0/1=0, pixel data are stored internally the same as fetched.
  * Conversely, when LPALIGN0/1=1, pixel data are rescaled to be stored left-
- * shifted, with an MSB alignment that depends on the ISP hardware revision:
- *   - ISP hardware revision V1 (i.MX95 rev A0/A1):
- *       input0: 20-bit MSB alignment
- *       input1: 16-bit MSB alignment
- *   - ISP hardware revision V2 (i.MX95 rev B0, i.MX952):
- *       input0:
- *           12-bit input pixel format: 16-bit MSB alignment
- *           10, 14, 16-bit input pixel format: 20-bit MSB alignment
- *       input1: 16-bit MSB alignment
- *       An other peculiarity of this revision is that for the 12-bit input
- *       pixel format, LPALIGN0 configuration value is ignored by the ISP and
- *       a LPALIGN0=1 value is unconditionally applied (16-bit MSB alignment).
+ * shifted, with:
+ *   - 20-bit MSB alignment for input0
+ *   - 16-bit MSB alignment for input1
+ * However there is a hardware peculiarity in the ISP hardware revision V2
+ * (i.MX95 rev B0, i.MX952) and with 12-bit sensor pixel format:
+ * - Rescaling for input0 and input1 is done to 16-bit regardless of the
+ *   PIPECONF.LPALIGN setting.
  *
  * Tables below recaps the ISP internal pipeline pixel data alignment depending
  * on the input camera bit per pixel (ibpp), LPALIGN0/1 configuration and the
@@ -112,7 +107,7 @@ namespace ipa::nxpneo::algorithms {
  * |      | HW V1 | HW V2 | HW V1 | HW V2 |
  * +------+-------+-------+---------------+
  * |  10  |  10   |  10   |  16   |  16   |
- * |  12  |  12   |  12   |  16   |  16   |
+ * |  12  |  12   |  16   |  16   |  16   |
  * |  14  |  14   |  14   |  16   |  16   |
  * +------+-------+-------+-------+-------+
  *
@@ -137,8 +132,8 @@ namespace ipa::nxpneo::algorithms {
 LOG_DEFINE_CATEGORY(NxpNeoAlgoPipeConf)
 
 PipeConf::PipeConf()
-	: inAlign0_(kInAlignDefault), lpAlign0_(kLpAlignDefault),
-	  inAlign1_(kInAlignDefault), lpAlign1_(kLpAlignDefault)
+	: inAlign0_(0), lpAlign0_(kLpAlignDefault),
+	  inAlign1_(0), lpAlign1_(kLpAlignDefault)
 {
 }
 
@@ -153,9 +148,11 @@ int PipeConf::init([[maybe_unused]] IPAContext &context,
 	const YamlObject &lpAlign1Obj = tuningData["lpalign1"];
 	lpAlign1_ = lpAlign1Obj.get<uint8_t>();
 
-	/* \todo make INALIGN default value SoC-dependent */
-	inAlign0_ = kInAlignDefault;
-	inAlign1_ = kInAlignDefault;
+	uint8_t inAlignAuto = (context.hw.hwCapabilities & NEO_CAP_ALIGNMENT_MSB) ? 1 : 0;
+	const YamlObject &inAlign0Obj = tuningData["inalign0"];
+	inAlign0_ = inAlign0Obj.get<uint8_t>().value_or(inAlignAuto);
+	const YamlObject &inAlign1Obj = tuningData["inalign1"];
+	inAlign1_ = inAlign1Obj.get<uint8_t>().value_or(inAlignAuto);
 
 	return 0;
 }
@@ -180,8 +177,8 @@ void PipeConf::prepare(IPAContext &context, const uint32_t frame,
 	uint8_t lpAlign1 = lpAlign1_.value_or(lpAlignAuto);
 
 	LOG(NxpNeoAlgoPipeConf, Debug)
-		<< "inalign0/1 " << inAlign0_ << "/" << inAlign1_
-		<< "lpalign0/1 " << lpAlign0 << "/" << lpAlign1;
+		<< "inalign0/1 " << +inAlign0_ << "/" << +inAlign1_
+		<< " lpalign0/1 " << +lpAlign0 << "/" << +lpAlign1;
 
 	config->img_conf_inalign0 = inAlign0_;
 	config->img_conf_lpalign0 = lpAlign0;

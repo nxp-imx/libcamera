@@ -332,7 +332,14 @@ CameraHelperMx95mbcam::CameraHelperMx95mbcam()
 	attributes_.mdParams.topLines = 2;
 #endif
 
-	parser_ = std::make_unique<MdParserOmniOx>(registerList);
+	/* Use CRC-32C polynomial for embedded data validation */
+	MdParserOmniOx::CrcParams crcParams = {
+		MdParserOmniOx::CrcType::Crc32Le,
+		/* Polynomial and check values come from ox03c10 datasheet. */
+		0x1edc6f41,
+		0x48674bc7,
+	};
+	parser_ = std::make_unique<MdParserOmniOx>(registerList, crcParams);
 
 	/* Embedded data are 16-bit words when transmitted as image top lines */
 	int bpp = attributes_.mdParams.topLines ? 16 : 8;

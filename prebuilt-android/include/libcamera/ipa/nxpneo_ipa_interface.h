@@ -131,18 +131,19 @@ struct InitParams
 public:
 #ifndef __DOXYGEN__
 	InitParams()
-		: hwRevision(0), apiVersion(0)
+		: hwRevision(0), hwCapabilities(0), apiVersion(0)
 	{
 	}
 
-	InitParams(uint32_t _hwRevision, uint32_t _apiVersion, const std::string &_sensorEntity, const IPACameraSensorInfo &_sensorInfo, const ControlInfoMap &_sensorControls, const ControlList &_sensorControlList)
-		: hwRevision(_hwRevision), apiVersion(_apiVersion), sensorEntity(_sensorEntity), sensorInfo(_sensorInfo), sensorControls(_sensorControls), sensorControlList(_sensorControlList)
+	InitParams(uint32_t _hwRevision, uint32_t _hwCapabilities, uint32_t _apiVersion, const std::string &_sensorEntity, const IPACameraSensorInfo &_sensorInfo, const ControlInfoMap &_sensorControls, const ControlList &_sensorControlList)
+		: hwRevision(_hwRevision), hwCapabilities(_hwCapabilities), apiVersion(_apiVersion), sensorEntity(_sensorEntity), sensorInfo(_sensorInfo), sensorControls(_sensorControls), sensorControlList(_sensorControlList)
 	{
 	}
 #endif
 
 
 	uint32_t hwRevision;
+	uint32_t hwCapabilities;
 	uint32_t apiVersion;
 	std::string sensorEntity;
 	IPACameraSensorInfo sensorInfo;
@@ -155,11 +156,12 @@ struct IPAConfigInfo
 public:
 #ifndef __DOXYGEN__
 	IPAConfigInfo()
+		: mode(static_cast<IPAModeType>(0)), bitsPerPixelAuxiliary(0)
 	{
 	}
 
-	IPAConfigInfo(const IPACameraSensorInfo &_sensorInfo, const ControlInfoMap &_sensorControls, const ControlList &_sensorControlList)
-		: sensorInfo(_sensorInfo), sensorControls(_sensorControls), sensorControlList(_sensorControlList)
+	IPAConfigInfo(const IPACameraSensorInfo &_sensorInfo, const ControlInfoMap &_sensorControls, const ControlList &_sensorControlList, const IPAModeType &_mode, const IPAColorSpace &_colorSpace, uint32_t _bitsPerPixelAuxiliary)
+		: sensorInfo(_sensorInfo), sensorControls(_sensorControls), sensorControlList(_sensorControlList), mode(_mode), colorSpace(_colorSpace), bitsPerPixelAuxiliary(_bitsPerPixelAuxiliary)
 	{
 	}
 #endif
@@ -168,6 +170,9 @@ public:
 	IPACameraSensorInfo sensorInfo;
 	ControlInfoMap sensorControls;
 	ControlList sensorControlList;
+	IPAModeType mode;
+	IPAColorSpace colorSpace;
+	uint32_t bitsPerPixelAuxiliary;
 };
 
 struct DelayedControlsParams
@@ -228,8 +233,6 @@ public:
 	virtual int32_t configure(
 		const IPAConfigInfo &configInfo,
 		const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
-		const IPAModeType mode,
-		const IPAColorSpace &colorSpace,
 		ControlInfoMap *ipaControls) = 0;
 
 	virtual void mapBuffers(

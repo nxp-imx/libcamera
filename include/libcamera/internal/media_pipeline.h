@@ -27,7 +27,6 @@ public:
 	int initLinks();
 	int configure(CameraSensor *sensor, V4L2SubdeviceFormat *);
 
-private:
 	struct Entity {
 		/* The media entity, always valid. */
 		MediaEntity *entity;
@@ -53,6 +52,9 @@ private:
 		MediaLink *sourceLink;
 	};
 
+	const std::list<Entity> &entities() { return entities_; };
+
+private:
 	std::list<Entity> entities_;
 };
 

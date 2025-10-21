@@ -50,6 +50,7 @@ struct IPAColorSpace {
 
 struct InitParams {
 	uint32 hwRevision;
+	uint32 hwCapabilities;
 	uint32 apiVersion;
 	string sensorEntity;
 	libcamera.IPACameraSensorInfo sensorInfo;
@@ -61,6 +62,10 @@ struct IPAConfigInfo {
 	libcamera.IPACameraSensorInfo sensorInfo;
 	libcamera.ControlInfoMap sensorControls;
 	libcamera.ControlList sensorControlList;
+	IPAModeType mode;
+	IPAColorSpace colorSpace;
+	/* \todo remove when available from IPACameraSensorInfo */
+	uint32 bitsPerPixelAuxiliary;
 };
 
 struct DelayedControlsParams {
@@ -117,9 +122,7 @@ interface IPANxpNeoInterface {
 	stop();
 
 	configure(IPAConfigInfo configInfo,
-		  map<uint32, libcamera.IPAStream> streamConfig,
-		  IPAModeType mode,
-		  IPAColorSpace colorSpace)
+		  map<uint32, libcamera.IPAStream> streamConfig)
 		=> (int32 ret, libcamera.ControlInfoMap ipaControls);
 
 	mapBuffers(array<libcamera.IPABuffer> buffers);

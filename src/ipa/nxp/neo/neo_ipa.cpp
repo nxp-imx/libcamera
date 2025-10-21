@@ -66,8 +66,6 @@ public:
 
 	int configure(const IPAConfigInfo &ipaConfig,
 		      const std::map<uint32_t, IPAStream> &streamConfig,
-		      const IPAModeType mode,
-		      const IPAColorSpace &colorSpace,
 		      ControlInfoMap *ipaControls) override;
 	void mapBuffers(const std::vector<IPABuffer> &buffers) override;
 	void unmapBuffers(const std::vector<unsigned int> &ids) override;
@@ -147,6 +145,7 @@ int IPANxpNeo::init(const IPASettings &settings, const InitParams &params,
 	/* Set the hardware-related block for the algorithms. */
 	context_.hw.apiVersion = params.apiVersion;
 	context_.hw.hwRevision = params.hwRevision;
+	context_.hw.hwCapabilities = params.hwCapabilities;
 
 	context_.camHelper = CameraHelperFactoryBase::create(settings.sensorModel);
 	if (!context_.camHelper) {
@@ -246,8 +245,6 @@ void IPANxpNeo::stop()
 
 int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 			 const std::map<uint32_t, IPAStream> &streamConfig,
-			 const IPAModeType mode,
-			 const IPAColorSpace &colorSpace,
 			 ControlInfoMap *ipaControls)
 {
 	/* Clear the IPA context before the streaming session. */
@@ -255,7 +252,7 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	context_.activeState = {};
 	context_.frameContexts.clear();
 
-	context_.configuration.pipelineMode = mode;
+	context_.configuration.pipelineMode = ipaConfig.mode;
 
 	const IPACameraSensorInfo &info = ipaConfig.sensorInfo;
 	sensorControlList_ = ipaConfig.sensorControlList;
@@ -265,16 +262,16 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 	/* Update the camera controls using the new sensor settings. */
 	updateControls(info, ipaConfig.sensorControls, ipaControls);
 
-	/* \todo get image1 bpp when available from IPACameraSensorInfo. */
-	uint32_t bpp = ipaConfig.sensorInfo.bitsPerPixel;
-	context_.configuration.sensor.bpps = { bpp, bpp };
+	uint32_t bpp0 = ipaConfig.sensorInfo.bitsPerPixel;
+	uint32_t bpp1 = ipaConfig.bitsPerPixelAuxiliary;
+	context_.configuration.sensor.bpps = { bpp0, bpp1 };
 
 	/* Active streams */
 	std::map<IPAStreamType, IPAStream> &streams = context_.configuration.streams;
 	for (const auto &[streamType, config] : streamConfig)
 		streams[static_cast<IPAStreamType>(streamType)] = config;
 
-	context_.configuration.colorSpace = colorSpace;
+	context_.configuration.colorSpace = ipaConfig.colorSpace;
 
 	for (auto const &a : algorithms()) {
 		Algorithm *algo = static_cast<Algorithm *>(a.get());

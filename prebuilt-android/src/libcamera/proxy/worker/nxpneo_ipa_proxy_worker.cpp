@@ -173,13 +173,9 @@ ipa_->stop();
 		                
                 	[[maybe_unused]] const size_t configInfoBufSize = readPOD<uint32_t>(_ipcMessage.data(), 0);
                 	[[maybe_unused]] const size_t streamConfigBufSize = readPOD<uint32_t>(_ipcMessage.data(), 4);
-                	[[maybe_unused]] const size_t modeBufSize = readPOD<uint32_t>(_ipcMessage.data(), 8);
-                	[[maybe_unused]] const size_t colorSpaceBufSize = readPOD<uint32_t>(_ipcMessage.data(), 12);
 
-                	const size_t configInfoStart = 16;
+                	const size_t configInfoStart = 8;
                 	const size_t streamConfigStart = configInfoStart + configInfoBufSize;
-                	const size_t modeStart = streamConfigStart + streamConfigBufSize;
-                	const size_t colorSpaceStart = modeStart + modeBufSize;
 
 
                 	IPAConfigInfo configInfo =
@@ -191,22 +187,12 @@ ipa_->stop();
                 	std::map<uint32_t, libcamera::IPAStream> streamConfig =
                         IPADataSerializer<std::map<uint32_t, libcamera::IPAStream>>::deserialize(
                         	_ipcMessage.data().cbegin() + streamConfigStart,
-                        	_ipcMessage.data().cbegin() + streamConfigStart + streamConfigBufSize);
-
-                	IPAModeType mode =
-                        static_cast<ipa::nxpneo::IPAModeType>(IPADataSerializer<uint32_t>::deserialize(
-                        	_ipcMessage.data().cbegin() + modeStart,
-                        	_ipcMessage.data().cbegin() + modeStart + modeBufSize));
-
-                	IPAColorSpace colorSpace =
-                        IPADataSerializer<IPAColorSpace>::deserialize(
-                        	_ipcMessage.data().cbegin() + colorSpaceStart,
                         	_ipcMessage.data().cend());
 
 
 			ControlInfoMap ipaControls;
 
-			int32_t _callRet =ipa_->configure(configInfo, streamConfig, mode, colorSpace, &ipaControls);
+			int32_t _callRet =ipa_->configure(configInfo, streamConfig, &ipaControls);
 
 			IPCMessage::Header header = { _ipcMessage.header().cmd, _ipcMessage.header().cookie };
 			IPCMessage _response(header);

@@ -155,6 +155,11 @@ public:
 			IPADataSerializer<uint32_t>::serialize(data.hwRevision);
 		retData.insert(retData.end(), hwRevision.begin(), hwRevision.end());
 
+		std::vector<uint8_t> hwCapabilities;
+		std::tie(hwCapabilities, std::ignore) =
+			IPADataSerializer<uint32_t>::serialize(data.hwCapabilities);
+		retData.insert(retData.end(), hwCapabilities.begin(), hwCapabilities.end());
+
 		std::vector<uint8_t> apiVersion;
 		std::tie(apiVersion, std::ignore) =
 			IPADataSerializer<uint32_t>::serialize(data.apiVersion);
@@ -221,6 +226,18 @@ public:
 			return ret;
 		}
 		ret.hwRevision = IPADataSerializer<uint32_t>::deserialize(m, m + 4);
+		m += 4;
+		dataSize -= 4;
+
+
+		if (dataSize < 4) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "hwCapabilities"
+				<< ": not enough data, expected "
+				<< (4) << ", got " << (dataSize);
+			return ret;
+		}
+		ret.hwCapabilities = IPADataSerializer<uint32_t>::deserialize(m, m + 4);
 		m += 4;
 		dataSize -= 4;
 
@@ -386,6 +403,22 @@ public:
 			appendPOD<uint32_t>(retData, 0);
 		}
 
+		std::vector<uint8_t> mode;
+		std::tie(mode, std::ignore) =
+			IPADataSerializer<uint32_t>::serialize(data.mode);
+		retData.insert(retData.end(), mode.begin(), mode.end());
+
+		std::vector<uint8_t> colorSpace;
+		std::tie(colorSpace, std::ignore) =
+			IPADataSerializer<ipa::nxpneo::IPAColorSpace>::serialize(data.colorSpace, cs);
+		appendPOD<uint32_t>(retData, colorSpace.size());
+		retData.insert(retData.end(), colorSpace.begin(), colorSpace.end());
+
+		std::vector<uint8_t> bitsPerPixelAuxiliary;
+		std::tie(bitsPerPixelAuxiliary, std::ignore) =
+			IPADataSerializer<uint32_t>::serialize(data.bitsPerPixelAuxiliary);
+		retData.insert(retData.end(), bitsPerPixelAuxiliary.begin(), bitsPerPixelAuxiliary.end());
+
 		return {retData, {}};
 	}
 
@@ -474,6 +507,53 @@ public:
 		if (sensorControlListSize > 0)
 			ret.sensorControlList =
 				IPADataSerializer<ControlList>::deserialize(m, m + sensorControlListSize, cs);
+		m += sensorControlListSize;
+		dataSize -= sensorControlListSize;
+
+
+		if (dataSize < 4) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "mode"
+				<< ": not enough data, expected "
+				<< (4) << ", got " << (dataSize);
+			return ret;
+		}
+		ret.mode = static_cast<ipa::nxpneo::IPAModeType>(IPADataSerializer<uint32_t>::deserialize(m, m + 4));
+		m += 4;
+		dataSize -= 4;
+
+
+		if (dataSize < 4) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "colorSpaceSize"
+				<< ": not enough data, expected "
+				<< (4) << ", got " << (dataSize);
+			return ret;
+		}
+		const size_t colorSpaceSize = readPOD<uint32_t>(m, 0, dataEnd);
+		m += 4;
+		dataSize -= 4;
+		if (dataSize < colorSpaceSize) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "colorSpace"
+				<< ": not enough data, expected "
+				<< (colorSpaceSize) << ", got " << (dataSize);
+			return ret;
+		}
+		ret.colorSpace =
+			IPADataSerializer<ipa::nxpneo::IPAColorSpace>::deserialize(m, m + colorSpaceSize, cs);
+		m += colorSpaceSize;
+		dataSize -= colorSpaceSize;
+
+
+		if (dataSize < 4) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "bitsPerPixelAuxiliary"
+				<< ": not enough data, expected "
+				<< (4) << ", got " << (dataSize);
+			return ret;
+		}
+		ret.bitsPerPixelAuxiliary = IPADataSerializer<uint32_t>::deserialize(m, m + 4);
 
 		return ret;
 	}

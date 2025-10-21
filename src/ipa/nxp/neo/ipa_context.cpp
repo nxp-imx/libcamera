@@ -26,6 +26,9 @@ namespace libcamera::ipa::nxpneo {
  * \var IPAHwSettings::hwRevision
  * \brief Neoisp media device HW revision
  *
+ * \var IPAHwSettings::hwCapabilities
+ * \brief Neoisp HW and driver capabilities flags
+ *
  * \var IPAHwSettings::apiVersion
  * \brief Neoisp uAPI meta version
  */

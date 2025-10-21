@@ -24,7 +24,8 @@
 #
 # cameras           = sequence of camera-entry
 #
-# camera-entry      = mapping of {model, entity, streams, format}
+# camera-entry      = mapping of {model, entity, streams, format,
+#                                 controls-update}
 #   model           = camera model
 #                     optional if entity is defined
 #   entity          = camera entity name
@@ -55,6 +56,12 @@
 #                       3: rotate 180
 #                       4: rotate 180 + mirror
 #                     optional - default is the camera mounting orientation
+#   controls-update = trigger used for controls update to workaround sensor-
+#                     specific issue.
+#                     values belong to [frame-available, isp-sync]
+#                     frame-available: front-end raw frame available event
+#                     isp-sync: ISP synchronization event
+#                     optional - default is frame-available
 #
 # 'cameras' section definition example:
 #
@@ -69,5 +76,10 @@
 version: 1.0
 global:
   buffer-count: 8
-
+cameras:
+  - model: mx95mbcam
+    controls-update: isp-sync
+  - model: os08a20
+# Uncomment the line below to enable os08a20 HDR operation
+#    streams: [image1]
 ...

@@ -48,8 +48,6 @@ public:
         int32_t configure(
         	const IPAConfigInfo &configInfo,
         	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
-        	const IPAModeType mode,
-        	const IPAColorSpace &colorSpace,
         	ControlInfoMap *ipaControls) override;
 
         void mapBuffers(
@@ -98,14 +96,10 @@ private:
         int32_t configureThread(
         	const IPAConfigInfo &configInfo,
         	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
-        	const IPAModeType mode,
-        	const IPAColorSpace &colorSpace,
         	ControlInfoMap *ipaControls);
         int32_t configureIPC(
         	const IPAConfigInfo &configInfo,
         	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
-        	const IPAModeType mode,
-        	const IPAColorSpace &colorSpace,
         	ControlInfoMap *ipaControls);
 
         void mapBuffersThread(
