@@ -1268,11 +1268,12 @@ bool PipelineHandlerNxpNeo::acquireDevice(Camera *camera)
 {
 	NxpNeoCameraData *data = cameraData(camera);
 
-	acquireCount_++;
 	LOG(NxpNeoPipe, Debug) << "acquireDevice " << data->cameraName()
 			       << " count " << acquireCount_;
-	if (acquireCount_ > 1)
+	if (acquireCount_ > 0) {
+		acquireCount_++;
 		return true;
+	}
 
 	/*
 	 * Frontend media controller device has been locked by the process.
@@ -1286,7 +1287,11 @@ bool PipelineHandlerNxpNeo::acquireDevice(Camera *camera)
 		return false;
 
 	ret = setupCameraGraphs();
-	return (!ret);
+	if (ret)
+		return false;
+
+	acquireCount_++;
+	return true;
 }
 
 void PipelineHandlerNxpNeo::releaseDevice(Camera *camera)
