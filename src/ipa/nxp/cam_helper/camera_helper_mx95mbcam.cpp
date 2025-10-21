@@ -16,7 +16,7 @@
 #include "md_parser_ox.h"
 
 #define ENABLE_EMBEDDED_DATA_TOP_LINES 1
-#define USE_CUSTOM_CONTROLS 0
+#define USE_CUSTOM_CONTROLS 1
 
 #define Q8_1 (0x100U)
 #define Q10_1 (0x400U)
