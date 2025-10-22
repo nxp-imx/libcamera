@@ -66,6 +66,7 @@ private:
 	std::vector<RGB<double>> blocks_;
 	std::vector<uint8_t> obwbs_;
 	std::array<unsigned int, kObwbCount> obwbObpp_;
+	bool awbGainInSensor_;
 };
 
 } /* namespace ipa::nxpneo::algorithms */

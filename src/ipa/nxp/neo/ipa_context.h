@@ -46,6 +46,7 @@ struct IPASessionConfiguration {
 	struct {
 		/* ROI for statistics measurements */
 		struct neoisp_roi_cfg_s roi;
+		bool awbGainInSensor;
 	} awb;
 
 	struct {
@@ -131,6 +132,7 @@ struct IPAFrameContext : public FrameContext {
 	struct {
 		uint32_t exposure;
 		double gain;
+		RGB<double> wbGains;
 		ControlList mdControls;
 		bool metaDataValid;
 	} sensor;
