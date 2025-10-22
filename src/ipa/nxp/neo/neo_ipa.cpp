@@ -86,6 +86,7 @@ private:
 	void updateControls(const IPACameraSensorInfo &sensorInfo,
 			    const ControlInfoMap &sensorControls,
 			    ControlInfoMap *ipaControls);
+	void updateFrameContextSensorMeta(const uint32_t frame);
 	void setControls(unsigned int frame, IPAContextType context);
 	std::string controlListToString(const ControlList *ctrls) const;
 	std::string logSensorParams(const unsigned int frame,
@@ -428,45 +429,8 @@ void IPANxpNeo::processStats(const uint32_t frame, const IPAContextType context,
 		context_.camHelper->sensorControlsToMetaData(&sensorControls, &mdControls);
 	}
 
-	Duration exposure;
-	if (mdControls.contains(md::Exposure.id())) {
-		const ControlValue &exposureValue =
-			mdControls.get(md::Exposure.id());
-		Span<const float> exposuresSpan =
-			exposureValue.get<Span<const float>>();
-		exposure = exposuresSpan[0] * 1.0s;
-	} else {
-		LOG(NxpNeoIPA, Warning) << "No exposure metadata";
-		exposure = context_.configuration.sensor.minExposureTime;
-	}
-
-	frameContext.sensor.exposure = context_.camHelper->exposureLines(
-		exposure,
-		context_.configuration.sensor.lineDuration);
-
-	float aGain = 1.0f;
-	if (mdControls.contains(md::AnalogueGain.id())) {
-		const ControlValue &aGainValue =
-			mdControls.get(md::AnalogueGain.id());
-		Span<const float> aGainsSpan =
-			aGainValue.get<Span<const float>>();
-		aGain = aGainsSpan[0];
-	} else {
-		LOG(NxpNeoIPA, Warning) << "No analog gain metadata";
-	}
-
-	float dGain = 1.0f;
-	if (mdControls.contains(md::DigitalGain.id())) {
-		const ControlValue &dGainValue =
-			mdControls.get(md::DigitalGain.id());
-		Span<const float> dGainsSpan =
-			dGainValue.get<Span<const float>>();
-		dGain = dGainsSpan[0];
-	} else {
-		LOG(NxpNeoIPA, Warning) << "No digital gain metadata";
-	}
-
-	frameContext.sensor.gain = aGain * dGain;
+	/* Update frame context with the sensor metadata */
+	updateFrameContextSensorMeta(frame);
 
 	ControlList metadata(controls::controls);
 	for (auto const &a : algorithms()) {
@@ -605,6 +569,52 @@ void IPANxpNeo::updateControls(const IPACameraSensorInfo &sensorInfo,
 
 	ctrlMap.merge(context_.ctrlMap);
 	*ipaControls = ControlInfoMap(std::move(ctrlMap), controls::controls);
+}
+
+void IPANxpNeo::updateFrameContextSensorMeta(const uint32_t frame)
+{
+	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
+	ControlList &mdControls = frameContext.sensor.mdControls;
+
+	Duration exposure;
+	if (mdControls.contains(md::Exposure.id())) {
+		const ControlValue &exposureValue =
+			mdControls.get(md::Exposure.id());
+		Span<const float> exposuresSpan =
+			exposureValue.get<Span<const float>>();
+		exposure = exposuresSpan[0] * 1.0s;
+	} else {
+		LOG(NxpNeoIPA, Warning) << "No exposure metadata";
+		exposure = context_.configuration.sensor.minExposureTime;
+	}
+
+	frameContext.sensor.exposure = context_.camHelper->exposureLines(
+		exposure,
+		context_.configuration.sensor.lineDuration);
+
+	float aGain = 1.0f;
+	if (mdControls.contains(md::AnalogueGain.id())) {
+		const ControlValue &aGainValue =
+			mdControls.get(md::AnalogueGain.id());
+		Span<const float> aGainsSpan =
+			aGainValue.get<Span<const float>>();
+		aGain = aGainsSpan[0];
+	} else {
+		LOG(NxpNeoIPA, Warning) << "No analog gain metadata";
+	}
+
+	float dGain = 1.0f;
+	if (mdControls.contains(md::DigitalGain.id())) {
+		const ControlValue &dGainValue =
+			mdControls.get(md::DigitalGain.id());
+		Span<const float> dGainsSpan =
+			dGainValue.get<Span<const float>>();
+		dGain = dGainsSpan[0];
+	} else {
+		LOG(NxpNeoIPA, Warning) << "No digital gain metadata";
+	}
+
+	frameContext.sensor.gain = aGain * dGain;
 }
 
 void IPANxpNeo::setControls(unsigned int frame, IPAContextType context)
