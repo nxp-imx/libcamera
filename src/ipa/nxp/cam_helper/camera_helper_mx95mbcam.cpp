@@ -882,9 +882,18 @@ int CameraHelperMx95mbcam::parseEmbedded(Span<const uint8_t> buffer,
 		((registers[AwbGainHcg6Reg] & 0x7fU) << 8U) |
 		registers[AwbGainHcg7Reg];
 
+	std::array<float, 4> wbGainsArray = { 1.0f, 1.0f, 1.0f, 1.0f };
 	std::array<uint32_t, 4> wbGainCodes = { redGain, greenRGain, greenBGain, blueGain };
-	std::array<float, 4> wbGainsArray;
-	whiteBalanceGains(Span<uint32_t>(wbGainCodes), Span<float>(wbGainsArray));
+	auto iter = std::find(wbGainCodes.begin(), wbGainCodes.end(), 0);
+	/*
+	 * In case WB gains are reported from sensor with value 0.0f,
+	 * wbGain should be forced to default value 1.0f for
+	 * valid processing.
+	 * Hence avoid updating wbGainArray with wbGainCodes
+	 */
+	if (iter == wbGainCodes.end())
+		whiteBalanceGains(Span<uint32_t>(wbGainCodes),
+				  Span<float>(wbGainsArray));
 
 	Span<float> wbGains = Span<float>(wbGainsArray);
 	mdControls->set(md::WhiteBalanceGain, wbGains);
