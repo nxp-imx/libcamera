@@ -201,6 +201,7 @@ int BlackLevelCorrection::configure(IPAContext &context,
 
 	std::array<uint32_t, kInputsCount> &bpps =
 		context.configuration.sensor.bpps;
+	auto &blcConfig = context.configuration.blc;
 
 	/*
 	 * Compute the BLC offset at sensor level for each ISP input. For each
@@ -237,7 +238,7 @@ int BlackLevelCorrection::configure(IPAContext &context,
 	 *     - 20/16-bit (input0/input1) for operation without HDR merge
 	 *     - The native sensor format (input0/input1) when HDR merge enabled
 	 *       or 12-bit if the pixel format is 10-bit
-	 * - OBwB2
+	 * - OBWB2
 	 *     - 20-bit unconditionally
 	 */
 	ObwbArray<unsigned int> gainLeftShift;
@@ -277,7 +278,7 @@ int BlackLevelCorrection::configure(IPAContext &context,
 		 */
 		ChannelArray<uint16_t> &sensorOffset =
 			obwb != 1 ? sensorOffsets[0] : sensorOffsets[1];
-		ChannelArray<uint16_t> &obwbOffset = obwbOffsets_[obwb];
+		ChannelArray<uint16_t> &obwbOffset = blcConfig.obwbOffsets[obwb];
 		applyGain(sensorOffset, obwbOffset, gainLeftShift[obwb]);
 	}
 
@@ -290,10 +291,10 @@ int BlackLevelCorrection::configure(IPAContext &context,
 	for (unsigned channel = 0; channel < kObwbChannelsCount; channel++) {
 		uint16_t &sensorOffset = sensorOffsets[0][channel];
 		if (leftShift >= 0)
-			mdOffsets_[channel] =
+			blcConfig.mdOffsets[channel] =
 				static_cast<int32_t>(sensorOffset << leftShift);
 		else
-			mdOffsets_[channel] =
+			blcConfig.mdOffsets[channel] =
 				static_cast<int32_t>(sensorOffset >> (-leftShift));
 	}
 
@@ -316,13 +317,13 @@ int BlackLevelCorrection::configure(IPAContext &context,
 	};
 
 	if (mode != IPAModeTypeHdrMerge) {
-		obwbObpp_[0] = obpp(20);
-		obwbObpp_[1] = obpp(16);
+		blcConfig.obwbObpp[0] = obpp(20);
+		blcConfig.obwbObpp[1] = obpp(16);
 	} else {
-		obwbObpp_[0] = obpp(bpps[0]);
-		obwbObpp_[1] = obpp(bpps[1]);
+		blcConfig.obwbObpp[0] = obpp(bpps[0]);
+		blcConfig.obwbObpp[1] = obpp(bpps[1]);
 	}
-	obwbObpp_[2] = obpp(20);
+	blcConfig.obwbObpp[2] = obpp(20);
 
 	return 0;
 }
@@ -342,6 +343,7 @@ void BlackLevelCorrection::prepare([[maybe_unused]] IPAContext &context,
 	 */
 	if (!enabled_)
 		return;
+	const auto &blcConfig = context.configuration.blc;
 
 	auto obwb0Config = params->block<BlockParamsType::Obwb0>();
 	auto obwb1Config = params->block<BlockParamsType::Obwb1>();
@@ -356,20 +358,20 @@ void BlackLevelCorrection::prepare([[maybe_unused]] IPAContext &context,
 	for (const uint8_t &obwb : obwbs_) {
 		if (obwb == 0) {
 			obwb0Config.setUpdate(true);
-			obwb0Config->ctrl_obpp = obwbObpp_[0];
+			obwb0Config->ctrl_obpp = blcConfig.obwbObpp[0];
 		} else if (obwb == 1) {
 			obwb1Config.setUpdate(true);
-			obwb1Config->ctrl_obpp = obwbObpp_[1];
+			obwb1Config->ctrl_obpp = blcConfig.obwbObpp[1];
 		} else if (obwb == 2) {
 			obwb2Config.setUpdate(true);
-			obwb2Config->ctrl_obpp = obwbObpp_[2];
+			obwb2Config->ctrl_obpp = blcConfig.obwbObpp[2];
 		} else {
 			LOG(NxpNeoAlgoBlc, Warning) << "Invalid OBWB" << +obwb << " block,";
 			continue;
 		}
 
 		neoisp_obwb_cfg_s *config = obwbBlocks[obwb];
-		const ChannelArray<uint16_t> &offsets = obwbOffsets_[obwb];
+		const ChannelArray<uint16_t> &offsets = blcConfig.obwbOffsets[obwb];
 
 		config->r_ctrl_offset = offsets[0];
 		config->gr_ctrl_offset = offsets[1];
@@ -406,10 +408,12 @@ void BlackLevelCorrection::process([[maybe_unused]] IPAContext &context,
 {
 	if (!enabled_)
 		return;
+	const auto &blcConfig = context.configuration.blc;
 
 	/* Report the offsets in 16-bit pixel format. */
 	metadata.set(controls::SensorBlackLevels,
-		     { mdOffsets_[0], mdOffsets_[1], mdOffsets_[2], mdOffsets_[3] });
+		     { blcConfig.mdOffsets[0], blcConfig.mdOffsets[1],
+		       blcConfig.mdOffsets[2], blcConfig.mdOffsets[3] });
 }
 
 REGISTER_IPA_ALGORITHM(BlackLevelCorrection, "BlackLevelCorrection")

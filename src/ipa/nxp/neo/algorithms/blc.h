@@ -47,13 +47,6 @@ private:
 	/* BLC offset values from calibration (16-bit pixel format) */
 	ChannelArray<uint16_t> calibrationOffsets_;
 
-	/* OBWB instances BLC offsets and obpp values */
-	ObwbArray<ChannelArray<uint16_t>> obwbOffsets_;
-	ObwbArray<unsigned int> obwbObpp_;
-
-	/* BLC offset reported in metadata format */
-	ChannelArray<int32_t> mdOffsets_;
-
 	/* Offset reference bit-depth */
 	std::optional<uint32_t> referenceBitDepth_;
 };

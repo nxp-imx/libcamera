@@ -26,6 +26,7 @@
 #include <libipa/fc_queue.h>
 
 #include "nxp/cam_helper/camera_helper.h"
+#include "neoisp-definitions.h"
 
 namespace libcamera {
 
@@ -48,6 +49,15 @@ struct IPASessionConfiguration {
 		struct neoisp_roi_cfg_s roi;
 		bool awbGainInSensor;
 	} awb;
+
+	struct {
+		/* OBWB instances BLC offsets */
+		ObwbArray<ChannelArray<uint16_t>> obwbOffsets;
+		/* OBWB instances obpp values */
+		ObwbArray<unsigned int> obwbObpp;
+		/* BLC offset reported in metadata format */
+		ChannelArray<uint32_t> mdOffsets;
+	} blc;
 
 	struct {
 		uint16_t ratioLong2Short;
