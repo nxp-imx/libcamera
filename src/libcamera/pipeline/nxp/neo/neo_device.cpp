@@ -647,39 +647,58 @@ int NeoDevice::configure(PipeConfig &pipeConfig,
 	return ret;
 }
 
-const std::vector<V4L2PixelFormat> &NeoDevice::frameFormats()
-{
-	static const std::vector<V4L2PixelFormat> formats = {
-		V4L2PixelFormat(V4L2_PIX_FMT_RGB24),
-		V4L2PixelFormat(V4L2_PIX_FMT_BGR24),
-		V4L2PixelFormat(V4L2_PIX_FMT_RGBX32),
-		V4L2PixelFormat(V4L2_PIX_FMT_XBGR32),
-		V4L2PixelFormat(V4L2_PIX_FMT_YUVX32),
-		V4L2PixelFormat(V4L2_PIX_FMT_YUYV),
-		V4L2PixelFormat(V4L2_PIX_FMT_UYVY),
-		V4L2PixelFormat(V4L2_PIX_FMT_NV12),
-		V4L2PixelFormat(V4L2_PIX_FMT_NV21),
-		V4L2PixelFormat(V4L2_PIX_FMT_NV16),
-		V4L2PixelFormat(V4L2_PIX_FMT_NV61),
-		V4L2PixelFormat(V4L2_PIX_FMT_GREY),
-		V4L2PixelFormat(V4L2_PIX_FMT_Y10),
-		V4L2PixelFormat(V4L2_PIX_FMT_Y12),
-		V4L2PixelFormat(V4L2_PIX_FMT_Y16),
-	};
+namespace {
+	std::vector<PixelFormat> queryPixelFormats(V4L2VideoDevice *device)
+	{
+		V4L2VideoDevice::Formats deviceFormats = device->formats();
+		std::vector<PixelFormat> formats;
+		for (const auto &[format, ranges] : deviceFormats) {
+			PixelFormat pixelFormat = format.toPixelFormat(false);
+			if (pixelFormat.isValid())
+				formats.push_back(pixelFormat);
+		}
+		return formats;
+	}
+} /* namespace */
 
-	return formats;
+/**
+ * \brief Report the supported pixel formats on the frame capture node
+ *
+ * \return The vector of frame pixel formats
+ */
+const std::vector<PixelFormat> &NeoDevice::framePixelFormats()
+{
+	/* Initialize once */
+	static std::vector<PixelFormat> pixelFormats =
+		queryPixelFormats(frame_.get());
+
+	return pixelFormats;
 }
 
-const std::vector<V4L2PixelFormat> &NeoDevice::irFormats()
+/**
+ * \brief Report the supported pixel formats on the IR capture node
+ *
+ * \return The vector of IR pixel formats
+ */
+const std::vector<PixelFormat> &NeoDevice::irPixelFormats()
 {
-	static const std::vector<V4L2PixelFormat> formats = {
-		V4L2PixelFormat(V4L2_PIX_FMT_GREY),
-		V4L2PixelFormat(V4L2_PIX_FMT_Y16),
-	};
+	/* Initialize once */
+	static std::vector<PixelFormat> pixelFormats =
+		queryPixelFormats(ir_.get());
 
-	return formats;
+	return pixelFormats;
 }
 
+/**
+ * \brief Report the supported V4L2 pixel formats on the input0 output node
+ *
+ * This function returns the supported V4L2 pixel formats for the input0 node.
+ * It has to remain as a static function with a predefined list of V4L2 pixel
+ * formats as it may be called during the early stages of the pipeline handler
+ * creation before the NeoDevice object is created.
+ *
+ * \return The vector of input0 pixel formats
+ */
 const std::vector<V4L2PixelFormat> &NeoDevice::input0Formats()
 {
 	static const std::vector<V4L2PixelFormat> formats = {
@@ -712,6 +731,16 @@ const std::vector<V4L2PixelFormat> &NeoDevice::input0Formats()
 	return formats;
 }
 
+/**
+ * \brief Report the supported V4L2 pixel formats on the input1 output node
+ *
+ * This function returns the supported V4L2 pixel formats for the input1 node.
+ * It has to remain as a static function with a predefined list of V4L2 pixel
+ * formats as it may be called during the early stages of the pipeline handler
+ * creation before the NeoDevice object is created.
+ *
+ * \return The vector of input1 pixel formats
+ */
 const std::vector<V4L2PixelFormat> &NeoDevice::input1Formats()
 {
 	static const std::vector<V4L2PixelFormat> formats = {

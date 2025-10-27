@@ -1001,19 +1001,28 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validateRaw()
 			<< "Stream " << i << " to validate cfg " << cfg->toString();
 
 		if (isFrame || isIr) {
-			const std::vector<V4L2PixelFormat> &formats =
-				isFrame ? NeoDevice::frameFormats() : NeoDevice::irFormats();
-			if (std::find_if(formats.begin(),
-					 formats.end(),
-					 [&](auto &format) {
-						 return format.toPixelFormat() == cfg->pixelFormat;
-					 }) == formats.end())
-				cfg->pixelFormat = formats[0].toPixelFormat();
-			cfg->size = pixelSize;
+			/* Check format, default on YUYV (frame) and R8 (IR). */
+			NeoDevice *neo = data_->neoDevice();
+			V4L2VideoDevice *device;
+			if (isFrame) {
+				const std::vector<PixelFormat> &pixelFormats =
+					neo->framePixelFormats();
+				if (std::find(pixelFormats.begin(), pixelFormats.end(),
+					      cfg->pixelFormat) == pixelFormats.end())
+					cfg->pixelFormat = formats::YUYV;
+				device = neo->frame_.get();
+			} else {
+				const std::vector<PixelFormat> &pixelFormats =
+					neo->irPixelFormats();
+				if (std::find(pixelFormats.begin(), pixelFormats.end(),
+					      cfg->pixelFormat) == pixelFormats.end())
+					cfg->pixelFormat = formats::R8;
+				device = neo->ir_.get();
+			}
 
 			V4L2DeviceFormat format = {};
 			format.size = cfg->size;
-			format.fourcc = (V4L2PixelFormat::fromPixelFormat(cfg->pixelFormat))[0];
+			format.fourcc = device->toV4L2PixelFormat(cfg->pixelFormat);
 			format.colorSpace = cfg->colorSpace;
 
 			/* For frame stream, the user can choose the
@@ -1026,18 +1035,10 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validateRaw()
 			if (format.colorSpace == ColorSpace::Srgb)
 				format.colorSpace = ColorSpace::Sycc;
 
-			if (isFrame) {
-				data_->neoDevice()->frame_->tryFormat(&format);
-				cfg->colorSpace = format.colorSpace;
-				cfg->stride = format.planes[0].bpl;
-				cfg->frameSize = format.planes[0].size;
-			} else if (isIr) {
-				data_->neoDevice()->ir_->tryFormat(&format);
-				/* IR node is fixed to RAW colorspace */
-				cfg->colorSpace = ColorSpace::Raw;
-				cfg->stride = format.planes[0].bpl;
-				cfg->frameSize = format.planes[0].size;
-			}
+			device->tryFormat(&format);
+			cfg->stride = format.planes[0].bpl;
+			cfg->frameSize = format.planes[0].size;
+			cfg->colorSpace = isFrame ? format.colorSpace : ColorSpace::Raw;
 
 			LOG(NxpNeoPipe, Debug) << "Assigned " << cfg->toString()
 					       << " to the "
@@ -1122,7 +1123,7 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validateYuv()
 		ISIPipe::pixelFormatsProcessed();
 	auto it = std::find(pixelFormats.begin(), pixelFormats.end(), cfg.pixelFormat);
 	if (it == pixelFormats.end())
-		cfg.pixelFormat = pixelFormats[0];
+		cfg.pixelFormat = formats::YUYV;
 
 	/*
 	 * Cache sensor format for later usage by configure().
@@ -1398,20 +1399,17 @@ PipelineHandlerNxpNeo::generateConfigurationRaw(Camera *camera,
 		case StreamRole::VideoRecording: {
 			/*
 			 * Propose the resolutions supported by the sensor with
-			 * all output formats supported by the ISP, including
-			 * Infrared (gray) if supported by the sensor.
+			 * all output formats supported by the ISP. Gray formats
+			 * reported apply to both RGB and IR pixels, when
+			 * applicable to the sensor, as there is no dedicated IR
+			 * role for now.
 			 */
-			const std::vector<V4L2PixelFormat> &frameFormats =
-				NeoDevice::frameFormats();
-			pixelFormat = frameFormats[0].toPixelFormat();
-			for (const V4L2PixelFormat &format : frameFormats)
-				streamFormats[format.toPixelFormat()] = pixelRanges;
-
-			const std::vector<V4L2PixelFormat> &irFormats =
-				NeoDevice::irFormats();
+			NeoDevice *neo = data->neoDevice();
+			for (const PixelFormat &format : neo->framePixelFormats())
+				streamFormats[format] = pixelRanges;
 			if (data->sensorIsRgbIr()) {
-				for (const V4L2PixelFormat &format : irFormats)
-					streamFormats[format.toPixelFormat()] = pixelRanges;
+				for (const PixelFormat &format : neo->irPixelFormats())
+					streamFormats[format] = pixelRanges;
 			}
 
 			/*
@@ -1420,11 +1418,11 @@ PipelineHandlerNxpNeo::generateConfigurationRaw(Camera *camera,
 			 * check.
 			 */
 			if (frameOutputAvailable) {
-				pixelFormat = frameFormats[0].toPixelFormat();
+				pixelFormat = formats::YUYV;
 				colorSpace = ColorSpace::Sycc;
 				frameOutputAvailable = false;
 			} else if (irOutputAvailable) {
-				pixelFormat = irFormats[0].toPixelFormat();
+				pixelFormat = formats::R8;
 				colorSpace = ColorSpace::Raw;
 				irOutputAvailable = false;
 			} else {
