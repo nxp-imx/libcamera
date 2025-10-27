@@ -76,6 +76,15 @@ namespace ipa::nxpneo::algorithms {
  * HDR merge mode where OBWB0/1 has to be used. The user configuration, if
  * present, takes precedence over the default configuration.
  *
+ * The gain compensation of the AWB function is required to make sure to reach
+ * maximum pixel range for the saturation function of the OBWB block to operate
+ * properly.
+ * To be effective, this compensation applies after the BLC offset removal.
+ * This is the case if AWB is mapped in the same block as the BLC, or in a
+ * different OBWB block but downstream in the ISP pipeline.
+ * Also the BLC algorithm should run before the AWB algorithm in order to
+ * use the computed scaled BLC offsets.
+ *
  * AWB may share usage of the OBWB blocks with BLC, AWB configuring the
  * gains and BLC configuring the offsets. Thus, AWB also configures default
  * offsets to zero in the OBWB blocks if they were not configured beforehand by
@@ -144,8 +153,9 @@ int Awb::configure(IPAContext &context,
 {
 	if (!enabled_)
 		return 0;
+	auto &awbConfig = context.configuration.awb;
 
-	context.configuration.awb.awbGainInSensor = awbGainInSensor_;
+	awbConfig.awbGainInSensor = awbGainInSensor_;
 	LOG(NxpNeoAlgoAwb, Debug) << "AWB gains apply in sensor: " << awbGainInSensor_;
 
 	/*
@@ -181,14 +191,53 @@ int Awb::configure(IPAContext &context,
 	std::array<uint32_t, kInputsCount> &bpps =
 		context.configuration.sensor.bpps;
 
+	/*
+	 * Assumption is that the internal pixel format at the input of OBWB
+	 * blocks is:
+	 * - OBWB0/1
+	 *     - 20/16-bit (input0/input1) for operation without HDR merge
+	 *     - The native sensor format (input0/input1) when HDR merge enabled
+	 *       or 12-bit if the pixel format is 10-bit
+	 * - OBWB2
+	 *     - 20-bit unconditionally
+	 */
+	ObwbArray<uint16_t> obwbPixelFormat;
 	if (mode != IPAModeTypeHdrMerge) {
-		obwbObpp_[0] = obpp(20);
-		obwbObpp_[1] = obpp(16);
+		obwbPixelFormat[0] = 20;
+		obwbPixelFormat[1] = 16;
+		awbConfig.obwbObpp[0] = obpp(obwbPixelFormat[0]);
+		awbConfig.obwbObpp[1] = obpp(obwbPixelFormat[1]);
 	} else {
-		obwbObpp_[0] = obpp(bpps[0]);
-		obwbObpp_[1] = obpp(bpps[1]);
+		obwbPixelFormat[0] = bpps[0] == 10 ? 12 : bpps[0];
+		obwbPixelFormat[1] = bpps[1] == 10 ? 12 : bpps[1];
+		awbConfig.obwbObpp[0] = obpp(bpps[0]);
+		awbConfig.obwbObpp[1] = obpp(bpps[1]);
 	}
-	obwbObpp_[2] = obpp(20);
+	obwbPixelFormat[2] = 20;
+	awbConfig.obwbObpp[2] = obpp(obwbPixelFormat[2]);
+
+	/*
+	 * The awb gain factors are used to compensate the black level offsets
+	 * subtracted from the input pixel value.
+	 * It is calculated per OBWB unit and per color channel and based on
+	 * following associated parameters:
+	 * - maximum pixel value fed to the OBWB block input
+	 * - black level offset scaled to the input pixel format (which is
+	 *   already computed from the blc algorithm)
+	 */
+	std::stringstream oss;
+	for (unsigned int obwb = 0; obwb < kObwbInstancesCount; obwb++) {
+		double inputPixelMax = (1 << obwbPixelFormat[obwb]) - 1;
+		const ChannelArray<uint16_t> &blcOffsets =
+			context.configuration.blc.obwbOffsets[obwb];
+		ChannelArray<float> &factors = awbConfig.blcFactors[obwb];
+		oss << "\nblcFactors_RGrGbB[obwb" << obwb << "]=";
+		for (unsigned channel = 0; channel < kObwbChannelsCount; channel++) {
+			factors[channel] = inputPixelMax / (inputPixelMax - blcOffsets[channel]);
+			oss << factors[channel] << "/";
+		}
+	}
+	LOG(NxpNeoAlgoAwb, Debug) << oss.str();
 
 	context.activeState.awb.gains.manual = RGB<double>{ 1.0 };
 	context.activeState.awb.gains.automatic = RGB<double>{ 1.0 };
@@ -198,10 +247,10 @@ int Awb::configure(IPAContext &context,
 	 * Configuration for CTEMP Block Statistics.
 	 * ROI is defined as the full image size.
 	 */
-	context.configuration.awb.roi.xpos = 0;
-	context.configuration.awb.roi.ypos = 0;
-	context.configuration.awb.roi.width = configInfo.outputSize.width;
-	context.configuration.awb.roi.height = configInfo.outputSize.height;
+	awbConfig.roi.xpos = 0;
+	awbConfig.roi.ypos = 0;
+	awbConfig.roi.width = configInfo.outputSize.width;
+	awbConfig.roi.height = configInfo.outputSize.height;
 
 	return 0;
 }
@@ -275,7 +324,7 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 
 	/* Update the WB gains in the OBWB blocks only if they are applied in the ISP */
 	if (!context.configuration.awb.awbGainInSensor)
-		updateObwbGains(frameContext, params);
+		updateObwbGains(context, frame, frameContext, params);
 
 	/* If we have already set the CTEMP measurement parameters, return. */
 	if (frame > 0)
@@ -291,8 +340,10 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
  * \param[out] params Params of the ISP to update
  *
  */
-void Awb::updateObwbGains(IPAFrameContext &frameContext, NxpNeoParams *params)
+void Awb::updateObwbGains(IPAContext &context, const uint32_t frame,
+			  IPAFrameContext &frameContext, NxpNeoParams *params)
 {
+	auto &awbConfig = context.configuration.awb;
 	auto obwb0Config = params->block<BlockParamsType::Obwb0>();
 	auto obwb1Config = params->block<BlockParamsType::Obwb1>();
 	auto obwb2Config = params->block<BlockParamsType::Obwb2>();
@@ -306,25 +357,45 @@ void Awb::updateObwbGains(IPAFrameContext &frameContext, NxpNeoParams *params)
 	for (const uint8_t &obwb : obwbs_) {
 		if (obwb == 0) {
 			obwb0Config.setUpdate(true);
-			obwb0Config->ctrl_obpp = obwbObpp_[0];
+			obwb0Config->ctrl_obpp = awbConfig.obwbObpp[0];
 		} else if (obwb == 1) {
 			obwb1Config.setUpdate(true);
-			obwb1Config->ctrl_obpp = obwbObpp_[1];
+			obwb1Config->ctrl_obpp = awbConfig.obwbObpp[1];
 		} else if (obwb == 2) {
 			obwb2Config.setUpdate(true);
-			obwb2Config->ctrl_obpp = obwbObpp_[2];
+			obwb2Config->ctrl_obpp = awbConfig.obwbObpp[2];
 		} else {
-			LOG(NxpNeoAlgoAwb, Warning) << "Invalid OBWB" << +obwb << " block,";
+			LOG(NxpNeoAlgoAwb, Warning) << "Invalid OBWB" << +obwb << " block";
 			continue;
 		}
 
-		neoisp_obwb_cfg_s *config = obwbBlocks[obwb];
-		config->r_ctrl_gain = gainDouble2Param(frameContext.awb.gains.r());
-		config->gr_ctrl_gain = gainDouble2Param(frameContext.awb.gains.g());
-		config->gb_ctrl_gain = gainDouble2Param(frameContext.awb.gains.g());
-		config->b_ctrl_gain = gainDouble2Param(frameContext.awb.gains.b());
+		/*
+		 * Compensate the wb gains with the blc offset subtracted from
+		 * the pixel value.
+		 * This is effective if AWB is mapped in the same block as the
+		 * BLC, or in a different OBWB block but downstream in the ISP
+		 * pipeline.
+		 * If the BLC offsets are applied in the OBWB2 block whereas
+		 * the wb gains apply in the OBWB0/1 blocks, there is no need
+		 * to compensate.
+		 */
+		if (frame == 0 && obwb < 2 && !frameContext.blc.colorOffsetsSet[obwb])
+			awbConfig.blcFactors[obwb] = { 1.0f, 1.0f, 1.0f, 1.0f };
+		ChannelArray<float> gains;
+		gains[0] = frameContext.awb.gains.r() * awbConfig.blcFactors[obwb][0];
+		gains[1] = frameContext.awb.gains.g() * awbConfig.blcFactors[obwb][1];
+		gains[2] = frameContext.awb.gains.g() * awbConfig.blcFactors[obwb][2];
+		gains[3] = frameContext.awb.gains.b() * awbConfig.blcFactors[obwb][3];
 
-		frameContext.awb.colorGainsSet[obwb] = true;
+		neoisp_obwb_cfg_s *config = obwbBlocks[obwb];
+		config->r_ctrl_gain = gainDouble2Param(gains[0]);
+		config->gr_ctrl_gain = gainDouble2Param(gains[1]);
+		config->gb_ctrl_gain = gainDouble2Param(gains[2]);
+		config->b_ctrl_gain = gainDouble2Param(gains[3]);
+
+		frameContext.awb.gains.r() = gains[0];
+		frameContext.awb.gains.g() = (gains[1] + gains[2]) / 2;
+		frameContext.awb.gains.b() = gains[3];
 
 		/*
 		 * When OBWB offsets are not configured by BLC, set some default offsets.

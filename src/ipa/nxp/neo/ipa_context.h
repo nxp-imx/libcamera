@@ -48,6 +48,8 @@ struct IPASessionConfiguration {
 		/* ROI for statistics measurements */
 		struct neoisp_roi_cfg_s roi;
 		bool awbGainInSensor;
+		ObwbArray<unsigned int> obwbObpp;
+		ObwbArray<ChannelArray<float>> blcFactors;
 	} awb;
 
 	struct {

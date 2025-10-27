@@ -41,7 +41,8 @@ public:
 		     ControlList &metadata) override;
 
 private:
-	void updateObwbGains(IPAFrameContext &frameContext, NxpNeoParams *params);
+	void updateObwbGains(IPAContext &context, const uint32_t frame,
+			     IPAFrameContext &frameContext, NxpNeoParams *params);
 	void configureCtempStats(IPAContext &context, NxpNeoParams *params);
 	void generateBlocks(const NxpNeoStats *stats);
 	void awbGreyWorld(IPAActiveState &activeState, IPAFrameContext &frameContext,
@@ -64,7 +65,6 @@ private:
 	std::optional<std::string> obwbUserConfig_;
 	std::vector<RGB<double>> blocks_;
 	std::vector<uint8_t> obwbs_;
-	ObwbArray<unsigned int> obwbObpp_;
 	bool awbGainInSensor_;
 };
 
