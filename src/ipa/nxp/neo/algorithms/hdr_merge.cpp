@@ -85,10 +85,10 @@ namespace ipa::nxpneo::algorithms {
  * - luma = binomial3x3(gimage0[x,y]) >> luma-scale-th-shift
  * - if (luma < luma-th0)
  *       mluma = 0
- *   else if (luma > luma-th0)
- *       mluma = 1
  *   else
  *       mluma = ((luma - luma-th0) * luma-scale) >> luma-scale-shift
+ *       if (mluma > 256)
+ *           mluma = 256
  *   endif
  * - spv0 = (gimage0[x,y] << upscale[0]) >> downscale[0]
  * - spv1 = (gimage1[x,y] << upscale[1]) >> downscale[1]
