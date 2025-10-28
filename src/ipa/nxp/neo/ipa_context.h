@@ -50,6 +50,10 @@ struct IPASessionConfiguration {
 	} awb;
 
 	struct {
+		uint16_t ratioLong2Short;
+	} hdr;
+
+	struct {
 		utils::Duration minExposureTime;
 		utils::Duration maxExposureTime;
 		utils::Duration defExposureTime;
