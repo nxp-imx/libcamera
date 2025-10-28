@@ -42,11 +42,11 @@ namespace ipa::nxpneo::algorithms {
  * \class Agc
  * \brief A mean-based auto-exposure algorithm
  *
- * The AGC algorithm should run after the AWB algorithm
- * since the AGC has dependency with the AWB.
- * Indeed the AGC algorithm is using the AWB gains to estimate
- * the luminance.
- * Hence the AWB gains should be computed before running the AGC.
+ * The AGC algorithm should run after the AWB and HDR algorithms
+ * due to following dependencies:
+ * - AGC is using the AWB gains to adapt the calculated luminance.
+ * - AGC is using the ratio between the long and short captures
+ *   configured from the HDR algorithm to adapt the histogram scaling factor.
  */
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoAgc)
@@ -127,6 +127,8 @@ int Agc::init(IPAContext &context, const YamlObject &tuningData)
 		return -EINVAL;
 	}
 
+	userConfig_ = true;
+
 	return 0;
 }
 
@@ -162,6 +164,23 @@ int Agc::configure(IPAContext &context, const IPACameraSensorInfo &configInfo)
 		  context.configuration.sensor.minAnalogueGain,
 		  context.configuration.sensor.maxAnalogueGain);
 	resetFrameCount();
+
+	/*
+	 * In HDR mode, the histogram scaling factor is adapted considering
+	 * that it should be configured for the long capture and
+	 * that HDR merge is rescaling input captures as follow:
+	 * - short capture to 20-bits range
+	 * - long capture to the range of the short capture divided by the ratio
+	 *   between the long and the short captures
+	 * Note that AGC_HIST_SCALE_DEFAULT is configured for the default 20-bits
+	 * scaling format.
+	 */
+	IPAModeType &mode = context.configuration.pipelineMode;
+	if (!userConfig_ && mode == IPAModeTypeHdrMerge) {
+		uint16_t ratioL2S = context.configuration.hdr.ratioLong2Short;
+		uint32_t scaleHdr = AGC_HIST_SCALE_DEFAULT * ratioL2S;
+		histScale_ = { scaleHdr, scaleHdr, scaleHdr, scaleHdr };
+	}
 
 	return 0;
 }
