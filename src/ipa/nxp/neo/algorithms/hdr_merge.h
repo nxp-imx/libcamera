@@ -59,6 +59,8 @@ private:
 	static constexpr uint8_t kDefaultUpscale1 = 8;
 	static constexpr uint8_t kDefaultPostscale = 0;
 
+	static constexpr uint16_t kRatioL2S = 16;
+
 	uint8_t obpp_;
 	uint8_t motionfixEn_;
 	uint8_t blend3x3_;
@@ -76,6 +78,9 @@ private:
 	std::vector<uint8_t> downscale_;
 	std::vector<uint8_t> upscale_;
 	uint8_t postscale_;
+
+	/* Ratio between the long and the short captures. */
+	uint16_t ratioL2S_;
 
 	bool enabled_ = false;
 };
