@@ -325,7 +325,19 @@ int PipelineConfig::loadAutoDetect()
 		else
 			cameraInfo.properties_ = &modelPropertiesMap_[model];
 
-		Size size = sensor->resolution();
+		/* Select max sensor resolution compatible with an ISI pipe. */
+		Size sizeMax;
+		std::set<Size> sizesSet;
+		const std::vector<unsigned int> mbusCodes = sensor->mbusCodes();
+		for (const auto mbusCode : sensor->mbusCodes()) {
+			for (const auto &size : sensor->sizes(mbusCode))
+				if (size.width <= ISIPipe::kChainedWidthMax)
+					sizesSet.insert(size);
+		}
+		if (sizesSet.size())
+			sizeMax = *sizesSet.rbegin();
+		else
+			continue;
 
 		/* Map for each stream the pipe index and per-entity routing */
 		std::map<StreamType, unsigned int> pipeIndex;
@@ -366,7 +378,7 @@ int PipelineConfig::loadAutoDetect()
 			}
 
 			unsigned int index;
-			ret = isiDevice->reservePipeBySize(size, &index);
+			ret = isiDevice->reservePipeBySize(sizeMax, &index);
 			if (ret) {
 				LOG(NxpNeoPipe, Warning) << "Input pipe allocation failed";
 				goto error;
