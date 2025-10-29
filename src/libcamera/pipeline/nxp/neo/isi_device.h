@@ -39,6 +39,9 @@ public:
 		kStateActive,
 	};
 
+	static constexpr unsigned int kUnchainedWidthMax = 2048;
+	static constexpr unsigned int kChainedWidthMax = 4096;
+
 	ISIPipe(unsigned int index)
 		: index_(index), state_(kStateIdle) {}
 
@@ -96,8 +99,6 @@ public:
 	ISIDevice() {}
 
 	static constexpr unsigned int kPipesMax = 16;
-	static constexpr unsigned int kUnchainedWidthMax = 2048;
-	static constexpr unsigned int kChainedWidthMax = 4096;
 
 	int init(MediaDevice *media);
 

@@ -2905,7 +2905,7 @@ int NxpNeoCameraData::enumerateFormatsYuv()
 		}
 
 		for (const Size &size : sizes) {
-			if (size.width > ISIDevice::kChainedWidthMax)
+			if (size.width > ISIPipe::kChainedWidthMax)
 				continue;
 
 			if (sizeFilter && size != sizeFilter.value())
