@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: CC0-1.0
 
 conf_files = files([
+    'imx519.yaml',
     'mx95mbcam.yaml',
     'os08a20.yaml',
     'ov5640.yaml',
