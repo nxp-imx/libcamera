@@ -268,9 +268,9 @@ public:
 	std::map<StreamType, ISIPipe *> &isiPipes() { return pipes_; };
 	const std::string &cameraName() const { return sensor_->entity()->name(); }
 	bool multiCamera() const { return cameraInfo_->cameraProperties().multiCamera; }
-	bool updateControlsOnIspSync() const
+	std::optional<utils::Duration> controlsDelay() const
 	{
-		return cameraInfo_->cameraProperties().updateControlsOnIspSync;
+		return cameraInfo_->cameraProperties().controlsDelay;
 	}
 	bool isRawCamera() const { return isRawCamera_; };
 	const std::map<Size, std::vector<unsigned int>> &
@@ -288,7 +288,7 @@ public:
 	/* Requests for which no buffer has been queued to the frontend  device yet */
 	std::queue<Request *> pendingRequests_;
 	/* Requests in-flight not yet completed */
-	std::deque<Request *> processingRequests_;
+	std::queue<Request *> processingRequests_;
 
 private:
 	friend NxpNeoFrames;
@@ -321,13 +321,13 @@ private:
 	void isiImage0BufferReady(FrameBuffer *buffer);
 	void isiImage1BufferReady(FrameBuffer *buffer);
 	void isiEmbeddedDataBufferReady(FrameBuffer *buffer);
+	void applySensorControls(NxpNeoFrames::Info *info, ContextType context);
 
 	void neoInput0BufferReady(FrameBuffer *buffer);
 	void neoInput1BufferReady(FrameBuffer *buffer);
 	void neoOutputBufferReady(FrameBuffer *buffer);
 	void neoParamsBufferReady(FrameBuffer *buffer);
 	void neoStatsBufferReady(FrameBuffer *buffer);
-	void frameStart(uint32_t sequence);
 
 	void ipaParamsComputed(unsigned int id, ipa::nxpneo::IPAContextType context,
 			       unsigned int bytesused);
@@ -366,6 +366,8 @@ private:
 	std::map<BufferType, std::queue<FrameBuffer *>> availableBuffersMap_;
 	std::vector<std::unique_ptr<FrameBuffer>> frameBuffersPool_;
 	std::vector<std::unique_ptr<FrameBuffer>> irBuffersPool_;
+
+	std::map<ContextType, std::unique_ptr<Timer>> controlsTimers_;
 };
 
 class NxpNeoCameraConfiguration : public CameraConfiguration
@@ -748,6 +750,9 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 		infoContext.paramDequeued_ = false;
 		infoContext.metadataProcessed_ = false;
 
+		if (data_->rawStreamOnly_)
+			continue;
+
 		/*
 		 * Map the ISP frame and infrared output buffer of the ISP. They
 		 * are provided by the application in the libcamera:Request as
@@ -762,15 +767,12 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 		case ModeTypeRgbIrDual:
 			ASSERT(context == ContextTypeRgb || context == ContextTypeIr);
 			if (context == ContextTypeRgb) {
-				if (data_->rawStreamOnly_)
-					frameBuffer = allocBuffer(BufferTypeFrame);
-				else
-					frameBuffer = info->frameStreamBuffer_;
+				frameBuffer = info->frameStreamBuffer_;
 				if (info->irStreamBuffer_)
 					irBuffer = allocBuffer(BufferTypeIr);
 			} else {
 				irBuffer = info->irStreamBuffer_;
-				if ((info->frameStreamBuffer_) || (data_->rawStreamOnly_))
+				if (info->frameStreamBuffer_)
 					frameBuffer = allocBuffer(BufferTypeFrame);
 			}
 			break;
@@ -779,10 +781,7 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 		case ModeTypeHdrMerge:
 		default:
 			ASSERT(context == ContextTypeRgb);
-			if (data_->rawStreamOnly_)
-				frameBuffer = allocBuffer(BufferTypeFrame);
-			else
-				frameBuffer = info->frameStreamBuffer_;
+			frameBuffer = info->frameStreamBuffer_;
 			irBuffer = info->irStreamBuffer_;
 			break;
 		}
@@ -1269,11 +1268,12 @@ bool PipelineHandlerNxpNeo::acquireDevice(Camera *camera)
 {
 	NxpNeoCameraData *data = cameraData(camera);
 
-	acquireCount_++;
 	LOG(NxpNeoPipe, Debug) << "acquireDevice " << data->cameraName()
 			       << " count " << acquireCount_;
-	if (acquireCount_ > 1)
+	if (acquireCount_ > 0) {
+		acquireCount_++;
 		return true;
+	}
 
 	/*
 	 * Frontend media controller device has been locked by the process.
@@ -1287,7 +1287,11 @@ bool PipelineHandlerNxpNeo::acquireDevice(Camera *camera)
 		return false;
 
 	ret = setupCameraGraphs();
-	return (!ret);
+	if (ret)
+		return false;
+
+	acquireCount_++;
+	return true;
 }
 
 void PipelineHandlerNxpNeo::releaseDevice(Camera *camera)
@@ -1836,6 +1840,11 @@ void NxpNeoCameraData::stopDevice()
 
 	freeBuffers();
 
+	for (auto const &[context, timer] : controlsTimers_) {
+		if (timer.get())
+			timer->stop();
+	}
+
 	if (ret)
 		LOG(NxpNeoPipe, Warning) << "Failed to stop camera " << cameraName();
 }
@@ -1876,7 +1885,7 @@ void NxpNeoCameraData::queuePendingRequests()
 			ipa_->queueRequest(info->id_, request->controls());
 
 		pendingRequests_.pop();
-		processingRequests_.push_back(request);
+		processingRequests_.push(request);
 	}
 
 	return;
@@ -1937,6 +1946,12 @@ int NxpNeoCameraData::init(DeviceEnumerator *enumerator)
 			mode_ = sensorIsRgbIr() ? ModeTypeRgbIr : ModeTypeStandard;
 		else
 			mode_ = sensorIsRgbIr() ? ModeTypeRgbIrDual : ModeTypeHdrMerge;
+
+		for (const auto context : { ContextTypeRgb, ContextTypeIr }) {
+			std::unique_ptr<Timer> timer =
+				controlsDelay().has_value() ? std::make_unique<Timer>() : nullptr;
+			controlsTimers_.insert({ context, std::move(timer) });
+		}
 	}
 
 	/* Initialize the camera properties. */
@@ -2015,10 +2030,6 @@ int NxpNeoCameraData::init(DeviceEnumerator *enumerator)
 			this, &NxpNeoCameraData::neoParamsBufferReady);
 		neo_->stats_->bufferReady.connect(
 			this, &NxpNeoCameraData::neoStatsBufferReady);
-		if (updateControlsOnIspSync()) {
-			neo_->isp_->frameStart.connect(
-				this, &NxpNeoCameraData::frameStart);
-		}
 	}
 
 	return 0;
@@ -2277,12 +2288,9 @@ int NxpNeoCameraData::allocateBuffersRaw()
 	 *  - Throw-away buffers for ISP frame and infrared outputs have to be
 	 *    allocated. They are used as temporary storage for the ISP
 	 *    decoded buffers not delivered to the application.
-	 * Raw-only operation also has the specificity that ISP capture buffer
-	 * for frame output is not provided in the libcamera::Request so it has
-	 * to be allocated internally. For RGBIr raw-only operation, a frame
-	 * buffer for the frame output is to be provided for both contexts.
-	 * \todo replace full size output buffers by short dummy buffers when
-	 * that is supported by the ISP driver.
+	 * Raw-only operation has the specificity that no buffers are provided
+	 * by the application for the ISP outputs. Therefore the capture video
+	 * devices are disabled and no buffers have to be provided to them.
 	 */
 	int ret = 0;
 	unsigned int _contextCount = contextCount();
@@ -2293,13 +2301,7 @@ int NxpNeoCameraData::allocateBuffersRaw()
 			{ BufferTypeFrame, { &frameBuffersPool_, neo_->frame_.get() } },
 			{ BufferTypeIr, { &irBuffersPool_, neo_->ir_.get() } },
 		};
-	if (rawStreamOnly_) {
-		unsigned int count = bufferCount * _contextCount;
-		const auto &[pool, device] = ispOutputPools.at(BufferTypeFrame);
-		int res = device->exportBuffers(count, pool);
-		ret |= res == static_cast<int>(count) ? 0 : -ENOMEM;
-		registerPoolBuffers(pool, BufferTypeFrame);
-	} else if (mode_ == ModeTypeRgbIrDual) {
+	if (mode_ == ModeTypeRgbIrDual && !rawStreamOnly_) {
 		for (const auto &[bufferType, pair] : ispOutputPools) {
 			std::vector<std::unique_ptr<FrameBuffer>> *pool = pair.first;
 			V4L2VideoDevice *device = pair.second;
@@ -2573,51 +2575,38 @@ int NxpNeoCameraData::configureRaw(CameraConfiguration *c)
 	rawStreamOnly_ = ((config->size() == 1) &&
 			  ((*config)[0].stream() == &streamRaw_));
 
-	if (!rawStreamOnly_) {
-		for (unsigned int i = 0; i < config->size(); ++i) {
-			StreamConfiguration &cfg = (*config)[i];
-			Stream *stream = cfg.stream();
 
-			if (stream == &streamRaw_)
-				continue;
+	for (unsigned int i = 0; i < config->size(); ++i) {
+		StreamConfiguration &cfg = (*config)[i];
+		Stream *stream = cfg.stream();
 
-			V4L2DeviceFormat *deviceFormat;
-			V4L2VideoDevice *videoDevice;
-			if (stream == &streamFrame_) {
-				deviceFormat = &devFormatFrame;
-				videoDevice = neo_->frame_.get();
-			} else {
-				deviceFormat = &devFormatIr;
-				videoDevice = neo_->ir_.get();
-			}
+		if (stream == &streamRaw_)
+			continue;
 
-			V4L2PixelFormat pixelFormat =
-				videoDevice->toV4L2PixelFormat(cfg.pixelFormat);
-			deviceFormat->fourcc = pixelFormat;
-
-			deviceFormat->size = cfg.size;
-
-			/*
-			 * Use libcamera sYCC colorspace definition that maps
-			 * to a v4l2 sRGB colorspace equivalent.
-			 */
-			std::optional<ColorSpace> colorSpace = cfg.colorSpace;
-			if (colorSpace && colorSpace.value() == ColorSpace::Srgb)
-				colorSpace = ColorSpace::Sycc;
-			deviceFormat->colorSpace = colorSpace;
+		V4L2DeviceFormat *deviceFormat;
+		V4L2VideoDevice *videoDevice;
+		if (stream == &streamFrame_) {
+			deviceFormat = &devFormatFrame;
+			videoDevice = neo_->frame_.get();
+		} else {
+			deviceFormat = &devFormatIr;
+			videoDevice = neo_->ir_.get();
 		}
-	} else {
+
+		V4L2PixelFormat pixelFormat =
+			videoDevice->toV4L2PixelFormat(cfg.pixelFormat);
+		deviceFormat->fourcc = pixelFormat;
+
+		deviceFormat->size = cfg.size;
+
 		/*
-		 * ISP driver requires at least one of the output video nodes to
-		 * be enabled. During raw-stream only mode of operation, there
-		 * is no buffer provided by the application for the outputs.
-		 * Thus, configure the frame output with an arbitrary format.
-		 * Internal buffers will be allocated and provided to the ISP.
+		 * Use libcamera sYCC colorspace definition that maps
+		 * to a v4l2 sRGB colorspace equivalent.
 		 */
-		devFormatFrame.size = devFormatInput0.size;
-		adjustTopLinesSize(&devFormatFrame.size);
-		devFormatFrame.fourcc = V4L2PixelFormat(V4L2_PIX_FMT_NV12);
-		devFormatFrame.colorSpace = ColorSpace::Sycc;
+		std::optional<ColorSpace> colorSpace = cfg.colorSpace;
+		if (colorSpace && colorSpace.value() == ColorSpace::Srgb)
+			colorSpace = ColorSpace::Sycc;
+		deviceFormat->colorSpace = colorSpace;
 	}
 
 	NeoDevice::PipeConfig pipeConfig = {};
@@ -3002,7 +2991,7 @@ void NxpNeoCameraData::clearRequest(NxpNeoFrames::Info *info)
 	if (processingRequests_.empty() || processingRequests_.front() != request)
 		LOG(NxpNeoPipe, Warning) << "Processing request not found";
 	else
-		processingRequests_.pop_front();
+		processingRequests_.pop();
 
 	int ret = frameInfos_.destroy(info->id_);
 	if (ret)
@@ -3131,8 +3120,7 @@ void NxpNeoCameraData::isiImage0BufferReady(FrameBuffer *buffer)
 	if (isRawCamera()) {
 		isiInputBufferReady(info, context);
 
-		if (!updateControlsOnIspSync())
-			delayedCtrls_[ContextTypeRgb]->applyControls(info->id_);
+		applySensorControls(info, context);
 	} else {
 		tryCompleteRequest(info);
 	}
@@ -3167,8 +3155,8 @@ void NxpNeoCameraData::isiImage1BufferReady(FrameBuffer *buffer)
 
 	isiInputBufferReady(info, context);
 
-	if (mode_ == ModeTypeRgbIrDual && !updateControlsOnIspSync())
-		delayedCtrls_[ContextTypeIr]->applyControls(info->id_);
+	if (mode_ == ModeTypeRgbIrDual)
+		applySensorControls(info, context);
 }
 
 /**
@@ -3192,6 +3180,42 @@ void NxpNeoCameraData::isiEmbeddedDataBufferReady(FrameBuffer *buffer)
 	}
 
 	isiInputBufferReady(info, context);
+}
+
+/**
+ * \brief Apply the sensor controls update for the current request
+ * \param[in] info The frame Info object associated to the request
+ * \param[in] context The context of the sensor to be updated
+ */
+void NxpNeoCameraData::applySensorControls(NxpNeoFrames::Info *info, ContextType context)
+{
+	if (!isRawCamera())
+		return;
+
+	unsigned int id = info->id_;
+	DelayedControls *delayedControls = delayedCtrls_.at(context).get();
+
+	auto apply = [id, delayedControls]() {
+		delayedControls->applyControls(id);
+	};
+
+	if (!controlsDelay().has_value()) {
+		apply();
+		return;
+	}
+
+	Timer *timer = controlsTimers_.at(context).get();
+	if (timer->isRunning()) {
+		LOG(NxpNeoPipe, Debug) << "Controls timer is running";
+		timer->stop();
+	}
+
+	timer->timeout.disconnect();
+	timer->timeout.connect(this, apply);
+
+	std::chrono::milliseconds delay =
+		std::chrono::duration_cast<std::chrono::milliseconds>(controlsDelay().value());
+	timer->start(delay);
 }
 
 /**
@@ -3291,45 +3315,6 @@ void NxpNeoCameraData::neoStatsBufferReady(FrameBuffer *buffer)
 			   delayedCtrls_[context]->get(sequence));
 
 	tryCompleteRequest(info);
-}
-
-/*
- * \brief Handle the start of frame exposure signal
- * \param[in] sequence The sequence number of frame
- */
-void NxpNeoCameraData::frameStart([[maybe_unused]] uint32_t sequence)
-{
-	if (!updateControlsOnIspSync())
-		return;
-
-	/*
-	 * Event is used as the trigger to update the camera controls. The
-	 * requests in the processing queue are served in order. Iterate through
-	 * the active requests to find the first one having a context running in
-	 * the ISP, identified as having no stats buffer produced yet.
-	 */
-	bool found = false;
-	for (Request *request : processingRequests_) {
-		NxpNeoFrames::Info *info = frameInfos_.find(request);
-		if (!info) {
-			LOG(NxpNeoPipe, Error) << "No info found for request";
-			return;
-		}
-
-		for (const auto &[context, infoContext] : info->contexts_) {
-			if (infoContext.isBufferPending({ BufferTypeStats })) {
-				delayedCtrls_[context]->applyControls(info->id_);
-				found = true;
-				break;
-			}
-		}
-
-		if (found)
-			break;
-	}
-
-	if (!found)
-		LOG(NxpNeoPipe, Error) << "No context found for controls update";
 }
 
 void NxpNeoCameraData::ipaParamsComputed(unsigned int id,

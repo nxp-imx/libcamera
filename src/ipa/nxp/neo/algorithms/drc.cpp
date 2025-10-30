@@ -529,6 +529,7 @@ uint16_t Drc::lutFirstRun(DrcLut *lutVars)
 		/* Convert output value to ratio */
 		if (inVal == 0) {
 			LOG(NxpNeoAlgoDrc, Warning) << "Warning: pixel level corresponding to bin " << index << " should not be 0";
+			lutVars->ratio[index] = 1.0f;
 		} else {
 			inVal /= DRC_INPUT_UMAX;
 			lutVars->ratio[index] = outRatio / inVal;

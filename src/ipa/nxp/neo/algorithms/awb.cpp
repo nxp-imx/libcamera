@@ -86,6 +86,9 @@ namespace ipa::nxpneo::algorithms {
  * obwb-blocks: the OBWB blocks where AWB gains should apply - optional
  *              valid values: { "obwb0/1", "obwb2"}
  *              default value: "obwb2" (non HDR-merge) or "obwb0/1" (HDR-merge)
+ * awb-gains: location where the AWB gains should apply (in ISP or in sensor)
+ *            valid values: { isp, sensor }
+ *            default value: isp
  */
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoAwb)
@@ -98,7 +101,7 @@ const std::map<const std::string, std::vector<uint8_t>> Awb::kObwbMap = {
 };
 
 Awb::Awb()
-	: enabled_(false)
+	: enabled_(false), awbGainInSensor_(false)
 {
 }
 
@@ -126,6 +129,9 @@ int Awb::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData
 		}
 	}
 
+	if (tuningData["awb-gains"].get<std::string>("") == "sensor")
+		awbGainInSensor_ = true;
+
 	enabled_ = true;
 
 	return 0;
@@ -139,6 +145,9 @@ int Awb::configure(IPAContext &context,
 {
 	if (!enabled_)
 		return 0;
+
+	context.configuration.awb.awbGainInSensor = awbGainInSensor_;
+	LOG(NxpNeoAlgoAwb, Debug) << "AWB gains apply in sensor: " << awbGainInSensor_;
 
 	/*
 	 * In case the OBWB blocks to be used by AWB were not explicitly
@@ -265,6 +274,26 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 	if (frameContext.awb.autoEnabled)
 		frameContext.awb.gains = context.activeState.awb.gains.automatic;
 
+	/* Update the WB gains in the OBWB blocks only if they are applied in the ISP */
+	if (!context.configuration.awb.awbGainInSensor)
+		updateObwbGains(frameContext, params);
+
+	/* If we have already set the CTEMP measurement parameters, return. */
+	if (frame > 0)
+		return;
+
+	configureCtempStats(context, params);
+}
+
+/**
+ * \brief Update the gains of the ISP OBWB blocks
+ *
+ * \param[in] frameContext The per-frame context
+ * \param[out] params Params of the ISP to update
+ *
+ */
+void Awb::updateObwbGains(IPAFrameContext &frameContext, NxpNeoParams *params)
+{
 	auto obwb0Config = params->block<BlockParamsType::Obwb0>();
 	auto obwb1Config = params->block<BlockParamsType::Obwb1>();
 	auto obwb2Config = params->block<BlockParamsType::Obwb2>();
@@ -309,11 +338,17 @@ void Awb::prepare(IPAContext &context, const uint32_t frame,
 			config->b_ctrl_offset = 0;
 		}
 	}
+}
 
-	/* If we have already set the CTEMP measurement parameters, return. */
-	if (frame > 0)
-		return;
-
+/**
+ * \brief Configure the statistics of the ISP CTEMP block
+ *
+ * \param[in] context The global IPA context
+ * \param[out] params Params of the ISP to update
+ *
+ */
+void Awb::configureCtempStats(IPAContext &context, NxpNeoParams *params)
+{
 	auto ctempConfig = params->block<BlockParamsType::CTemp>();
 	ctempConfig.setUpdate(true);
 
@@ -409,8 +444,13 @@ void Awb::awbGreyWorld(IPAActiveState &activeState, IPAFrameContext &frameContex
 	 * divide by the gains that were used to get the raw means from the
 	 * sensor.
 	 */
-	sumRed /= frameContext.awb.gains;
-	sumBlue /= frameContext.awb.gains;
+	if (awbGainInSensor_) {
+		sumRed /= frameContext.sensor.wbGains;
+		sumBlue /= frameContext.sensor.wbGains;
+	} else {
+		sumRed /= frameContext.awb.gains;
+		sumBlue /= frameContext.awb.gains;
+	}
 
 	RGB<double> gains({
 		sumRed.g() / (sumRed.r() + 1),

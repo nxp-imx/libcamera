@@ -85,10 +85,10 @@ namespace ipa::nxpneo::algorithms {
  * - luma = binomial3x3(gimage0[x,y]) >> luma-scale-th-shift
  * - if (luma < luma-th0)
  *       mluma = 0
- *   else if (luma > luma-th0)
- *       mluma = 1
  *   else
  *       mluma = ((luma - luma-th0) * luma-scale) >> luma-scale-shift
+ *       if (mluma > 256)
+ *           mluma = 256
  *   endif
  * - spv0 = (gimage0[x,y] << upscale[0]) >> downscale[0]
  * - spv1 = (gimage1[x,y] << upscale[1]) >> downscale[1]
@@ -111,6 +111,8 @@ namespace ipa::nxpneo::algorithms {
  *       5 bits values (2 entries)
  * - postscale: downscale shift applied to pixel value obtained from blending,
  *       5 bits value
+ * - ratio-long2short: ratio between the long capture and the short capture,
+ *       default value: 16
  *
  * Other configurable values are:
  * - obpp: pixel fomat at the output of the merge block, that defines the
@@ -181,6 +183,8 @@ int HdrMerge::init([[maybe_unused]] IPAContext &context,
 	}
 	postscale_ = tuningData["postscale"].get<uint8_t>().value_or(kDefaultPostscale);
 
+	ratioL2S_ = tuningData["ratio-long2short"].get<uint16_t>().value_or(kRatioL2S);
+
 	return 0;
 }
 
@@ -192,6 +196,8 @@ int HdrMerge::configure(IPAContext &context,
 {
 	IPAModeType &mode = context.configuration.pipelineMode;
 	enabled_ = mode == IPAModeTypeHdrMerge;
+
+	context.configuration.hdr.ratioLong2Short = ratioL2S_;
 
 	return 0;
 }

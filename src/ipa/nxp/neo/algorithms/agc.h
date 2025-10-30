@@ -56,6 +56,7 @@ private:
 
 	static constexpr size_t kNumHist = 4;
 	std::vector<uint32_t> histScale_;
+	bool userConfig_ = false;
 };
 
 } /* namespace ipa::nxpneo::algorithms */

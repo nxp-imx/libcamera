@@ -24,8 +24,8 @@
 #
 # cameras           = sequence of camera-entry
 #
-# camera-entry      = mapping of {model, entity, streams, format,
-#                                 controls-update}
+# camera-entry      = mapping of {model, entity, streams, format, orientation,
+#                                 controls-delay}
 #   model           = camera model
 #                     optional if entity is defined
 #   entity          = camera entity name
@@ -48,20 +48,19 @@
 #                     restricts the camera formats exposed to the user to the
 #                     ones whose size matches this value
 #                     optional
-#     orientation   = camera orientation
-#                     requires both hflip and vflip support from camera driver
-#                     values in [1..4]:
-#                       1: rotate 0
-#                       2: rotate 0 + mirror
-#                       3: rotate 180
-#                       4: rotate 180 + mirror
-#                     optional - default is the camera mounting orientation
-#   controls-update = trigger used for controls update to workaround sensor-
-#                     specific issue.
-#                     values belong to [frame-available, isp-sync]
-#                     frame-available: front-end raw frame available event
-#                     isp-sync: ISP synchronization event
-#                     optional - default is frame-available
+#   orientation   = camera orientation
+#                   requires both hflip and vflip support from camera driver
+#                   values in [1..4]:
+#                     1: rotate 0
+#                     2: rotate 0 + mirror
+#                     3: rotate 180
+#                     4: rotate 180 + mirror
+#                   optional - default is the camera mounting orientation
+#   controls-delay =
+#                   delay in ms applied to the front-end frame done event before
+#                   updating the camera controls, to workaround device-specific
+#                   issues (experimental)
+#                   optional - default is 0
 #
 # 'cameras' section definition example:
 #
@@ -77,9 +76,9 @@ version: 1.0
 global:
   buffer-count: 8
 cameras:
-  - model: mx95mbcam
-    controls-update: isp-sync
   - model: os08a20
 # Uncomment the line below to enable os08a20 HDR operation
 #    streams: [image1]
+  - model: mx95mbcam
+    controls-delay: 3
 ...

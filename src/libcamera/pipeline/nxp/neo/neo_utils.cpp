@@ -21,6 +21,8 @@
 
 #include "isi_device.h"
 
+using namespace std::chrono_literals;
+
 namespace libcamera {
 
 LOG_DECLARE_CATEGORY(NxpNeoPipe)
@@ -30,6 +32,9 @@ namespace nxpneo {
 /**
  * \struct CameraProperties
  * \brief Camera properties defined by topology discovery or configuration file
+ *
+ * This structure reports to the pipeline handler a set of properties coming
+ * from the platform configuration file and the graph discovery.
  *
  * \var CameraProperties::image1Stream
  * \brief Camera has an image1 stream for HDR or RGBIr context switch mode
@@ -43,13 +48,6 @@ namespace nxpneo {
  * This flag reports that the camera is sharing its MIPI-CSI port with other
  * cameras which induces some limitations in the capability of the front-end
  * graph to be reconfigured after startup.
- *
- * \var CameraProperties::updateControlsOnIspSync
- * \brief Camera controls are to be updated on ISP frame start event
- *
- * Default operation is to update the camera controls on ISI pipe buffer
- * available event. To workaround some camera issues, this flag indicates that
- * the camera controls update should be moved to the ISP frame start event.
  *
  * \var CameraProperties::formatBpp
  * \brief Format bit-per-pixel filter value (optional)
@@ -72,11 +70,13 @@ namespace nxpneo {
  * horizontal and vertical flips:
  * Rotate0 (1), Rotate0Mirror (2), Rotate180 (3), Rotate180Mirror (4)
  *
- * \var CameraProperties::multiCamera
- * \brief Camera is sharing its MIPI CSI-2 port with other cameras
+ * \var CameraProperties::controlsDelay
+ * \brief Delay to update the controls on front-end frame done event (optional)
  *
- * This structure reports to the pipeline handler a set of properties coming
- * from the platform configuration file and the graph discovery.
+ * Camera controls update is synchronized on the front-end frame done events.
+ * For cameras having issue with that timing, this allows delaying the controls
+ * update by a user configured delay.
+ *
  */
 
 /* -----------------------------------------------------------------------------
@@ -845,18 +845,10 @@ int PipelineConfig::parseCameras(const YamlObject &cameras)
 					<< "Invalid orientation value " << orientation;
 		}
 
-		const YamlObject &controlsUpdateObj = cameraObj["controls-update"];
-		std::optional<std::string> controlsUpdate =
-			controlsUpdateObj.get<std::string>();
-		properties.updateControlsOnIspSync = false;
-		if (controlsUpdate) {
-			if (controlsUpdate.value() == "isp-sync")
-				properties.updateControlsOnIspSync = true;
-			else if (controlsUpdate.value() != "frame-available")
-				LOG(NxpNeoPipe, Warning)
-					<< "Invalid controls-update "
-					<< controlsUpdate.value();
-		}
+		const YamlObject &controlsDelayObj = cameraObj["controls-delay"];
+		uint32_t controlsDelay = controlsDelayObj.get<uint32_t>().value_or(0);
+		if (controlsDelay)
+			properties.controlsDelay = controlsDelay * 1ms;
 
 		LOG(NxpNeoPipe, Debug)
 			<< "Camera entry model [" << model

@@ -40,6 +40,8 @@ public:
 		     ControlList &metadata) override;
 
 private:
+	void updateObwbGains(IPAFrameContext &frameContext, NxpNeoParams *params);
+	void configureCtempStats(IPAContext &context, NxpNeoParams *params);
 	void generateBlocks(const NxpNeoStats *stats);
 	void awbGreyWorld(IPAActiveState &activeState, IPAFrameContext &frameContext,
 			  const uint32_t frame);
@@ -64,6 +66,7 @@ private:
 	std::vector<RGB<double>> blocks_;
 	std::vector<uint8_t> obwbs_;
 	std::array<unsigned int, kObwbCount> obwbObpp_;
+	bool awbGainInSensor_;
 };
 
 } /* namespace ipa::nxpneo::algorithms */

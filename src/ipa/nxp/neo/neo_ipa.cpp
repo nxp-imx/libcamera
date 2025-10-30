@@ -86,6 +86,7 @@ private:
 	void updateControls(const IPACameraSensorInfo &sensorInfo,
 			    const ControlInfoMap &sensorControls,
 			    ControlInfoMap *ipaControls);
+	void updateFrameContextSensorMeta(const uint32_t frame);
 	void setControls(unsigned int frame, IPAContextType context);
 	std::string controlListToString(const ControlList *ctrls) const;
 	std::string logSensorParams(const unsigned int frame,
@@ -428,45 +429,8 @@ void IPANxpNeo::processStats(const uint32_t frame, const IPAContextType context,
 		context_.camHelper->sensorControlsToMetaData(&sensorControls, &mdControls);
 	}
 
-	Duration exposure;
-	if (mdControls.contains(md::Exposure.id())) {
-		const ControlValue &exposureValue =
-			mdControls.get(md::Exposure.id());
-		Span<const float> exposuresSpan =
-			exposureValue.get<Span<const float>>();
-		exposure = exposuresSpan[0] * 1.0s;
-	} else {
-		LOG(NxpNeoIPA, Warning) << "No exposure metadata";
-		exposure = context_.configuration.sensor.minExposureTime;
-	}
-
-	frameContext.sensor.exposure = context_.camHelper->exposureLines(
-		exposure,
-		context_.configuration.sensor.lineDuration);
-
-	float aGain = 1.0f;
-	if (mdControls.contains(md::AnalogueGain.id())) {
-		const ControlValue &aGainValue =
-			mdControls.get(md::AnalogueGain.id());
-		Span<const float> aGainsSpan =
-			aGainValue.get<Span<const float>>();
-		aGain = aGainsSpan[0];
-	} else {
-		LOG(NxpNeoIPA, Warning) << "No analog gain metadata";
-	}
-
-	float dGain = 1.0f;
-	if (mdControls.contains(md::DigitalGain.id())) {
-		const ControlValue &dGainValue =
-			mdControls.get(md::DigitalGain.id());
-		Span<const float> dGainsSpan =
-			dGainValue.get<Span<const float>>();
-		dGain = dGainsSpan[0];
-	} else {
-		LOG(NxpNeoIPA, Warning) << "No digital gain metadata";
-	}
-
-	frameContext.sensor.gain = aGain * dGain;
+	/* Update frame context with the sensor metadata */
+	updateFrameContextSensorMeta(frame);
 
 	ControlList metadata(controls::controls);
 	for (auto const &a : algorithms()) {
@@ -607,6 +571,70 @@ void IPANxpNeo::updateControls(const IPACameraSensorInfo &sensorInfo,
 	*ipaControls = ControlInfoMap(std::move(ctrlMap), controls::controls);
 }
 
+void IPANxpNeo::updateFrameContextSensorMeta(const uint32_t frame)
+{
+	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
+	ControlList &mdControls = frameContext.sensor.mdControls;
+
+	Duration exposure;
+	if (mdControls.contains(md::Exposure.id())) {
+		const ControlValue &exposureValue =
+			mdControls.get(md::Exposure.id());
+		Span<const float> exposuresSpan =
+			exposureValue.get<Span<const float>>();
+		exposure = exposuresSpan[0] * 1.0s;
+	} else {
+		LOG(NxpNeoIPA, Warning) << "No exposure metadata";
+		exposure = context_.configuration.sensor.minExposureTime;
+	}
+
+	frameContext.sensor.exposure = context_.camHelper->exposureLines(
+		exposure,
+		context_.configuration.sensor.lineDuration);
+
+	float aGain = 1.0f;
+	if (mdControls.contains(md::AnalogueGain.id())) {
+		const ControlValue &aGainValue =
+			mdControls.get(md::AnalogueGain.id());
+		Span<const float> aGainsSpan =
+			aGainValue.get<Span<const float>>();
+		aGain = aGainsSpan[0];
+	} else {
+		LOG(NxpNeoIPA, Warning) << "No analog gain metadata";
+	}
+
+	float dGain = 1.0f;
+	if (mdControls.contains(md::DigitalGain.id())) {
+		const ControlValue &dGainValue =
+			mdControls.get(md::DigitalGain.id());
+		Span<const float> dGainsSpan =
+			dGainValue.get<Span<const float>>();
+		dGain = dGainsSpan[0];
+	} else {
+		LOG(NxpNeoIPA, Warning) << "No digital gain metadata";
+	}
+
+	frameContext.sensor.gain = aGain * dGain;
+
+	std::array<float, 4> wbGainsArray = { 1.0f, 1.0f, 1.0f, 1.0f };
+	if (mdControls.contains(md::WhiteBalanceGain.id())) {
+		const ControlValue &wbGainsValue =
+			mdControls.get(md::WhiteBalanceGain.id());
+		Span<const float> wbGainsSpan =
+			wbGainsValue.get<Span<const float>>();
+		wbGainsArray[0] = wbGainsSpan[0];
+		wbGainsArray[1] = wbGainsSpan[1];
+		wbGainsArray[2] = wbGainsSpan[2];
+		wbGainsArray[3] = wbGainsSpan[3];
+	} else {
+		LOG(NxpNeoIPA, Warning) << "No white balance gains metadata";
+	}
+
+	frameContext.sensor.wbGains.r() = wbGainsArray[0];
+	frameContext.sensor.wbGains.g() = wbGainsArray[1];
+	frameContext.sensor.wbGains.b() = wbGainsArray[3];
+}
+
 void IPANxpNeo::setControls(unsigned int frame, IPAContextType context)
 {
 	/*
@@ -618,20 +646,39 @@ void IPANxpNeo::setControls(unsigned int frame, IPAContextType context)
 
 	ControlList ctrls(sensorControls_);
 
+	Duration exposure = context_.camHelper->exposure(frameContext.agc.exposure,
+							 context_.configuration.sensor.lineDuration);
+
 	/*
 	 * Skip control setting for frame 0 for which the frame context
-	 * doesn't have a relevant configuration for the exposure and the gain.
+	 * doesn't have a relevant configuration for the exposure, analog gain and
+	 * white balance gains..
 	 * Indeed the frame context is not initialized at startup.
 	 *
 	 * This workaround prevents some frames from flashing at startup.
 	 * This effect can be addressed later by configuring some startup
 	 * frames to be hidden.
 	 */
-	Duration exposure = context_.camHelper->exposure(frameContext.agc.exposure,
-							 context_.configuration.sensor.lineDuration);
-
-	if (frame)
+	if (frame) {
 		context_.camHelper->controlListSetAGC(&ctrls, exposure, frameContext.agc.gain);
+
+		if (context_.configuration.awb.awbGainInSensor) {
+			std::array<double, 4> wbGains;
+			/* R, Gr, Gb, B */
+			wbGains[0] = frameContext.awb.gains.r();
+			wbGains[1] = frameContext.awb.gains.g();
+			wbGains[2] = wbGains[1];
+			wbGains[3] = frameContext.awb.gains.b();
+			context_.camHelper->controlListSetAWB(&ctrls, Span<const double, 4>(wbGains));
+		}
+	} else if (!context_.configuration.awb.awbGainInSensor) {
+		/*
+		 * Set unitary white balance gains in sensor
+		 * when white balance gains are applied in the ISP.
+		 */
+		std::array<double, 4> wbGains = { 1.0f, 1.0f, 1.0f, 1.0f };
+		context_.camHelper->controlListSetAWB(&ctrls, Span<const double, 4>(wbGains));
+	}
 
 	LOG(NxpNeoControlList, Debug)
 		<< logSensorParams(frame, &frameContext.sensor.mdControls, &ctrls);
