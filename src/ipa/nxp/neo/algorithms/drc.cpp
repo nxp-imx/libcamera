@@ -39,6 +39,14 @@ namespace ipa::nxpneo::algorithms {
  * and the LUT entry valid for the particular bin is applied to the input value.
  * This algorithm calculates the LUT entries.
  *
+ * It is possible to restrict the DRC operation to run only if the pipeline is in HDR merge mode.
+ * Such restriction can be set with following key:
+ * "restrict-mode": allow to restrict the DRC to run only if the pipeline is in HDR merge mode.
+ *                  If set to "hdr-merge" and if the pipeline is not in HDR merge mode,
+ *                  the DRC operation is disabled (the DRC mode is forced to gbl-mode=0, Copy mode)
+ *                  valid values: { "hdr-merge", "none" }
+ *                  Any other values than the valid ones are ignored.
+ *
  * Three modes of operation are supported to determine the global DRC lookup table,
  * as specified by the "gbl-mode" attribute:
  * "gbl-mode: 0" is the Copy mode. In this case, the generated lookup table only
@@ -583,40 +591,23 @@ void Drc::controlDynamicMode(const std::vector<uint32_t> &inputHistogram,
  */
 int Drc::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData)
 {
-	/* Parsing GDRC mode */
-	gblMode_ = tuningData["gbl-mode"].get<uint16_t>(kGblMode);
+	restrictMode_ = tuningData["restrict-mode"].get<std::string>("none");
 
-	switch (gblMode_) {
-	case 0: {
-		LOG(NxpNeoAlgoDrc, Debug) << "Global DRC Mode = 0: Passthrough (no compression)";
-		gblLut_.resize(NEO_DRC_GLOBAL_TONEMAP_SIZE, kQ8One);
-		break;
-	}
-	case 1: {
-		LOG(NxpNeoAlgoDrc, Debug) << "Global DRC Mode = 1: Using pre-configured LUT.";
-		/* Global DRC lut parsing */
-		const YamlObject &lut = tuningData["gbl-lut"];
-		if (lut.size()) {
-			gblLut_ = lut.getList<uint16_t>()
-					  .value_or(std::vector<uint16_t>{});
-			if (gblLut_.size() != NEO_DRC_GLOBAL_TONEMAP_SIZE) {
-				LOG(NxpNeoAlgoDrc, Error) << "global lut list size must be "
-							  << NEO_DRC_GLOBAL_TONEMAP_SIZE;
-				return -EINVAL;
-			}
-		}
-		break;
-	}
-	case 2: {
-		LOG(NxpNeoAlgoDrc, Debug) << "Global DRC Mode = 2: Dynamic LUT computed from histogram.";
-		gblLut_ = std::vector<uint16_t>(NEO_DRC_GLOBAL_TONEMAP_SIZE, 0);
-		break;
-	}
-	default: {
-		LOG(NxpNeoAlgoDrc, Error) << "gbl-mode must be 0 / 1 / 2";
+	/* Parsing GDRC mode */
+	gblInitMode_ = tuningData["gbl-mode"].get<uint16_t>(kGblMode);
+
+	/* Global fixed LUT (needed for global mode 1) */
+	auto lut = tuningData["gbl-lut"].getList<uint16_t>().value_or(std::vector<uint16_t>{});
+	if (lut.size() && lut.size() != NEO_DRC_GLOBAL_TONEMAP_SIZE) {
+		LOG(NxpNeoAlgoDrc, Error) << "global lut list size must be "
+					  << NEO_DRC_GLOBAL_TONEMAP_SIZE;
 		return -EINVAL;
 	}
-	}
+	if (lut.size() == NEO_DRC_GLOBAL_TONEMAP_SIZE)
+		std::copy(lut.begin(), lut.end(), gblFixedLut_.begin());
+	else
+		/* Initialize with unit gain if the fixed LUT is not provided in calibration file. */
+		std::fill(gblFixedLut_.begin(), gblFixedLut_.end(), kQ8One);
 
 	/* Global DRC gain parsing - for GDRC modes. Will be overriden by dynamic control */
 	gblGain_ = tuningData["gbl-gain"].get<uint16_t>(kGblGain);
@@ -640,15 +631,48 @@ int Drc::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData
  */
 int Drc::configure(IPAContext &context, const IPACameraSensorInfo &configInfo)
 {
+	IPAModeType &pipelineMode = context.configuration.pipelineMode;
+
+	context.configuration.drc.gblMode = gblInitMode_;
+	if ((restrictMode_ == "hdr-merge") && (pipelineMode != IPAModeTypeHdrMerge)) {
+		/*
+		 * Disable the dynamic DRC (set to Copy mode) if the restrict mode
+		 * is set to "hdr-merge"
+		 * and if the pipeline is not in HDR merge mode.
+		 */
+		context.configuration.drc.gblMode = 0;
+		LOG(NxpNeoAlgoDrc, Debug)
+			<< "DRC is disabled - the pipeline mode doesn't match the restrict mode.";
+	}
+
+	switch (context.configuration.drc.gblMode) {
+	case 0: {
+		LOG(NxpNeoAlgoDrc, Debug) << "Global DRC Mode = 0: Passthrough (no compression)";
+		std::fill(gblLut_.begin(), gblLut_.end(), kQ8One);
+		break;
+	}
+	case 1: {
+		LOG(NxpNeoAlgoDrc, Debug) << "Global DRC Mode = 1: Using pre-configured LUT.";
+		std::copy(gblFixedLut_.begin(), gblFixedLut_.end(), gblLut_.begin());
+		break;
+	}
+	case 2: {
+		LOG(NxpNeoAlgoDrc, Debug) << "Global DRC Mode = 2: Dynamic LUT computed from histogram.";
+		std::fill(gblLut_.begin(), gblLut_.end(), 0);
+		configureGblDrcContext();
+		fixedModeLut();
+		break;
+	}
+	default: {
+		LOG(NxpNeoAlgoDrc, Error) << "gbl-mode must be 0 / 1 / 2";
+		return -EINVAL;
+	}
+	}
+
 	context.configuration.drc.roi.xpos = 0;
 	context.configuration.drc.roi.ypos = 0;
 	context.configuration.drc.roi.width = configInfo.outputSize.width;
 	context.configuration.drc.roi.height = configInfo.outputSize.height;
-
-	if (gblMode_ == 2) {
-		configureGblDrcContext();
-		fixedModeLut();
-	}
 
 	return 0;
 }
@@ -661,15 +685,13 @@ void Drc::prepare([[maybe_unused]] IPAContext &context,
 		  [[maybe_unused]] IPAFrameContext &frameContext,
 		  NxpNeoParams *params)
 {
-	bool update = gblMode_ == 2 || frame == 0;
+	bool update = context.configuration.drc.gblMode == 2 || frame == 0;
 	if (update) {
 		auto drcGlobalTonemapConfig = params->block<BlockParamsType::DrcGlobalTonemap>();
 		/* Set global lut */
 		drcGlobalTonemapConfig.setUpdate(true);
 
-		memcpy(drcGlobalTonemapConfig->drc_global_tonemap,
-		       gblLut_.data(),
-		       sizeof(struct neoisp_drc_global_tonemap_mem_params_s));
+		std::copy(gblLut_.begin(), gblLut_.end(), drcGlobalTonemapConfig->drc_global_tonemap);
 	}
 
 	auto drcConfig = params->block<BlockParamsType::DrComp>();
@@ -702,7 +724,7 @@ void Drc::process([[maybe_unused]] IPAContext &context,
 		  const NxpNeoStats *stats,
 		  [[maybe_unused]] ControlList &metadata)
 {
-	if (gblMode_ == 2) {
+	if (context.configuration.drc.gblMode == 2) {
 		auto drcMemStats = stats->block<BlockStatsType::MDrc>();
 		const unsigned int *statsHistogram = drcMemStats->drc_global_hist_roi1;
 		std::vector<uint32_t> inputHistogram(statsHistogram,
