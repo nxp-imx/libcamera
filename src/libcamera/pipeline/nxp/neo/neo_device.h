@@ -27,6 +27,7 @@ class NeoDevice
 {
 public:
 	static constexpr unsigned int kRawWidthMax = 4096;
+	static constexpr unsigned int kWidthAlignment = 16;
 
 	struct PipeConfig {
 		unsigned int topLines;
