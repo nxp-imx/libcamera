@@ -94,10 +94,13 @@ private:
 	static constexpr float kHESaturation = 0.5;
 
 	/* Global DRC configuration */
-	std::vector<uint16_t> gblLut_;
+	std::array<uint16_t, NEO_DRC_GLOBAL_TONEMAP_SIZE> gblLut_;
+	std::array<uint16_t, NEO_DRC_GLOBAL_TONEMAP_SIZE> gblFixedLut_;
 
 	uint16_t gblGain_;
-	uint16_t gblMode_;
+	/* init global DRC mode */
+	uint16_t gblInitMode_;
+	std::string restrictMode_;
 
 	DrcControlContext gblDrcContext_;
 };
