@@ -107,14 +107,4 @@ algorithms:
       upscale: [ 0, 0 ]
       postscale: 0
   - Agc:
-      AeConstraintMode:
-        ConstraintHighlight:
-          lower:
-            qLo: 0.98
-            qHi: 1.0
-            yTarget: [ 0.5 ]
-          upper:
-            qLo: 0.98
-            qHi: 1.0
-            yTarget: [ 0.8 ]
 ...
