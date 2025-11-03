@@ -69,6 +69,8 @@ algorithms:
           },
       ]
   - Drc:
+      # Restrict DRC operation to HDR merge mode only
+      restrict-mode: hdr-merge
       # Global DRC control mode. Select among the following options:
       # 0 - copy. Data is copied from input to output of the DRC block,
       #     no dynamic range compression is done (default)
