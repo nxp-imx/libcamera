@@ -22,8 +22,6 @@ struct DrcControlContext {
 	uint32_t minValue;
 	uint32_t maxBin;
 	uint32_t minBin;
-	uint32_t minPixelCount;
-	uint32_t maxPixelCount;
 	uint32_t maxHistory[kDrcMaxHistory];
 	uint32_t maxBinHistory[kDrcMaxHistory];
 	uint8_t historyPointer;
@@ -34,8 +32,6 @@ struct DrcControlContext {
 	uint16_t gamma;
 	uint16_t gammaOld;
 	uint16_t gammaFixed;
-	uint32_t histEqThreshold;
-	double histEqSaturation;
 };
 
 struct DrcLut {
@@ -64,7 +60,6 @@ public:
 		     ControlList &metadata) override;
 
 private:
-	void initializeGblDrcContext();
 	void configureGblDrcContext();
 	uint32_t binToLinear(uint32_t aBin) const;
 	void fixedModeLut();
@@ -74,22 +69,26 @@ private:
 	void getHistoryMax();
 	float applyNewPreGain();
 	void controlDynamicMode(const std::vector<uint32_t> &inputHistogram,
-				std::vector<uint16_t> &lut,
 				uint16_t *extraGainOut);
 	void dynamicModeSum(const std::vector<uint32_t> &inputHistogram, DrcLut *lutVars) const;
 	void effectiveGamma(DrcLut *lutVars) const;
 	uint16_t lutFirstRun(DrcLut *lutVars);
-	void lutSecondRun(std::vector<uint16_t> &lut, DrcLut *lutVars);
+	void lutSecondRun(DrcLut *lutVars);
 
 	/* Initial values of control constants. May be overriden by config yaml */
 	static constexpr uint16_t kGblMode = 0;
 
+	/* Min count can be adjusted to steer the contrast by avoiding dark input regions. */
+	static constexpr uint32_t kMinPixelCount = 100;
+	/* Max count can be adjusted to steer the contrast by avoiding bright input regions. */
+	static constexpr uint32_t kMaxPixelCount = 100;
+
 	static constexpr uint16_t kLocalStretchvalue = 256;
 	static constexpr uint16_t kAlphaValue = 256;
-	static constexpr uint16_t kGdrcAlphaValue = 256;
+	static constexpr uint16_t kGdrcAlphaValue = 128;
 	static constexpr uint16_t kGblGain = 256;
 
-	static constexpr uint16_t kGdrcGammaValue = 256;
+	static constexpr uint16_t kGdrcGammaValue = 140;
 
 	static constexpr uint16_t kHEThreshold = 2000;
 	static constexpr float kHESaturation = 0.5;
