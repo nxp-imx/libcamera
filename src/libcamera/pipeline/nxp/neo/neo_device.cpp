@@ -37,7 +37,7 @@ namespace libcamera {
 
 /* \todo Remove when control is available in v4l2-controls header */
 #ifndef V4L2_CID_USER_NEOISP_BASE
-#define V4L2_CID_USER_NEOISP_BASE (V4L2_CID_USER_BASE + 0x11e0)
+#define V4L2_CID_USER_NEOISP_BASE (V4L2_CID_USER_BASE + 0x1230)
 #endif
 
 LOG_DEFINE_CATEGORY(NxpNeoDev)
