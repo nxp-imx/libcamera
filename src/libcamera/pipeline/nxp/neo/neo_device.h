@@ -27,6 +27,7 @@ class NeoDevice
 {
 public:
 	static constexpr unsigned int kRawWidthMax = 4096;
+	static constexpr unsigned int kWidthAlignment = 16;
 
 	struct PipeConfig {
 		unsigned int topLines;
@@ -77,8 +78,8 @@ public:
 		return "Neo[" + std::to_string(index_) + "] ";
 	}
 
-	static const std::vector<V4L2PixelFormat> &frameFormats();
-	static const std::vector<V4L2PixelFormat> &irFormats();
+	const std::vector<PixelFormat> &framePixelFormats();
+	const std::vector<PixelFormat> &irPixelFormats();
 	static const std::vector<V4L2PixelFormat> &input0Formats();
 	static const std::vector<V4L2PixelFormat> &input1Formats();
 

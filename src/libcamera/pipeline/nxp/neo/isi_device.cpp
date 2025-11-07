@@ -572,14 +572,14 @@ int ISIDevice::reservePipeBySize(Size &sizeMax, unsigned int *index)
 	*index = std::numeric_limits<unsigned int>::max();
 	bool chained = false;
 
-	if (sizeMax.width > kChainedWidthMax) {
+	if (sizeMax.width > ISIPipe::kChainedWidthMax) {
 		LOG(NxpNeoIsiDev, Error)
-			<< "Maximum width " << kChainedWidthMax
+			<< "Maximum width " << ISIPipe::kChainedWidthMax
 			<< " exceeded by size " << sizeMax.toString();
 		return -EINVAL;
 	}
 
-	if (sizeMax.width > kUnchainedWidthMax)
+	if (sizeMax.width > ISIPipe::kUnchainedWidthMax)
 		chained = true;
 
 	unsigned int pipes = pipeEntries_.size();
@@ -639,7 +639,7 @@ int ISIDevice::reservePipeByIndex(Size &sizeMax, unsigned int index)
 		return -EBUSY;
 	}
 
-	if (sizeMax.width > kUnchainedWidthMax)
+	if (sizeMax.width > ISIPipe::kUnchainedWidthMax)
 		chained = true;
 
 	if (chained && (index + 1 >= pipes ||
