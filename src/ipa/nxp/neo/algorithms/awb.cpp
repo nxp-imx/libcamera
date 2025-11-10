@@ -9,7 +9,6 @@
  */
 
 #include "awb.h"
-#include "neoisp-definitions.h"
 
 #include <algorithm>
 #include <cmath>

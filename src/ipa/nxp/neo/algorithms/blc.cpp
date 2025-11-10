@@ -15,8 +15,6 @@
 
 #include "libcamera/internal/yaml_parser.h"
 
-#include "neoisp-definitions.h"
-
 namespace libcamera {
 
 namespace ipa::nxpneo::algorithms {
@@ -211,14 +209,14 @@ int BlackLevelCorrection::configure(IPAContext &context,
 	 * Also, consider here the condition of the sensors that use the same
 	 * BLC digital value for all pixel formats.
 	 */
-	std::array<ChannelOffsets<uint16_t>, kInputsCount> sensorOffsets;
+	std::array<ChannelArray<uint16_t>, kInputsCount> sensorOffsets;
 	for (unsigned int input = 0; input < kInputsCount; input++) {
 		unsigned int &bpp = bpps[input];
 		int leftShift = bpp - 16;
 		if (referenceBitDepth_)
 			leftShift += referenceBitDepth_.value() - bpp;
 
-		ChannelOffsets<uint16_t> &offsets = sensorOffsets[input];
+		ChannelArray<uint16_t> &offsets = sensorOffsets[input];
 		for (const auto &[channel, calibrationOffset] : utils::enumerate(calibrationOffsets_)) {
 			if (leftShift >= 0)
 				offsets[channel] = calibrationOffset << leftShift;
@@ -242,7 +240,7 @@ int BlackLevelCorrection::configure(IPAContext &context,
 	 * - OBwB2
 	 *     - 20-bit unconditionally
 	 */
-	std::array<unsigned int, kObwbCount> gainLeftShift;
+	ObwbArray<unsigned int> gainLeftShift;
 	IPAModeType &mode = context.configuration.pipelineMode;
 	if (mode != IPAModeTypeHdrMerge) {
 		gainLeftShift[0] = 20 - bpps[0];
@@ -253,11 +251,11 @@ int BlackLevelCorrection::configure(IPAContext &context,
 	}
 	gainLeftShift[2] = 20 - bpps[0];
 
-	auto applyGain = [](ChannelOffsets<uint16_t> &sensor,
-			    ChannelOffsets<uint16_t> &obwb,
+	auto applyGain = [](ChannelArray<uint16_t> &sensor,
+			    ChannelArray<uint16_t> &obwb,
 			    unsigned int leftShift) {
 		uint16_t maxOffset = std::numeric_limits<uint16_t>::max() >> leftShift;
-		for (unsigned channel = 0; channel < kChannelsCount; channel++) {
+		for (unsigned channel = 0; channel < kObwbChannelsCount; channel++) {
 			uint16_t offset = sensor[channel];
 			if (offset > maxOffset) {
 				LOG(NxpNeoAlgoBlc, Debug)
@@ -271,15 +269,15 @@ int BlackLevelCorrection::configure(IPAContext &context,
 		}
 	};
 
-	for (unsigned int obwb = 0; obwb < kObwbCount; obwb++) {
+	for (unsigned int obwb = 0; obwb < kObwbInstancesCount; obwb++) {
 		/*
 		 * OBWB0/1 uses sensor offset from the respective sensor input
 		 * paths. OBWB2 uses sensor offset from sensor input path0 as
 		 * it is relevant to non-HDR merge cases.
 		 */
-		ChannelOffsets<uint16_t> &sensorOffset =
+		ChannelArray<uint16_t> &sensorOffset =
 			obwb != 1 ? sensorOffsets[0] : sensorOffsets[1];
-		ChannelOffsets<uint16_t> &obwbOffset = obwbOffsets_[obwb];
+		ChannelArray<uint16_t> &obwbOffset = obwbOffsets_[obwb];
 		applyGain(sensorOffset, obwbOffset, gainLeftShift[obwb]);
 	}
 
@@ -289,7 +287,7 @@ int BlackLevelCorrection::configure(IPAContext &context,
 	 * rescaled accordingly.
 	 */
 	int leftShift = 16 - bpps[0];
-	for (unsigned channel = 0; channel < kChannelsCount; channel++) {
+	for (unsigned channel = 0; channel < kObwbChannelsCount; channel++) {
 		uint16_t &sensorOffset = sensorOffsets[0][channel];
 		if (leftShift >= 0)
 			mdOffsets_[channel] =
@@ -371,7 +369,7 @@ void BlackLevelCorrection::prepare([[maybe_unused]] IPAContext &context,
 		}
 
 		neoisp_obwb_cfg_s *config = obwbBlocks[obwb];
-		const ChannelOffsets<uint16_t> &offsets = obwbOffsets_[obwb];
+		const ChannelArray<uint16_t> &offsets = obwbOffsets_[obwb];
 
 		config->r_ctrl_offset = offsets[0];
 		config->gr_ctrl_offset = offsets[1];
