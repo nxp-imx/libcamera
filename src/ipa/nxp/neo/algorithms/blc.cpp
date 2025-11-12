@@ -15,7 +15,7 @@
 
 #include "libcamera/internal/yaml_parser.h"
 
-#include "nxp-neoisp-enums.h"
+#include "neoisp-definitions.h"
 
 namespace libcamera {
 

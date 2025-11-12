@@ -9,7 +9,7 @@
  */
 
 #include "awb.h"
-#include "nxp-neoisp-enums.h"
+#include "neoisp-definitions.h"
 
 #include <algorithm>
 #include <cmath>
