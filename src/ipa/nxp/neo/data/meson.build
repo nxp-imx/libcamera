@@ -5,7 +5,6 @@ conf_files = files([
     'imx519.yaml',
     'mx95mbcam.yaml',
     'os08a20.yaml',
-    'ov5640.yaml',
     'ox05b1s.yaml',
     'uncalibrated.yaml',
 ])
