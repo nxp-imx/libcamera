@@ -21,7 +21,7 @@ namespace ipa::nxpneo::algorithms {
 class HdrDecomp : public Algorithm
 {
 public:
-	HdrDecomp(){};
+	HdrDecomp() {}
 	~HdrDecomp() = default;
 
 	int init(IPAContext &context, const YamlObject &tuningData) override;
