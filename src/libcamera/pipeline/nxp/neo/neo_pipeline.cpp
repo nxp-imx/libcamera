@@ -245,7 +245,7 @@ public:
 		: Camera::Private(pipe),
 		  sensor_(std::move(sensor)),
 		  cameraInfo_(cameraInfo),
-		  frameInfos_(this){};
+		  frameInfos_(this) {}
 
 	int configure(CameraConfiguration *c);
 	int exportFrameBuffers(Stream *stream,
@@ -265,14 +265,14 @@ public:
 
 	CameraSensor *sensor() const { return sensor_.get(); }
 	NeoDevice *neoDevice() const { return neo_.get(); }
-	std::map<StreamType, ISIPipe *> &isiPipes() { return pipes_; };
+	std::map<StreamType, ISIPipe *> &isiPipes() { return pipes_; }
 	const std::string &cameraName() const { return sensor_->entity()->name(); }
 	bool multiCamera() const { return cameraInfo_->cameraProperties().multiCamera; }
 	std::optional<utils::Duration> controlsDelay() const
 	{
 		return cameraInfo_->cameraProperties().controlsDelay;
 	}
-	bool isRawCamera() const { return isRawCamera_; };
+	bool isRawCamera() const { return isRawCamera_; }
 	const std::map<Size, std::vector<unsigned int>> &
 	formatsSizeToCodes() const { return formatsSizeToCodes_; }
 	const std::map<unsigned int, std::vector<Size>> &
@@ -335,7 +335,7 @@ private:
 			      const ControlList &metadata);
 	void ipaSetSensorControls(unsigned int id, ipa::nxpneo::IPAContextType context,
 				  const ControlList &sensorControls);
-	unsigned int contextCount() { return mode_ == ModeTypeRgbIrDual ? 2 : 1; };
+	unsigned int contextCount() { return mode_ == ModeTypeRgbIrDual ? 2 : 1; }
 
 	std::unique_ptr<CameraSensor> sensor_;
 	std::unique_ptr<NeoDevice> neo_;
