@@ -2787,7 +2787,7 @@ int NxpNeoCameraData::enumerateFormatsRaw()
 			if (size.width > NeoDevice::kRawWidthMax)
 				continue;
 
-			if (size.width & NeoDevice::kWidthAlignment)
+			if (size.width & (NeoDevice::kWidthAlignment - 1))
 				continue;
 
 			if (sizeFilter && size != sizeFilter.value())
