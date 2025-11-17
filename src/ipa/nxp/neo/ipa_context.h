@@ -58,7 +58,7 @@ struct IPASessionConfiguration {
 		/* OBWB instances obpp values */
 		ObwbArray<unsigned int> obwbObpp;
 		/* BLC offset reported in metadata format */
-		ChannelArray<uint32_t> mdOffsets;
+		ChannelArray<int32_t> mdOffsets;
 	} blc;
 
 	struct {
