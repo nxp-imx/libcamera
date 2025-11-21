@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: CC0-1.0
 
 conf_files = files([
+    'ar0235.yaml',
     'imx219.yaml',
     'imx519.yaml',
     'imx708.yaml',
