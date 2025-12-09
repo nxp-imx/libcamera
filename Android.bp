@@ -141,6 +141,7 @@ cc_library_shared {
         "src/libcamera/device_enumerator_sysfs.cpp",
         "src/libcamera/dma_buf_allocator.cpp",
         "src/libcamera/formats.cpp",
+        "src/libcamera/global_configuration.cpp",
         "src/libcamera/ipa_controls.cpp",
         "src/libcamera/ipa_data_serializer.cpp",
         "src/libcamera/ipa_interface.cpp",
@@ -163,6 +164,7 @@ cc_library_shared {
         "src/libcamera/sysfs.cpp",
         "src/libcamera/v4l2_device.cpp",
         "src/libcamera/v4l2_pixelformat.cpp",
+        "src/libcamera/v4l2_request.cpp",
         "src/libcamera/v4l2_subdevice.cpp",
         "src/libcamera/v4l2_videodevice.cpp",
         "src/libcamera/vector.cpp",
@@ -340,6 +342,7 @@ cc_library_shared {
         "src/ipa",
         "src/ipa/nxp/neo",
         "src/ipa/nxp/neo/algorithms",
+        "src/ipa/rpi/controller",
     ],
 }
 
@@ -405,7 +408,6 @@ cc_library_static {
         ".",
     ]
 }
-
 
 // nxpneo_ipa_proxy
 cc_binary {
