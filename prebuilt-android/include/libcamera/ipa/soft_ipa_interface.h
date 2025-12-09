@@ -11,6 +11,8 @@
 
 
 #include <string>
+#include <type_traits>
+#include <utility>
 
 
 #include <libcamera/base/flags.h>
@@ -54,12 +56,14 @@ struct IPAConfigInfo
 {
 public:
 #ifndef __DOXYGEN__
-	IPAConfigInfo()
-	{
-	}
+	IPAConfigInfo() = default;
 
-	IPAConfigInfo(const ControlInfoMap &_sensorControls)
-		: sensorControls(_sensorControls)
+	template<
+		typename T1 = ControlInfoMap,
+		std::enable_if_t<std::is_convertible_v<T1&&, ControlInfoMap>> * = nullptr
+	>
+	IPAConfigInfo(T1 &&_sensorControls)
+		: sensorControls(std::forward<T1>(_sensorControls))
 	{
 	}
 #endif

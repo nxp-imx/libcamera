@@ -80,12 +80,12 @@ public:
 
 
                 	IPASettings settings =
-                        IPADataSerializer<IPASettings>::deserialize(
+                        IPADataSerializer<libcamera::IPASettings>::deserialize(
                         	_ipcMessage.data().cbegin() + settingsStart,
                         	_ipcMessage.data().cbegin() + settingsStart + settingsBufSize);
 
                 	InitParams params =
-                        IPADataSerializer<InitParams>::deserialize(
+                        IPADataSerializer<ipa::nxpneo::InitParams>::deserialize(
                         	_ipcMessage.data().cbegin() + paramsStart,
                         	_ipcMessage.data().cend(),
                         	&controlSerializer_);
@@ -106,12 +106,10 @@ public:
 		                
                 	std::vector<uint8_t> ipaControlsBuf;
                 	std::tie(ipaControlsBuf, std::ignore) =
-                		IPADataSerializer<ControlInfoMap>::serialize(ipaControls
-                , &controlSerializer_);
+                		IPADataSerializer<libcamera::ControlInfoMap>::serialize(ipaControls, &controlSerializer_);
                 	std::vector<uint8_t> sensorConfigBuf;
                 	std::tie(sensorConfigBuf, std::ignore) =
-                		IPADataSerializer<SensorConfig>::serialize(sensorConfig
-                );
+                		IPADataSerializer<ipa::nxpneo::SensorConfig>::serialize(sensorConfig);
                 	appendPOD<uint32_t>(_response.data(), ipaControlsBuf.size());
                 	appendPOD<uint32_t>(_response.data(), sensorConfigBuf.size());
                 	_response.data().insert(_response.data().end(), ipaControlsBuf.begin(), ipaControlsBuf.end());
@@ -179,7 +177,7 @@ ipa_->stop();
 
 
                 	IPAConfigInfo configInfo =
-                        IPADataSerializer<IPAConfigInfo>::deserialize(
+                        IPADataSerializer<ipa::nxpneo::IPAConfigInfo>::deserialize(
                         	_ipcMessage.data().cbegin() + configInfoStart,
                         	_ipcMessage.data().cbegin() + configInfoStart + configInfoBufSize,
                         	&controlSerializer_);
@@ -203,8 +201,7 @@ ipa_->stop();
 		                
                 	std::vector<uint8_t> ipaControlsBuf;
                 	std::tie(ipaControlsBuf, std::ignore) =
-                		IPADataSerializer<ControlInfoMap>::serialize(ipaControls
-                , &controlSerializer_);
+                		IPADataSerializer<libcamera::ControlInfoMap>::serialize(ipaControls, &controlSerializer_);
                 	_response.data().insert(_response.data().end(), ipaControlsBuf.begin(), ipaControlsBuf.end());
 			int _ret = socket_.send(_response.payload());
 			if (_ret < 0) {
@@ -283,7 +280,7 @@ ipa_->unmapBuffers(ids);
                         	_ipcMessage.data().cbegin() + frameStart + frameBufSize);
 
                 	ControlList reqControls =
-                        IPADataSerializer<ControlList>::deserialize(
+                        IPADataSerializer<libcamera::ControlList>::deserialize(
                         	_ipcMessage.data().cbegin() + reqControlsStart,
                         	_ipcMessage.data().cend(),
                         	&controlSerializer_);
@@ -310,9 +307,9 @@ ipa_->queueRequest(frame, reqControls);
                         	_ipcMessage.data().cbegin() + frameStart + frameBufSize);
 
                 	IPAContextType context =
-                        static_cast<ipa::nxpneo::IPAContextType>(IPADataSerializer<uint32_t>::deserialize(
+                        IPADataSerializer<ipa::nxpneo::IPAContextType>::deserialize(
                         	_ipcMessage.data().cbegin() + contextStart,
-                        	_ipcMessage.data().cbegin() + contextStart + contextBufSize));
+                        	_ipcMessage.data().cbegin() + contextStart + contextBufSize);
 
                 	std::map<uint32_t, uint32_t> bufferIds =
                         IPADataSerializer<std::map<uint32_t, uint32_t>>::deserialize(
@@ -343,9 +340,9 @@ ipa_->computeParams(frame, context, bufferIds);
                         	_ipcMessage.data().cbegin() + frameStart + frameBufSize);
 
                 	IPAContextType context =
-                        static_cast<ipa::nxpneo::IPAContextType>(IPADataSerializer<uint32_t>::deserialize(
+                        IPADataSerializer<ipa::nxpneo::IPAContextType>::deserialize(
                         	_ipcMessage.data().cbegin() + contextStart,
-                        	_ipcMessage.data().cbegin() + contextStart + contextBufSize));
+                        	_ipcMessage.data().cbegin() + contextStart + contextBufSize);
 
                 	std::map<uint32_t, uint32_t> bufferIds =
                         IPADataSerializer<std::map<uint32_t, uint32_t>>::deserialize(
@@ -353,7 +350,7 @@ ipa_->computeParams(frame, context, bufferIds);
                         	_ipcMessage.data().cbegin() + bufferIdsStart + bufferIdsBufSize);
 
                 	ControlList sensorControls =
-                        IPADataSerializer<ControlList>::deserialize(
+                        IPADataSerializer<libcamera::ControlList>::deserialize(
                         	_ipcMessage.data().cbegin() + sensorControlsStart,
                         	_ipcMessage.data().cend(),
                         	&controlSerializer_);
@@ -386,6 +383,7 @@ ipa_->processStats(frame, context, bufferIds, sensorControls);
 
 		ipa_->paramsComputed.connect(this, &IPAProxyNxpNeoWorker::paramsComputed);
 		ipa_->setSensorControls.connect(this, &IPAProxyNxpNeoWorker::setSensorControls);
+		ipa_->setLensControls.connect(this, &IPAProxyNxpNeoWorker::setLensControls);
 		ipa_->metadataReady.connect(this, &IPAProxyNxpNeoWorker::metadataReady);
 		return 0;
 	}
@@ -420,16 +418,13 @@ private:
 		
 	std::vector<uint8_t> frameBuf;
 	std::tie(frameBuf, std::ignore) =
-		IPADataSerializer<uint32_t>::serialize(frame
-);
-	static_assert(sizeof(ipa::nxpneo::IPAContextType) <= 4);
+		IPADataSerializer<uint32_t>::serialize(frame);
 	std::vector<uint8_t> contextBuf;
 	std::tie(contextBuf, std::ignore) =
-		IPADataSerializer<uint32_t>::serialize(static_cast<uint32_t>(context));
+		IPADataSerializer<ipa::nxpneo::IPAContextType>::serialize(context);
 	std::vector<uint8_t> bytesusedBuf;
 	std::tie(bytesusedBuf, std::ignore) =
-		IPADataSerializer<uint32_t>::serialize(bytesused
-);
+		IPADataSerializer<uint32_t>::serialize(bytesused);
 	appendPOD<uint32_t>(_message.data(), frameBuf.size());
 	appendPOD<uint32_t>(_message.data(), contextBuf.size());
 	appendPOD<uint32_t>(_message.data(), bytesusedBuf.size());
@@ -447,7 +442,6 @@ private:
 
         void setSensorControls(
         	const uint32_t frame,
-        	const IPAContextType context,
         	const ControlList &sensorControls)
 	{
 		IPCMessage::Header header = {
@@ -459,21 +453,13 @@ private:
 		
 	std::vector<uint8_t> frameBuf;
 	std::tie(frameBuf, std::ignore) =
-		IPADataSerializer<uint32_t>::serialize(frame
-);
-	static_assert(sizeof(ipa::nxpneo::IPAContextType) <= 4);
-	std::vector<uint8_t> contextBuf;
-	std::tie(contextBuf, std::ignore) =
-		IPADataSerializer<uint32_t>::serialize(static_cast<uint32_t>(context));
+		IPADataSerializer<uint32_t>::serialize(frame);
 	std::vector<uint8_t> sensorControlsBuf;
 	std::tie(sensorControlsBuf, std::ignore) =
-		IPADataSerializer<ControlList>::serialize(sensorControls
-, &controlSerializer_);
+		IPADataSerializer<libcamera::ControlList>::serialize(sensorControls, &controlSerializer_);
 	appendPOD<uint32_t>(_message.data(), frameBuf.size());
-	appendPOD<uint32_t>(_message.data(), contextBuf.size());
 	appendPOD<uint32_t>(_message.data(), sensorControlsBuf.size());
 	_message.data().insert(_message.data().end(), frameBuf.begin(), frameBuf.end());
-	_message.data().insert(_message.data().end(), contextBuf.begin(), contextBuf.end());
 	_message.data().insert(_message.data().end(), sensorControlsBuf.begin(), sensorControlsBuf.end());
 
 		int _ret = socket_.send(_message.payload());
@@ -482,6 +468,29 @@ private:
 				<< "Sending event setSensorControls() failed: " << _ret;
 
 		LOG(IPAProxyNxpNeoWorker, Debug) << "setSensorControls done";
+	}
+
+        void setLensControls(
+        	const ControlList &controls)
+	{
+		IPCMessage::Header header = {
+			static_cast<uint32_t>(_NxpNeoEventCmd::SetLensControls),
+			0
+		};
+		IPCMessage _message(header);
+
+		
+	std::vector<uint8_t> controlsBuf;
+	std::tie(controlsBuf, std::ignore) =
+		IPADataSerializer<libcamera::ControlList>::serialize(controls, &controlSerializer_);
+	_message.data().insert(_message.data().end(), controlsBuf.begin(), controlsBuf.end());
+
+		int _ret = socket_.send(_message.payload());
+		if (_ret < 0)
+			LOG(IPAProxyNxpNeoWorker, Error)
+				<< "Sending event setLensControls() failed: " << _ret;
+
+		LOG(IPAProxyNxpNeoWorker, Debug) << "setLensControls done";
 	}
 
         void metadataReady(
@@ -498,16 +507,13 @@ private:
 		
 	std::vector<uint8_t> frameBuf;
 	std::tie(frameBuf, std::ignore) =
-		IPADataSerializer<uint32_t>::serialize(frame
-);
-	static_assert(sizeof(ipa::nxpneo::IPAContextType) <= 4);
+		IPADataSerializer<uint32_t>::serialize(frame);
 	std::vector<uint8_t> contextBuf;
 	std::tie(contextBuf, std::ignore) =
-		IPADataSerializer<uint32_t>::serialize(static_cast<uint32_t>(context));
+		IPADataSerializer<ipa::nxpneo::IPAContextType>::serialize(context);
 	std::vector<uint8_t> metadataBuf;
 	std::tie(metadataBuf, std::ignore) =
-		IPADataSerializer<ControlList>::serialize(metadata
-, &controlSerializer_);
+		IPADataSerializer<libcamera::ControlList>::serialize(metadata, &controlSerializer_);
 	appendPOD<uint32_t>(_message.data(), frameBuf.size());
 	appendPOD<uint32_t>(_message.data(), contextBuf.size());
 	appendPOD<uint32_t>(_message.data(), metadataBuf.size());

@@ -38,35 +38,12 @@ namespace ipa {
 namespace soft {
 
 
-IPAProxySoft::IPAProxySoft(IPAModule *ipam, bool isolate)
-	: IPAProxy(ipam), isolate_(isolate),
-	  controlSerializer_(ControlSerializer::Role::Proxy), seq_(0)
+IPAProxySoftThreaded::IPAProxySoftThreaded(IPAModule *ipam, const GlobalConfiguration &configuration)
+	: IPAProxySoft(ipam, configuration), thread_("IPAProxySoft")
 {
 	LOG(IPAProxy, Debug)
-		<< "initializing soft proxy: loading IPA from "
+		<< "initializing soft proxy in thread: loading IPA from "
 		<< ipam->path();
-
-	if (isolate_) {
-		const std::string proxyWorkerPath = resolvePath("soft_ipa_proxy");
-		if (proxyWorkerPath.empty()) {
-			LOG(IPAProxy, Error)
-				<< "Failed to get proxy worker path";
-			return;
-		}
-
-		auto ipc = std::make_unique<IPCPipeUnixSocket>(ipam->path().c_str(),
-							       proxyWorkerPath.c_str());
-		if (!ipc->isConnected()) {
-			LOG(IPAProxy, Error) << "Failed to create IPCPipe";
-			return;
-		}
-
-		ipc->recv.connect(this, &IPAProxySoft::recvMessage);
-
-		ipc_ = std::move(ipc);
-		valid_ = true;
-		return;
-	}
 
 	if (!ipam->load())
 		return;
@@ -82,64 +59,17 @@ IPAProxySoft::IPAProxySoft(IPAModule *ipam, bool isolate)
 	proxy_.setIPA(ipa_.get());
 
 
-	ipa_->setSensorControls.connect(this, &IPAProxySoft::setSensorControlsThread);
-	ipa_->setIspParams.connect(this, &IPAProxySoft::setIspParamsThread);
-	ipa_->metadataReady.connect(this, &IPAProxySoft::metadataReadyThread);
+	ipa_->setSensorControls.connect(this, &IPAProxySoftThreaded::setSensorControlsHandler);
+	ipa_->setIspParams.connect(this, &IPAProxySoftThreaded::setIspParamsHandler);
+	ipa_->metadataReady.connect(this, &IPAProxySoftThreaded::metadataReadyHandler);
 
 	valid_ = true;
 }
 
-IPAProxySoft::~IPAProxySoft()
-{
-	if (ipc_) {
-		IPCMessage::Header header =
-			{ static_cast<uint32_t>(_SoftCmd::Exit), seq_++ };
-		IPCMessage msg(header);
-		ipc_->sendAsync(msg);
-	}
-}
+IPAProxySoftThreaded::~IPAProxySoftThreaded() = default;
 
 
-void IPAProxySoft::recvMessage(const IPCMessage &data)
-{
-	size_t dataSize = data.data().size();
-	_SoftEventCmd _cmd = static_cast<_SoftEventCmd>(data.header().cmd);
-
-	switch (_cmd) {
-	case _SoftEventCmd::SetSensorControls: {
-		setSensorControlsIPC(data.data().cbegin(), dataSize, data.fds());
-		break;
-	}
-	case _SoftEventCmd::SetIspParams: {
-		setIspParamsIPC(data.data().cbegin(), dataSize, data.fds());
-		break;
-	}
-	case _SoftEventCmd::MetadataReady: {
-		metadataReadyIPC(data.data().cbegin(), dataSize, data.fds());
-		break;
-	}
-	default:
-		LOG(IPAProxy, Error) << "Unknown command " << static_cast<uint32_t>(_cmd);
-	}
-}
-
-
-int32_t IPAProxySoft::init(
-	const IPASettings &settings,
-	const SharedFD &fdStats,
-	const SharedFD &fdParams,
-	const IPACameraSensorInfo &sensorInfo,
-	const ControlInfoMap &sensorControls,
-	ControlInfoMap *ipaControls,
-	bool *ccmEnabled)
-{
-	if (isolate_)
-		return initIPC(settings, fdStats, fdParams, sensorInfo, sensorControls, ipaControls, ccmEnabled);
-	else
-		return initThread(settings, fdStats, fdParams, sensorInfo, sensorControls, ipaControls, ccmEnabled);
-}
-
-int32_t IPAProxySoft::initThread(
+int32_t IPAProxySoftThreaded::init(
 	const IPASettings &settings,
 	const SharedFD &fdStats,
 	const SharedFD &fdParams,
@@ -155,7 +85,128 @@ int32_t IPAProxySoft::initThread(
 	return _ret;
 }
 
-int32_t IPAProxySoft::initIPC(
+int32_t IPAProxySoftThreaded::start()
+{
+	state_ = ProxyRunning;
+	thread_.start();
+
+	return proxy_.invokeMethod(&ThreadProxy::start, ConnectionTypeBlocking);
+}
+
+void IPAProxySoftThreaded::stop()
+{
+	ASSERT(state_ != ProxyStopping);
+	if (state_ != ProxyRunning)
+		return;
+
+	state_ = ProxyStopping;
+
+	proxy_.invokeMethod(&ThreadProxy::stop, ConnectionTypeBlocking);
+
+	thread_.exit();
+	thread_.wait();
+
+	Thread::current()->dispatchMessages(Message::Type::InvokeMessage, this);
+
+	state_ = ProxyStopped;
+}
+
+int32_t IPAProxySoftThreaded::configure(
+	const IPAConfigInfo &configInfo)
+{
+	return ipa_->configure(configInfo);
+
+}
+
+void IPAProxySoftThreaded::queueRequest(
+	const uint32_t frame,
+	const ControlList &sensorControls)
+{
+	ASSERT(state_ == ProxyRunning);
+	proxy_.invokeMethod(&ThreadProxy::queueRequest, ConnectionTypeQueued, frame, sensorControls);
+}
+
+void IPAProxySoftThreaded::computeParams(
+	const uint32_t frame)
+{
+	ASSERT(state_ == ProxyRunning);
+	proxy_.invokeMethod(&ThreadProxy::computeParams, ConnectionTypeQueued, frame);
+}
+
+void IPAProxySoftThreaded::processStats(
+	const uint32_t frame,
+	const uint32_t bufferId,
+	const ControlList &sensorControls)
+{
+	ASSERT(state_ == ProxyRunning);
+	proxy_.invokeMethod(&ThreadProxy::processStats, ConnectionTypeQueued, frame, bufferId, sensorControls);
+}
+
+
+
+void IPAProxySoftThreaded::setSensorControlsHandler(
+	const ControlList &sensorControls)
+{
+	ASSERT(state_ != ProxyStopped);
+	setSensorControls.emit(sensorControls);
+}
+
+void IPAProxySoftThreaded::setIspParamsHandler()
+{
+	ASSERT(state_ != ProxyStopped);
+	setIspParams.emit();
+}
+
+void IPAProxySoftThreaded::metadataReadyHandler(
+	const uint32_t frame,
+	const ControlList &metadata)
+{
+	ASSERT(state_ != ProxyStopped);
+	metadataReady.emit(frame, metadata);
+}
+
+
+/* ========================================================================== */
+
+IPAProxySoftIsolated::IPAProxySoftIsolated(IPAModule *ipam, const GlobalConfiguration &configuration)
+	: IPAProxySoft(ipam, configuration),
+	  controlSerializer_(ControlSerializer::Role::Proxy), seq_(0)
+{
+	LOG(IPAProxy, Debug)
+		<< "initializing soft proxy in isolation: loading IPA from "
+		<< ipam->path();
+
+	const std::string proxyWorkerPath = resolvePath("soft_ipa_proxy");
+	if (proxyWorkerPath.empty()) {
+		LOG(IPAProxy, Error) << "Failed to get proxy worker path";
+		return;
+	}
+
+	auto ipc = std::make_unique<IPCPipeUnixSocket>(ipam->path().c_str(),
+						       proxyWorkerPath.c_str());
+	if (!ipc->isConnected()) {
+		LOG(IPAProxy, Error) << "Failed to create IPCPipe";
+		return;
+	}
+
+	ipc->recv.connect(this, &IPAProxySoftIsolated::recvMessage);
+
+	ipc_ = std::move(ipc);
+	valid_ = true;
+}
+
+IPAProxySoftIsolated::~IPAProxySoftIsolated()
+{
+	if (ipc_) {
+		IPCMessage::Header header =
+			{ static_cast<uint32_t>(_SoftCmd::Exit), seq_++ };
+		IPCMessage msg(header);
+		ipc_->sendAsync(msg);
+	}
+}
+
+
+int32_t IPAProxySoftIsolated::init(
 	const IPASettings &settings,
 	const SharedFD &fdStats,
 	const SharedFD &fdParams,
@@ -171,26 +222,21 @@ int32_t IPAProxySoft::initIPC(
 
 	std::vector<uint8_t> settingsBuf;
 	std::tie(settingsBuf, std::ignore) =
-		IPADataSerializer<IPASettings>::serialize(settings
-);
+		IPADataSerializer<libcamera::IPASettings>::serialize(settings);
 	std::vector<uint8_t> fdStatsBuf;
 	std::vector<SharedFD> fdStatsFds;
 	std::tie(fdStatsBuf, fdStatsFds) =
-		IPADataSerializer<SharedFD>::serialize(fdStats
-);
+		IPADataSerializer<libcamera::SharedFD>::serialize(fdStats);
 	std::vector<uint8_t> fdParamsBuf;
 	std::vector<SharedFD> fdParamsFds;
 	std::tie(fdParamsBuf, fdParamsFds) =
-		IPADataSerializer<SharedFD>::serialize(fdParams
-);
+		IPADataSerializer<libcamera::SharedFD>::serialize(fdParams);
 	std::vector<uint8_t> sensorInfoBuf;
 	std::tie(sensorInfoBuf, std::ignore) =
-		IPADataSerializer<IPACameraSensorInfo>::serialize(sensorInfo
-);
+		IPADataSerializer<libcamera::IPACameraSensorInfo>::serialize(sensorInfo);
 	std::vector<uint8_t> sensorControlsBuf;
 	std::tie(sensorControlsBuf, std::ignore) =
-		IPADataSerializer<ControlInfoMap>::serialize(sensorControls
-, &controlSerializer_);
+		IPADataSerializer<libcamera::ControlInfoMap>::serialize(sensorControls, &controlSerializer_);
 	appendPOD<uint32_t>(_ipcInputBuf.data(), settingsBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), fdStatsBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), fdStatsFds.size());
@@ -225,7 +271,7 @@ int32_t IPAProxySoft::initIPC(
 
 	if (ipaControls) {
                 *ipaControls =
-                IPADataSerializer<ControlInfoMap>::deserialize(
+                IPADataSerializer<libcamera::ControlInfoMap>::deserialize(
                 	_ipcOutputBuf.data().cbegin() + ipaControlsStart,
                 	_ipcOutputBuf.data().cbegin() + ipaControlsStart + ipaControlsBufSize,
                 	&controlSerializer_);
@@ -244,23 +290,7 @@ int32_t IPAProxySoft::initIPC(
 }
 
 
-int32_t IPAProxySoft::start()
-{
-	if (isolate_)
-		return startIPC();
-	else
-		return startThread();
-}
-
-int32_t IPAProxySoft::startThread()
-{
-	state_ = ProxyRunning;
-	thread_.start();
-
-	return proxy_.invokeMethod(&ThreadProxy::start, ConnectionTypeBlocking);
-}
-
-int32_t IPAProxySoft::startIPC()
+int32_t IPAProxySoftIsolated::start()
 {
 	IPCMessage::Header _header = { static_cast<uint32_t>(_SoftCmd::Start), seq_++ };
 	IPCMessage _ipcInputBuf(_header);
@@ -287,33 +317,7 @@ int32_t IPAProxySoft::startIPC()
 }
 
 
-void IPAProxySoft::stop()
-{
-	if (isolate_)
-		return stopIPC();
-	else
-		return stopThread();
-}
-
-void IPAProxySoft::stopThread()
-{
-	ASSERT(state_ != ProxyStopping);
-	if (state_ != ProxyRunning)
-		return;
-
-	state_ = ProxyStopping;
-
-	proxy_.invokeMethod(&ThreadProxy::stop, ConnectionTypeBlocking);
-
-	thread_.exit();
-	thread_.wait();
-
-	Thread::current()->dispatchMessages(Message::Type::InvokeMessage, this);
-
-	state_ = ProxyStopped;
-}
-
-void IPAProxySoft::stopIPC()
+void IPAProxySoftIsolated::stop()
 {
 	IPCMessage::Header _header = { static_cast<uint32_t>(_SoftCmd::Stop), seq_++ };
 	IPCMessage _ipcInputBuf(_header);
@@ -329,23 +333,7 @@ void IPAProxySoft::stopIPC()
 }
 
 
-int32_t IPAProxySoft::configure(
-	const IPAConfigInfo &configInfo)
-{
-	if (isolate_)
-		return configureIPC(configInfo);
-	else
-		return configureThread(configInfo);
-}
-
-int32_t IPAProxySoft::configureThread(
-	const IPAConfigInfo &configInfo)
-{
-	return ipa_->configure(configInfo);
-
-}
-
-int32_t IPAProxySoft::configureIPC(
+int32_t IPAProxySoftIsolated::configure(
 	const IPAConfigInfo &configInfo)
 {
 	controlSerializer_.reset();
@@ -356,8 +344,7 @@ int32_t IPAProxySoft::configureIPC(
 
 	std::vector<uint8_t> configInfoBuf;
 	std::tie(configInfoBuf, std::ignore) =
-		IPADataSerializer<IPAConfigInfo>::serialize(configInfo
-, &controlSerializer_);
+		IPADataSerializer<ipa::soft::IPAConfigInfo>::serialize(configInfo, &controlSerializer_);
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), configInfoBuf.begin(), configInfoBuf.end());
 
 
@@ -379,25 +366,7 @@ int32_t IPAProxySoft::configureIPC(
 }
 
 
-void IPAProxySoft::queueRequest(
-	const uint32_t frame,
-	const ControlList &sensorControls)
-{
-	if (isolate_)
-		return queueRequestIPC(frame, sensorControls);
-	else
-		return queueRequestThread(frame, sensorControls);
-}
-
-void IPAProxySoft::queueRequestThread(
-	const uint32_t frame,
-	const ControlList &sensorControls)
-{
-	ASSERT(state_ == ProxyRunning);
-	proxy_.invokeMethod(&ThreadProxy::queueRequest, ConnectionTypeQueued, frame, sensorControls);
-}
-
-void IPAProxySoft::queueRequestIPC(
+void IPAProxySoftIsolated::queueRequest(
 	const uint32_t frame,
 	const ControlList &sensorControls)
 {
@@ -407,12 +376,10 @@ void IPAProxySoft::queueRequestIPC(
 
 	std::vector<uint8_t> frameBuf;
 	std::tie(frameBuf, std::ignore) =
-		IPADataSerializer<uint32_t>::serialize(frame
-);
+		IPADataSerializer<uint32_t>::serialize(frame);
 	std::vector<uint8_t> sensorControlsBuf;
 	std::tie(sensorControlsBuf, std::ignore) =
-		IPADataSerializer<ControlList>::serialize(sensorControls
-, &controlSerializer_);
+		IPADataSerializer<libcamera::ControlList>::serialize(sensorControls, &controlSerializer_);
 	appendPOD<uint32_t>(_ipcInputBuf.data(), frameBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), sensorControlsBuf.size());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), frameBuf.begin(), frameBuf.end());
@@ -427,23 +394,7 @@ void IPAProxySoft::queueRequestIPC(
 }
 
 
-void IPAProxySoft::computeParams(
-	const uint32_t frame)
-{
-	if (isolate_)
-		return computeParamsIPC(frame);
-	else
-		return computeParamsThread(frame);
-}
-
-void IPAProxySoft::computeParamsThread(
-	const uint32_t frame)
-{
-	ASSERT(state_ == ProxyRunning);
-	proxy_.invokeMethod(&ThreadProxy::computeParams, ConnectionTypeQueued, frame);
-}
-
-void IPAProxySoft::computeParamsIPC(
+void IPAProxySoftIsolated::computeParams(
 	const uint32_t frame)
 {
 	IPCMessage::Header _header = { static_cast<uint32_t>(_SoftCmd::ComputeParams), seq_++ };
@@ -452,8 +403,7 @@ void IPAProxySoft::computeParamsIPC(
 
 	std::vector<uint8_t> frameBuf;
 	std::tie(frameBuf, std::ignore) =
-		IPADataSerializer<uint32_t>::serialize(frame
-);
+		IPADataSerializer<uint32_t>::serialize(frame);
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), frameBuf.begin(), frameBuf.end());
 
 
@@ -465,27 +415,7 @@ void IPAProxySoft::computeParamsIPC(
 }
 
 
-void IPAProxySoft::processStats(
-	const uint32_t frame,
-	const uint32_t bufferId,
-	const ControlList &sensorControls)
-{
-	if (isolate_)
-		return processStatsIPC(frame, bufferId, sensorControls);
-	else
-		return processStatsThread(frame, bufferId, sensorControls);
-}
-
-void IPAProxySoft::processStatsThread(
-	const uint32_t frame,
-	const uint32_t bufferId,
-	const ControlList &sensorControls)
-{
-	ASSERT(state_ == ProxyRunning);
-	proxy_.invokeMethod(&ThreadProxy::processStats, ConnectionTypeQueued, frame, bufferId, sensorControls);
-}
-
-void IPAProxySoft::processStatsIPC(
+void IPAProxySoftIsolated::processStats(
 	const uint32_t frame,
 	const uint32_t bufferId,
 	const ControlList &sensorControls)
@@ -496,16 +426,13 @@ void IPAProxySoft::processStatsIPC(
 
 	std::vector<uint8_t> frameBuf;
 	std::tie(frameBuf, std::ignore) =
-		IPADataSerializer<uint32_t>::serialize(frame
-);
+		IPADataSerializer<uint32_t>::serialize(frame);
 	std::vector<uint8_t> bufferIdBuf;
 	std::tie(bufferIdBuf, std::ignore) =
-		IPADataSerializer<uint32_t>::serialize(bufferId
-);
+		IPADataSerializer<uint32_t>::serialize(bufferId);
 	std::vector<uint8_t> sensorControlsBuf;
 	std::tie(sensorControlsBuf, std::ignore) =
-		IPADataSerializer<ControlList>::serialize(sensorControls
-, &controlSerializer_);
+		IPADataSerializer<libcamera::ControlList>::serialize(sensorControls, &controlSerializer_);
 	appendPOD<uint32_t>(_ipcInputBuf.data(), frameBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), bufferIdBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), sensorControlsBuf.size());
@@ -523,15 +450,31 @@ void IPAProxySoft::processStatsIPC(
 
 
 
-
-void IPAProxySoft::setSensorControlsThread(
-	const ControlList &sensorControls)
+void IPAProxySoftIsolated::recvMessage(const IPCMessage &data)
 {
-	ASSERT(state_ != ProxyStopped);
-	setSensorControls.emit(sensorControls);
+	size_t dataSize = data.data().size();
+	_SoftEventCmd _cmd = static_cast<_SoftEventCmd>(data.header().cmd);
+
+	switch (_cmd) {
+	case _SoftEventCmd::SetSensorControls: {
+		setSensorControlsHandler(data.data().cbegin(), dataSize, data.fds());
+		break;
+	}
+	case _SoftEventCmd::SetIspParams: {
+		setIspParamsHandler(data.data().cbegin(), dataSize, data.fds());
+		break;
+	}
+	case _SoftEventCmd::MetadataReady: {
+		metadataReadyHandler(data.data().cbegin(), dataSize, data.fds());
+		break;
+	}
+	default:
+		LOG(IPAProxy, Error) << "Unknown command " << static_cast<uint32_t>(_cmd);
+	}
 }
 
-void IPAProxySoft::setSensorControlsIPC(
+
+void IPAProxySoftIsolated::setSensorControlsHandler(
 	[[maybe_unused]] std::vector<uint8_t>::const_iterator data,
 	[[maybe_unused]] size_t dataSize,
 	[[maybe_unused]] const std::vector<SharedFD> &fds)
@@ -542,7 +485,7 @@ void IPAProxySoft::setSensorControlsIPC(
 
 
 	ControlList sensorControls =
-        IPADataSerializer<ControlList>::deserialize(
+        IPADataSerializer<libcamera::ControlList>::deserialize(
         	data + sensorControlsStart,
         	data + dataSize,
         	&controlSerializer_);
@@ -550,13 +493,7 @@ void IPAProxySoft::setSensorControlsIPC(
 	setSensorControls.emit(sensorControls);
 }
 
-void IPAProxySoft::setIspParamsThread()
-{
-	ASSERT(state_ != ProxyStopped);
-	setIspParams.emit();
-}
-
-void IPAProxySoft::setIspParamsIPC(
+void IPAProxySoftIsolated::setIspParamsHandler(
 	[[maybe_unused]] std::vector<uint8_t>::const_iterator data,
 	[[maybe_unused]] size_t dataSize,
 	[[maybe_unused]] const std::vector<SharedFD> &fds)
@@ -568,15 +505,7 @@ void IPAProxySoft::setIspParamsIPC(
 	setIspParams.emit();
 }
 
-void IPAProxySoft::metadataReadyThread(
-	const uint32_t frame,
-	const ControlList &metadata)
-{
-	ASSERT(state_ != ProxyStopped);
-	metadataReady.emit(frame, metadata);
-}
-
-void IPAProxySoft::metadataReadyIPC(
+void IPAProxySoftIsolated::metadataReadyHandler(
 	[[maybe_unused]] std::vector<uint8_t>::const_iterator data,
 	[[maybe_unused]] size_t dataSize,
 	[[maybe_unused]] const std::vector<SharedFD> &fds)
@@ -595,7 +524,7 @@ void IPAProxySoft::metadataReadyIPC(
         	data + frameStart + frameBufSize);
 
 	ControlList metadata =
-        IPADataSerializer<ControlList>::deserialize(
+        IPADataSerializer<libcamera::ControlList>::deserialize(
         	data + metadataStart,
         	data + metadataStart + metadataBufSize,
         	&controlSerializer_);

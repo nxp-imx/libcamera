@@ -13,6 +13,7 @@
 #include <map>
 #include <stdint.h>
 #include <string>
+#include <string_view>
 
 #include <libcamera/controls.h>
 
@@ -48,7 +49,7 @@ extern const Control<int32_t> Location;
 #define LIBCAMERA_HAS_LIBCAMERA_VENDOR_PROPERTIES_LOCATION
 extern const Control<int32_t> Rotation;
 #define LIBCAMERA_HAS_LIBCAMERA_VENDOR_PROPERTIES_ROTATION
-extern const Control<std::string> Model;
+extern const Control<std::string_view> Model;
 #define LIBCAMERA_HAS_LIBCAMERA_VENDOR_PROPERTIES_MODEL
 extern const Control<Size> UnitCellSize;
 #define LIBCAMERA_HAS_LIBCAMERA_VENDOR_PROPERTIES_UNIT_CELL_SIZE

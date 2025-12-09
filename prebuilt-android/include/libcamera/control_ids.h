@@ -13,6 +13,7 @@
 #include <map>
 #include <stdint.h>
 #include <string>
+#include <string_view>
 
 #include <libcamera/controls.h>
 
@@ -71,6 +72,10 @@ enum {
 	GAMMA = 45,
 	DEBUG_METADATA_ENABLE = 46,
 	FRAME_WALL_CLOCK = 47,
+	WDR_MODE = 48,
+	WDR_STRENGTH = 49,
+	WDR_MAX_BRIGHT_PIXELS = 50,
+	LENS_DEWARP_ENABLE = 51,
 };
 
 
@@ -301,6 +306,23 @@ extern const Control<bool> DebugMetadataEnable;
 #define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_DEBUG_METADATA_ENABLE
 extern const Control<int64_t> FrameWallClock;
 #define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_FRAME_WALL_CLOCK
+enum WdrModeEnum {
+	WdrOff = 0,
+	WdrLinear = 1,
+	WdrPower = 2,
+	WdrExponential = 3,
+	WdrHistogramEqualization = 4,
+};
+extern const std::array<const ControlValue, 5> WdrModeValues;
+extern const std::map<std::string, int32_t> WdrModeNameValueMap;
+extern const Control<int32_t> WdrMode;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_WDR_MODE
+extern const Control<float> WdrStrength;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_WDR_STRENGTH
+extern const Control<float> WdrMaxBrightPixels;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_WDR_MAX_BRIGHT_PIXELS
+extern const Control<bool> LensDewarpEnable;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_LENS_DEWARP_ENABLE
 
 namespace draft {
 
