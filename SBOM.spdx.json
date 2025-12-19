@@ -1,0 +1,82 @@
+{
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "spdxVersion": "SPDX-2.3",
+  "creationInfo": {
+    "created": "2025-12-19T09:43:04Z",
+    "creators": [
+      "Organization: NXP"
+    ],
+    "licenseListVersion": "3.26"
+  },
+  "name": "libcamera-libcamera--lf-6.18.2_1.0.0",
+  "dataLicense": "CC0-1.0",
+  "documentNamespace": "https://nxp.com/spdx/e6134c1d-f11f-4691-9792-e4f3508ff093",
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-package-e6134c1d-f11f-4691-9792-e4f3508ff093",
+      "name": "libcamera",
+      "versionInfo": "libcamera--lf-6.18.2_1.0.0",
+      "licenseConcluded": "(LGPL-2.1-or-later)",
+      "licenseDeclared": "(LGPL-2.1-or-later)",
+      "downloadLocation": "NOASSERTION",
+      "originator": "Organization: NXP",
+      "supplier": "NOASSERTION",
+      "externalRefs": [],
+      "filesAnalyzed": false
+    },
+    {
+      "SPDXID": "SPDXRef-package-1b1dab86-5b6b-47c2-be33-08dac2339839",
+      "name": "libcamera",
+      "versionInfo": "0.6.0",
+      "licenseConcluded": "LGPL-2.1-or-later",
+      "licenseDeclared": "GPL-2.0-or-later",
+      "homepage": "https://libcamera.org/",
+      "downloadLocation": "NOASSERTION",
+      "originator": "Organization: libcamera",
+      "supplier": "NOASSERTION",
+      "externalRefs": [],
+      "filesAnalyzed": false
+    },
+    {
+      "SPDXID": "SPDXRef-package-6d1f22d9-98c0-4a54-be8b-39708dabc994",
+      "name": "libcamera",
+      "versionInfo": "0.6.0",
+      "licenseConcluded": "LGPL-2.1-or-later",
+      "licenseDeclared": "NOASSERTION",
+      "homepage": "https://libcamera.org/",
+      "downloadLocation": "NOASSERTION",
+      "originator": "Organization: alpine",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "OTHER",
+          "referenceLocator": "ea2ec5d4-090a-4284-94a5-e6e63c496c33",
+          "referenceType": "BlackDuck-ComponentOrigin"
+        },
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceLocator": "pkg:apk/alpine/libcamera-raspberrypi@0.6.0-r0?arch=aarch64",
+          "referenceType": "purl"
+        }
+      ],
+      "filesAnalyzed": false
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-package-e6134c1d-f11f-4691-9792-e4f3508ff093"
+    },
+    {
+      "spdxElementId": "SPDXRef-package-e6134c1d-f11f-4691-9792-e4f3508ff093",
+      "relationshipType": "DYNAMIC_LINK",
+      "relatedSpdxElement": "SPDXRef-package-1b1dab86-5b6b-47c2-be33-08dac2339839"
+    },
+    {
+      "spdxElementId": "SPDXRef-package-e6134c1d-f11f-4691-9792-e4f3508ff093",
+      "relationshipType": "DYNAMIC_LINK",
+      "relatedSpdxElement": "SPDXRef-package-6d1f22d9-98c0-4a54-be8b-39708dabc994"
+    }
+  ]
+}
