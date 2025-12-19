@@ -80,6 +80,32 @@ namespace nxpneo {
  *
  */
 
+/**
+ * \brief Get the sizes supported by a camera for a mbus code
+ * \param[in] sensor The camera sensor
+ * \param[in] code The mbus code
+ * \param[out] sizes The sizes supported by \a sensor for \a code
+ *
+ * This is essentially a wrapper around the CameraSensor::sizes() function.
+ * It introduces a workaround for external ISP that exposes a single
+ * (min, max) size range corresponding to its full rescaling range capability.
+ * The CameraSensor::sizes() function reports only the max value of the range
+ * that may exceed the width limit of the ISI or ISP devices.
+ * For that case, make sure that at least the sensor native resolution is
+ * reported in the sizes list, to be considered as a valid size option.
+ */
+void cameraSizes(CameraSensor *sensor, int code, std::vector<Size> &sizes)
+{
+	sizes.clear();
+	sizes = sensor->sizes(code);
+	Size resolution = sensor->resolution();
+	if (sizes.size() == 1 &&
+	    std::find(sizes.begin(), sizes.end(), resolution) == sizes.end()) {
+		sizes.push_back(std::move(resolution));
+	}
+	std::sort(sizes.begin(), sizes.end());
+}
+
 /* -----------------------------------------------------------------------------
  * CameraMediaStream class
  */
@@ -331,9 +357,12 @@ int PipelineConfig::loadAutoDetect()
 		std::set<Size> sizesSet;
 		const std::vector<unsigned int> mbusCodes = sensor->mbusCodes();
 		for (const auto mbusCode : sensor->mbusCodes()) {
-			for (const auto &size : sensor->sizes(mbusCode))
+			std::vector<Size> sizes;
+			cameraSizes(sensor.get(), mbusCode, sizes);
+			for (const auto &size : sizes) {
 				if (size.width <= ISIPipe::kChainedWidthMax)
 					sizesSet.insert(size);
+			}
 		}
 		if (sizesSet.size())
 			sizeMax = *sizesSet.rbegin();

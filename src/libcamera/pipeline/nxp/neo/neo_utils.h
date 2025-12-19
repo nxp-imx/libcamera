@@ -25,6 +25,8 @@ namespace libcamera {
 
 namespace nxpneo {
 
+void cameraSizes(CameraSensor *sensor, int code, std::vector<Size> &sizes);
+
 class PipelineConfig;
 
 class CameraMediaStream

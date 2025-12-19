@@ -2849,20 +2849,8 @@ int NxpNeoCameraData::enumerateFormatsYuv()
 		if (bppFilter && info.bitsPerPixel != bppFilter.value())
 			continue;
 
-		std::vector<Size> sizes = sensor_->sizes(code);
-		/*
-		 * This is a workaround for external ISP that advertise a single
-		 * (min, max) size range corresponding to its full rescaling
-		 * capability. The CameraSensor::size() function reports only
-		 * the max value of the range that may fall out of ISI support.
-		 * For that case, make sure that at least the sensor native
-		 * resolution is considered.
-		 */
-		Size resolution = sensor_->resolution();
-		if (sizes.size() == 1 &&
-		    std::find(sizes.begin(), sizes.end(), resolution) == sizes.end()) {
-			sizes.push_back(std::move(resolution));
-		}
+		std::vector<Size> sizes;
+		cameraSizes(sensor_.get(), code, sizes);
 
 		for (const Size &size : sizes) {
 			if (size.width > ISIPipe::kChainedWidthMax)
