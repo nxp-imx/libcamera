@@ -15,8 +15,6 @@
 
 #include "libcamera/internal/yaml_parser.h"
 
-#include "nxp-neoisp-enums.h"
-
 namespace libcamera {
 
 namespace ipa::nxpneo::algorithms {
@@ -203,6 +201,7 @@ int BlackLevelCorrection::configure(IPAContext &context,
 
 	std::array<uint32_t, kInputsCount> &bpps =
 		context.configuration.sensor.bpps;
+	auto &blcConfig = context.configuration.blc;
 
 	/*
 	 * Compute the BLC offset at sensor level for each ISP input. For each
@@ -211,14 +210,14 @@ int BlackLevelCorrection::configure(IPAContext &context,
 	 * Also, consider here the condition of the sensors that use the same
 	 * BLC digital value for all pixel formats.
 	 */
-	std::array<ChannelOffsets<uint16_t>, kInputsCount> sensorOffsets;
+	std::array<ChannelArray<uint16_t>, kInputsCount> sensorOffsets;
 	for (unsigned int input = 0; input < kInputsCount; input++) {
 		unsigned int &bpp = bpps[input];
 		int leftShift = bpp - 16;
 		if (referenceBitDepth_)
 			leftShift += referenceBitDepth_.value() - bpp;
 
-		ChannelOffsets<uint16_t> &offsets = sensorOffsets[input];
+		ChannelArray<uint16_t> &offsets = sensorOffsets[input];
 		for (const auto &[channel, calibrationOffset] : utils::enumerate(calibrationOffsets_)) {
 			if (leftShift >= 0)
 				offsets[channel] = calibrationOffset << leftShift;
@@ -239,10 +238,10 @@ int BlackLevelCorrection::configure(IPAContext &context,
 	 *     - 20/16-bit (input0/input1) for operation without HDR merge
 	 *     - The native sensor format (input0/input1) when HDR merge enabled
 	 *       or 12-bit if the pixel format is 10-bit
-	 * - OBwB2
+	 * - OBWB2
 	 *     - 20-bit unconditionally
 	 */
-	std::array<unsigned int, kObwbCount> gainLeftShift;
+	ObwbArray<unsigned int> gainLeftShift;
 	IPAModeType &mode = context.configuration.pipelineMode;
 	if (mode != IPAModeTypeHdrMerge) {
 		gainLeftShift[0] = 20 - bpps[0];
@@ -253,11 +252,11 @@ int BlackLevelCorrection::configure(IPAContext &context,
 	}
 	gainLeftShift[2] = 20 - bpps[0];
 
-	auto applyGain = [](ChannelOffsets<uint16_t> &sensor,
-			    ChannelOffsets<uint16_t> &obwb,
+	auto applyGain = [](ChannelArray<uint16_t> &sensor,
+			    ChannelArray<uint16_t> &obwb,
 			    unsigned int leftShift) {
 		uint16_t maxOffset = std::numeric_limits<uint16_t>::max() >> leftShift;
-		for (unsigned channel = 0; channel < kChannelsCount; channel++) {
+		for (unsigned channel = 0; channel < kObwbChannelsCount; channel++) {
 			uint16_t offset = sensor[channel];
 			if (offset > maxOffset) {
 				LOG(NxpNeoAlgoBlc, Debug)
@@ -271,15 +270,15 @@ int BlackLevelCorrection::configure(IPAContext &context,
 		}
 	};
 
-	for (unsigned int obwb = 0; obwb < kObwbCount; obwb++) {
+	for (unsigned int obwb = 0; obwb < kObwbInstancesCount; obwb++) {
 		/*
 		 * OBWB0/1 uses sensor offset from the respective sensor input
 		 * paths. OBWB2 uses sensor offset from sensor input path0 as
 		 * it is relevant to non-HDR merge cases.
 		 */
-		ChannelOffsets<uint16_t> &sensorOffset =
+		ChannelArray<uint16_t> &sensorOffset =
 			obwb != 1 ? sensorOffsets[0] : sensorOffsets[1];
-		ChannelOffsets<uint16_t> &obwbOffset = obwbOffsets_[obwb];
+		ChannelArray<uint16_t> &obwbOffset = blcConfig.obwbOffsets[obwb];
 		applyGain(sensorOffset, obwbOffset, gainLeftShift[obwb]);
 	}
 
@@ -289,13 +288,13 @@ int BlackLevelCorrection::configure(IPAContext &context,
 	 * rescaled accordingly.
 	 */
 	int leftShift = 16 - bpps[0];
-	for (unsigned channel = 0; channel < kChannelsCount; channel++) {
+	for (unsigned channel = 0; channel < kObwbChannelsCount; channel++) {
 		uint16_t &sensorOffset = sensorOffsets[0][channel];
 		if (leftShift >= 0)
-			mdOffsets_[channel] =
+			blcConfig.mdOffsets[channel] =
 				static_cast<int32_t>(sensorOffset << leftShift);
 		else
-			mdOffsets_[channel] =
+			blcConfig.mdOffsets[channel] =
 				static_cast<int32_t>(sensorOffset >> (-leftShift));
 	}
 
@@ -318,13 +317,13 @@ int BlackLevelCorrection::configure(IPAContext &context,
 	};
 
 	if (mode != IPAModeTypeHdrMerge) {
-		obwbObpp_[0] = obpp(20);
-		obwbObpp_[1] = obpp(16);
+		blcConfig.obwbObpp[0] = obpp(20);
+		blcConfig.obwbObpp[1] = obpp(16);
 	} else {
-		obwbObpp_[0] = obpp(bpps[0]);
-		obwbObpp_[1] = obpp(bpps[1]);
+		blcConfig.obwbObpp[0] = obpp(bpps[0]);
+		blcConfig.obwbObpp[1] = obpp(bpps[1]);
 	}
-	obwbObpp_[2] = obpp(20);
+	blcConfig.obwbObpp[2] = obpp(20);
 
 	return 0;
 }
@@ -344,6 +343,7 @@ void BlackLevelCorrection::prepare([[maybe_unused]] IPAContext &context,
 	 */
 	if (!enabled_)
 		return;
+	const auto &blcConfig = context.configuration.blc;
 
 	auto obwb0Config = params->block<BlockParamsType::Obwb0>();
 	auto obwb1Config = params->block<BlockParamsType::Obwb1>();
@@ -358,20 +358,20 @@ void BlackLevelCorrection::prepare([[maybe_unused]] IPAContext &context,
 	for (const uint8_t &obwb : obwbs_) {
 		if (obwb == 0) {
 			obwb0Config.setUpdate(true);
-			obwb0Config->ctrl_obpp = obwbObpp_[0];
+			obwb0Config->ctrl_obpp = blcConfig.obwbObpp[0];
 		} else if (obwb == 1) {
 			obwb1Config.setUpdate(true);
-			obwb1Config->ctrl_obpp = obwbObpp_[1];
+			obwb1Config->ctrl_obpp = blcConfig.obwbObpp[1];
 		} else if (obwb == 2) {
 			obwb2Config.setUpdate(true);
-			obwb2Config->ctrl_obpp = obwbObpp_[2];
+			obwb2Config->ctrl_obpp = blcConfig.obwbObpp[2];
 		} else {
 			LOG(NxpNeoAlgoBlc, Warning) << "Invalid OBWB" << +obwb << " block,";
 			continue;
 		}
 
 		neoisp_obwb_cfg_s *config = obwbBlocks[obwb];
-		const ChannelOffsets<uint16_t> &offsets = obwbOffsets_[obwb];
+		const ChannelArray<uint16_t> &offsets = blcConfig.obwbOffsets[obwb];
 
 		config->r_ctrl_offset = offsets[0];
 		config->gr_ctrl_offset = offsets[1];
@@ -408,10 +408,12 @@ void BlackLevelCorrection::process([[maybe_unused]] IPAContext &context,
 {
 	if (!enabled_)
 		return;
+	const auto &blcConfig = context.configuration.blc;
 
 	/* Report the offsets in 16-bit pixel format. */
 	metadata.set(controls::SensorBlackLevels,
-		     { mdOffsets_[0], mdOffsets_[1], mdOffsets_[2], mdOffsets_[3] });
+		     { blcConfig.mdOffsets[0], blcConfig.mdOffsets[1],
+		       blcConfig.mdOffsets[2], blcConfig.mdOffsets[3] });
 }
 
 REGISTER_IPA_ALGORITHM(BlackLevelCorrection, "BlackLevelCorrection")

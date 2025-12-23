@@ -4,7 +4,7 @@
  * integrated part of the linux kernel UAPI nxp_neoisp.h
  *
  * nxp-neoisp-enums.h - NXP NEO ISP enum values
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  */
 
 #pragma once
@@ -103,6 +103,22 @@ enum neoisp_hist_ctrl_channel {
 			  NEO_HIST_ROI1_ID * NEO_HIST_BIN_SIZE)
 #define NEO_HIST3_OFFSET (NEO_HIST3_ID * NEO_HIST_ROI_NB * NEO_HIST_BIN_SIZE + \
 			  NEO_HIST_ROI1_ID * NEO_HIST_BIN_SIZE)
+
+/**
+ * OBWB shared definitions between algorithms and IPA context.
+ */
+
+/* OBWB Color channels: R, Gr, Gb, B */
+static constexpr unsigned int kObwbChannelsCount = 4;
+/* OBWB instances: OBWB0, OBWB1 and OBWB2 */
+static constexpr unsigned int kObwbInstancesCount = 3;
+
+/* OBWB Color channels array: R, Gr, Gb, B */
+template<class T>
+using ChannelArray = std::array<T, kObwbChannelsCount>;
+/* OBWB instances array: OBWB0, OBWB1 and OBWB2 */
+template<class T>
+using ObwbArray = std::array<T, kObwbInstancesCount>;
 
 } /* namespace ipa::nxpneo */
 

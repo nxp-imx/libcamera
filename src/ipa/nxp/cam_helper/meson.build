@@ -6,10 +6,12 @@ nxp_ipa_cam_helper_headers = files([
 
 nxp_ipa_cam_helper_sources = files([
     'camera_helper.cpp',
+    'camera_helper_ar0235.cpp',
+    'camera_helper_imx219.cpp',
     'camera_helper_imx519.cpp',
+    'camera_helper_imx708.cpp',
     'camera_helper_mx95mbcam.cpp',
     'camera_helper_os08a20.cpp',
-    'camera_helper_ov5640.cpp',
     'camera_helper_ox05b1s.cpp',
     'md_parser_ox.cpp',
 ])

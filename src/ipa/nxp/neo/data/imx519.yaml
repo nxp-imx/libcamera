@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: CC0-1.0
+# CCM matrixes come from RPi imx519.json calibration file
 %YAML 1.1
 ---
 version: 1
@@ -12,7 +13,6 @@ algorithms:
       Gb: 4096
       B: 4096
   - Ccm:
-      # CCM matrixes come from RPi imx519.json calibration file
       ccms: [
           {
               ct: 2890,

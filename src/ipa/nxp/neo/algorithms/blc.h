@@ -11,6 +11,7 @@
 #include <libcamera/base/utils.h>
 
 #include "algorithm.h"
+#include "neoisp-definitions.h"
 
 namespace libcamera {
 
@@ -37,29 +38,14 @@ private:
 	static const std::string kDefaultObwb;
 	static const std::map<const std::string, std::vector<uint8_t>> kObwbMap;
 
-	/* Color channels: R, Gr, Gb, B */
-	static constexpr unsigned int kChannelsCount = 4;
 	/* ISP inputs: Input0, Input1 */
 	static constexpr unsigned int kInputsCount = 2;
-	/* OBWB instances: OBWB0, OBWB1 and OBWB2 */
-	static constexpr unsigned int kObwbCount = 3;
 
 	bool enabled_;
 	std::vector<uint8_t> obwbs_;
 
-	/* Color channels offsets: R, Gr, Gb, B */
-	template<class T>
-	using ChannelOffsets = std::array<T, kChannelsCount>;
-
 	/* BLC offset values from calibration (16-bit pixel format) */
-	ChannelOffsets<uint16_t> calibrationOffsets_;
-
-	/* OBWB instances BLC offsets and obpp values */
-	std::array<ChannelOffsets<uint16_t>, kObwbCount> obwbOffsets_;
-	std::array<unsigned int, kObwbCount> obwbObpp_;
-
-	/* BLC offset reported in metadata format */
-	ChannelOffsets<int32_t> mdOffsets_;
+	ChannelArray<uint16_t> calibrationOffsets_;
 
 	/* Offset reference bit-depth */
 	std::optional<uint32_t> referenceBitDepth_;

@@ -52,7 +52,7 @@ public:
 		MediaLink *sourceLink;
 	};
 
-	const std::list<Entity> &entities() { return entities_; };
+	const std::list<Entity> &entities() { return entities_; }
 
 private:
 	std::list<Entity> entities_;

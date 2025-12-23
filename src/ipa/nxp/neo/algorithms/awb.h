@@ -15,6 +15,7 @@
 #include "libcamera/internal/vector.h"
 
 #include "algorithm.h"
+#include "neoisp-definitions.h"
 
 namespace libcamera {
 
@@ -40,7 +41,8 @@ public:
 		     ControlList &metadata) override;
 
 private:
-	void updateObwbGains(IPAFrameContext &frameContext, NxpNeoParams *params);
+	void updateObwbGains(IPAContext &context, const uint32_t frame,
+			     IPAFrameContext &frameContext, NxpNeoParams *params);
 	void configureCtempStats(IPAContext &context, NxpNeoParams *params);
 	void generateBlocks(const NxpNeoStats *stats);
 	void awbGreyWorld(IPAActiveState &activeState, IPAFrameContext &frameContext,
@@ -53,8 +55,6 @@ private:
 	 */
 	static constexpr uint32_t kNumStartupFrames = 10;
 
-	/* OBWB instances: OBWB0, OBWB1 and OBWB2 */
-	static constexpr unsigned int kObwbCount = 3;
 	/* ISP inputs: Input0, Input1 */
 	static constexpr unsigned int kInputsCount = 2;
 
@@ -65,7 +65,6 @@ private:
 	std::optional<std::string> obwbUserConfig_;
 	std::vector<RGB<double>> blocks_;
 	std::vector<uint8_t> obwbs_;
-	std::array<unsigned int, kObwbCount> obwbObpp_;
 	bool awbGainInSensor_;
 };
 

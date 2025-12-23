@@ -128,7 +128,7 @@ public:
 private:
 	struct PipeWrapper {
 		PipeWrapper(unsigned int index)
-			: pipe_(index), free(true), chained(false){};
+			: pipe_(index), free(true), chained(false) {}
 		ISIPipe pipe_;
 		bool free;
 		bool chained;

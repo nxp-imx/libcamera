@@ -105,7 +105,7 @@ struct GlobalInfo {
 class PipelineConfig
 {
 public:
-	PipelineConfig(){};
+	PipelineConfig() {}
 	virtual ~PipelineConfig();
 	int load(const std::string &file, std::shared_ptr<ISIDevice> isiDevice);
 	const CameraInfo *cameraInfo(const std::string &name) const;

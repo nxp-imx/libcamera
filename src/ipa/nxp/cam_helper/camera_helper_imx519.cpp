@@ -19,7 +19,7 @@ public:
 	double gain(uint32_t gainCode) const override;
 };
 
-/* Gain conversions come from RPi camera_helper_imx519.cpp implementation */
+/* Gain conversions come from RPi cam_helper_imx519.cpp implementation */
 uint32_t CameraHelperImx519::gainCode(double gain) const
 {
 	return static_cast<uint32_t>(1024 - 1024 / gain);
