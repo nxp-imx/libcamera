@@ -34,22 +34,22 @@ public:
 
 		std::vector<uint8_t> primaries;
 		std::tie(primaries, std::ignore) =
-			IPADataSerializer<uint32_t>::serialize(data.primaries);
+			IPADataSerializer<ipa::nxpneo::IPAPrimaries>::serialize(data.primaries);
 		retData.insert(retData.end(), primaries.begin(), primaries.end());
 
 		std::vector<uint8_t> transferFunction;
 		std::tie(transferFunction, std::ignore) =
-			IPADataSerializer<uint32_t>::serialize(data.transferFunction);
+			IPADataSerializer<ipa::nxpneo::IPATransferFunction>::serialize(data.transferFunction);
 		retData.insert(retData.end(), transferFunction.begin(), transferFunction.end());
 
 		std::vector<uint8_t> ycbcrEncoding;
 		std::tie(ycbcrEncoding, std::ignore) =
-			IPADataSerializer<uint32_t>::serialize(data.ycbcrEncoding);
+			IPADataSerializer<ipa::nxpneo::IPAYcbcrEncoding>::serialize(data.ycbcrEncoding);
 		retData.insert(retData.end(), ycbcrEncoding.begin(), ycbcrEncoding.end());
 
 		std::vector<uint8_t> range;
 		std::tie(range, std::ignore) =
-			IPADataSerializer<uint32_t>::serialize(data.range);
+			IPADataSerializer<ipa::nxpneo::IPARange>::serialize(data.range);
 		retData.insert(retData.end(), range.begin(), range.end());
 
 		return {retData, {}};
@@ -80,7 +80,7 @@ public:
 				<< (4) << ", got " << (dataSize);
 			return ret;
 		}
-		ret.primaries = static_cast<ipa::nxpneo::IPAPrimaries>(IPADataSerializer<uint32_t>::deserialize(m, m + 4));
+		ret.primaries = IPADataSerializer<ipa::nxpneo::IPAPrimaries>::deserialize(m, m + 4);
 		m += 4;
 		dataSize -= 4;
 
@@ -92,7 +92,7 @@ public:
 				<< (4) << ", got " << (dataSize);
 			return ret;
 		}
-		ret.transferFunction = static_cast<ipa::nxpneo::IPATransferFunction>(IPADataSerializer<uint32_t>::deserialize(m, m + 4));
+		ret.transferFunction = IPADataSerializer<ipa::nxpneo::IPATransferFunction>::deserialize(m, m + 4);
 		m += 4;
 		dataSize -= 4;
 
@@ -104,7 +104,7 @@ public:
 				<< (4) << ", got " << (dataSize);
 			return ret;
 		}
-		ret.ycbcrEncoding = static_cast<ipa::nxpneo::IPAYcbcrEncoding>(IPADataSerializer<uint32_t>::deserialize(m, m + 4));
+		ret.ycbcrEncoding = IPADataSerializer<ipa::nxpneo::IPAYcbcrEncoding>::deserialize(m, m + 4);
 		m += 4;
 		dataSize -= 4;
 
@@ -116,7 +116,7 @@ public:
 				<< (4) << ", got " << (dataSize);
 			return ret;
 		}
-		ret.range = static_cast<ipa::nxpneo::IPARange>(IPADataSerializer<uint32_t>::deserialize(m, m + 4));
+		ret.range = IPADataSerializer<ipa::nxpneo::IPARange>::deserialize(m, m + 4);
 
 		return ret;
 	}
@@ -196,6 +196,11 @@ public:
 		} else {
 			appendPOD<uint32_t>(retData, 0);
 		}
+
+		std::vector<uint8_t> lensPresent;
+		std::tie(lensPresent, std::ignore) =
+			IPADataSerializer<bool>::serialize(data.lensPresent);
+		retData.insert(retData.end(), lensPresent.begin(), lensPresent.end());
 
 		return {retData, {}};
 	}
@@ -344,6 +349,18 @@ public:
 		if (sensorControlListSize > 0)
 			ret.sensorControlList =
 				IPADataSerializer<ControlList>::deserialize(m, m + sensorControlListSize, cs);
+		m += sensorControlListSize;
+		dataSize -= sensorControlListSize;
+
+
+		if (dataSize < 1) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "lensPresent"
+				<< ": not enough data, expected "
+				<< (1) << ", got " << (dataSize);
+			return ret;
+		}
+		ret.lensPresent = IPADataSerializer<bool>::deserialize(m, m + 1);
 
 		return ret;
 	}
@@ -393,6 +410,16 @@ public:
 			appendPOD<uint32_t>(retData, 0);
 		}
 
+		if (data.lensControls.size() > 0) {
+			std::vector<uint8_t> lensControls;
+			std::tie(lensControls, std::ignore) =
+				IPADataSerializer<ControlInfoMap>::serialize(data.lensControls, cs);
+			appendPOD<uint32_t>(retData, lensControls.size());
+			retData.insert(retData.end(), lensControls.begin(), lensControls.end());
+		} else {
+			appendPOD<uint32_t>(retData, 0);
+		}
+
 		if (data.sensorControlList.size() > 0) {
 			std::vector<uint8_t> sensorControlList;
 			std::tie(sensorControlList, std::ignore) =
@@ -405,7 +432,7 @@ public:
 
 		std::vector<uint8_t> mode;
 		std::tie(mode, std::ignore) =
-			IPADataSerializer<uint32_t>::serialize(data.mode);
+			IPADataSerializer<ipa::nxpneo::IPAModeType>::serialize(data.mode);
 		retData.insert(retData.end(), mode.begin(), mode.end());
 
 		std::vector<uint8_t> colorSpace;
@@ -489,6 +516,30 @@ public:
 
 		if (dataSize < 4) {
 			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "lensControlsSize"
+				<< ": not enough data, expected "
+				<< (4) << ", got " << (dataSize);
+			return ret;
+		}
+		const size_t lensControlsSize = readPOD<uint32_t>(m, 0, dataEnd);
+		m += 4;
+		dataSize -= 4;
+		if (dataSize < lensControlsSize) {
+			LOG(IPADataSerializer, Error)
+				<< "Failed to deserialize " << "lensControls"
+				<< ": not enough data, expected "
+				<< (lensControlsSize) << ", got " << (dataSize);
+			return ret;
+		}
+		if (lensControlsSize > 0)
+			ret.lensControls =
+				IPADataSerializer<ControlInfoMap>::deserialize(m, m + lensControlsSize, cs);
+		m += lensControlsSize;
+		dataSize -= lensControlsSize;
+
+
+		if (dataSize < 4) {
+			LOG(IPADataSerializer, Error)
 				<< "Failed to deserialize " << "sensorControlListSize"
 				<< ": not enough data, expected "
 				<< (4) << ", got " << (dataSize);
@@ -518,7 +569,7 @@ public:
 				<< (4) << ", got " << (dataSize);
 			return ret;
 		}
-		ret.mode = static_cast<ipa::nxpneo::IPAModeType>(IPADataSerializer<uint32_t>::deserialize(m, m + 4));
+		ret.mode = IPADataSerializer<ipa::nxpneo::IPAModeType>::deserialize(m, m + 4);
 		m += 4;
 		dataSize -= 4;
 

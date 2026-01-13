@@ -60,6 +60,12 @@ enum SensorStreamModes {
 	SensorStreamDualContext,
 };
 
+/* Sensor frame context types */
+enum SensorContextTypes {
+	SensorContextRgb = 0,
+	SensorContextIr,
+};
+
 /* Subset of IPACameraSensorInfo structure*/
 struct CameraMode {
 	/* bit depth of the raw camera output */
@@ -85,7 +91,8 @@ public:
 	virtual void setControls(const ControlList *sensorCtrls);
 
 	virtual void controlListSetAGC(
-		ControlList *ctrls, Duration exposure, double gain) const;
+		ControlList *ctrls, SensorContextTypes context,
+		Duration exposure, double gain);
 
 	virtual void controlInfoMapGetExposureRange(
 		const ControlInfoMap *ctrls, std::vector<Duration> *minExposure,

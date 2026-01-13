@@ -14,6 +14,7 @@
 
 #include <libcamera/base/utils.h>
 
+#include <libcamera/control_ids.h>
 #include <libcamera/controls.h>
 #include <libcamera/geometry.h>
 
@@ -38,7 +39,20 @@ struct IPAHwSettings {
 	uint32_t apiVersion;
 };
 
+static constexpr unsigned int kContextTypes = 2;
+
 struct IPASessionConfiguration {
+	struct {
+		std::array<neoisp_roi_cfg_s, NEO_AF_ROIS_CNT> rois;
+		std::array<double, NEO_AF_ROIS_CNT> normalGains;
+
+		/* Camera mode */
+		uint16_t cropX;
+		uint16_t cropY;
+		double scaleX;
+		double scaleY;
+	} af;
+
 	struct {
 		/* ROI for statistics measurements */
 		struct neoisp_roi_cfg_s roi;
@@ -93,6 +107,12 @@ struct IPASessionConfiguration {
 
 struct IPAActiveState {
 	struct {
+		controls::AfModeEnum mode;
+		std::optional<int32_t> hwPosition;
+		bool hwPositionUpdate;
+	} af;
+
+	struct agc {
 		struct {
 			uint32_t exposure;
 			double gain;
@@ -105,7 +125,8 @@ struct IPAActiveState {
 		uint32_t constraintMode;
 		uint32_t exposureMode;
 		bool autoEnabled;
-	} agc;
+	};
+	std::array<agc, kContextTypes> agc;
 
 	struct {
 		struct {
@@ -115,6 +136,8 @@ struct IPAActiveState {
 
 		unsigned int temperatureK;
 		bool autoEnabled;
+		std::array<std::array<RGB<uint64_t>, NEO_CTEMP_BLOCK_NB_X>, NEO_CTEMP_BLOCK_NB_Y>
+			blockSums;
 	} awb;
 
 	struct {
@@ -128,10 +151,27 @@ struct IPAActiveState {
 
 struct IPAFrameContext : public FrameContext {
 	struct {
+		/* User control updates. */
+		std::optional<controls::AfModeEnum> mode;
+		std::optional<controls::AfRangeEnum> range;
+		std::optional<controls::AfSpeedEnum> speed;
+		std::optional<controls::AfMeteringEnum> metering;
+		std::optional<std::vector<Rectangle>> windows;
+		std::optional<controls::AfPauseEnum> pause;
+		std::optional<controls::AfTriggerEnum> trigger;
+		std::optional<float> lensPosition;
+
+		/* AF states. */
+		controls::AfStateEnum state;
+		controls::AfPauseStateEnum pauseState;
+	} af;
+
+	struct agc {
 		uint32_t exposure;
 		double gain;
 		bool autoEnabled;
-	} agc;
+	};
+	std::array<agc, kContextTypes> agc;
 
 	struct {
 		RGB<double> gains;
@@ -139,6 +179,7 @@ struct IPAFrameContext : public FrameContext {
 		bool autoEnabled;
 		/* Set of WB enabled flags for the 3 OBWB blocks */
 		std::array<bool, 3> colorGainsSet;
+		std::vector<RGB<double>> blockAverages;
 	} awb;
 
 	struct {
@@ -147,8 +188,11 @@ struct IPAFrameContext : public FrameContext {
 	} blc;
 
 	struct {
-		uint32_t exposure;
-		double gain;
+		struct agc {
+			uint32_t exposure;
+			double gain;
+		};
+		std::array<agc, kContextTypes> agc;
 		RGB<double> wbGains;
 		ControlList mdControls;
 		bool metaDataValid;
@@ -162,6 +206,8 @@ struct IPAFrameContext : public FrameContext {
 		float gamma;
 		bool update;
 	} goc;
+
+	IPAContextType contextType;
 };
 
 struct IPAContext {

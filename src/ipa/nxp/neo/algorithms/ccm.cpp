@@ -63,9 +63,7 @@ int Ccm::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData
 
 	ret = offsets_.readYaml(tuningData["ccms"], "ct", "offsets");
 	if (ret < 0) {
-		LOG(NxpNeoAlgoCcm, Warning)
-			<< "Failed to parse 'offsets' "
-			<< "parameter from tuning file; falling back to zero offsets";
+		LOG(NxpNeoAlgoCcm, Debug) << "No 'offsets' configuration";
 		offsets_.setData({ { 0, Matrix<int32_t, 3, 1>({ 0, 0, 0 }) } });
 	}
 

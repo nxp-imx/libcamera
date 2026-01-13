@@ -1431,6 +1431,82 @@ namespace controls {
  */
 
 /**
+ * \enum WdrModeEnum
+ * \brief Supported WdrMode values
+ *
+ * \var WdrOff
+ * \brief Wdr is disabled.
+ *
+ * \var WdrLinear
+ * \brief Apply a linear global tone mapping curve.
+ * A curve with two linear sections is applied. This produces good results at the expense of a slightly artificial look.
+ *
+ * \var WdrPower
+ * \brief Apply a power global tone mapping curve.
+ *
+ * This curve has high gain values on the dark areas of an image and
+ * high compression values on the bright area. It therefore tends to
+ * produce noticeable noise artifacts.
+ *
+ * \var WdrExponential
+ * \brief Apply an exponential global tone mapping curve.
+ *
+ * This curve has lower gain values in dark areas compared to the power
+ * curve but produces a more natural look compared to the linear curve.
+ * It is therefore the best choice for most scenes.
+ *
+ * \var WdrHistogramEqualization
+ * \brief Apply histogram equalization.
+ *
+ * This curve preserves most of the information of the image at the
+ * expense of a very artificial look. It is therefore best suited for
+ * technical analysis.
+ */
+
+/**
+ * \var WdrModeValues
+ * \brief List of all WdrMode supported values
+ */
+
+/**
+ * \var WdrModeNameValueMap
+ * \brief Map of all WdrMode supported value names (in std::string format) to value
+ */
+
+/**
+ * \var WdrMode
+ * \brief Set the WDR mode.
+ *
+ * The WDR mode is used to select the algorithm used for global tone
+ * mapping. It will automatically reduce the exposure time of the sensor
+ * so that there are only a small number of saturated pixels in the image.
+ * The algorithm then compensates for the loss of brightness by applying a
+ * global tone mapping curve to the image.
+ */
+
+/**
+ * \var WdrStrength
+ * \brief Specify the strength of the wdr algorithm. The exact meaning of this
+ * value is specific to the algorithm in use. Usually a value of 0 means no
+ * global tone mapping is applied. A values of 1 is the default value and
+ * the correct value for most scenes. A value above 1 increases the global
+ * tone mapping effect and can lead to unrealistic image effects.
+ */
+
+/**
+ * \var WdrMaxBrightPixels
+ * \brief Percentage of allowed (nearly) saturated pixels. The WDR algorithm
+ * reduces the WdrExposureValue until the amount of pixels that are close
+ * to saturation is lower than this value.
+ */
+
+/**
+ * \var LensDewarpEnable
+ * \brief Enable or disable lens dewarping. This control is only available if lens
+ * dewarp parameters are configured in the tuning file.
+ */
+
+/**
  * \brief Namespace for draft controls
  */
 namespace draft {
@@ -2089,6 +2165,28 @@ extern const Control<bool> DebugMetadataEnable(DEBUG_METADATA_ENABLE, "DebugMeta
 
 extern const Control<int64_t> FrameWallClock(FRAME_WALL_CLOCK, "FrameWallClock", "libcamera", ControlId::Direction::Out);
 
+extern const std::array<const ControlValue, 5> WdrModeValues = {
+	static_cast<int32_t>(WdrOff),
+	static_cast<int32_t>(WdrLinear),
+	static_cast<int32_t>(WdrPower),
+	static_cast<int32_t>(WdrExponential),
+	static_cast<int32_t>(WdrHistogramEqualization),
+};
+extern const std::map<std::string, int32_t> WdrModeNameValueMap = {
+	{ "WdrOff", WdrOff },
+	{ "WdrLinear", WdrLinear },
+	{ "WdrPower", WdrPower },
+	{ "WdrExponential", WdrExponential },
+	{ "WdrHistogramEqualization", WdrHistogramEqualization },
+};
+extern const Control<int32_t> WdrMode(WDR_MODE, "WdrMode", "libcamera", ControlId::Direction::In | ControlId::Direction::Out, WdrModeNameValueMap);
+
+extern const Control<float> WdrStrength(WDR_STRENGTH, "WdrStrength", "libcamera", ControlId::Direction::In);
+
+extern const Control<float> WdrMaxBrightPixels(WDR_MAX_BRIGHT_PIXELS, "WdrMaxBrightPixels", "libcamera", ControlId::Direction::In);
+
+extern const Control<bool> LensDewarpEnable(LENS_DEWARP_ENABLE, "LensDewarpEnable", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
 
 
 namespace draft {
@@ -2267,6 +2365,10 @@ extern const ControlIdMap controls {
 	{ GAMMA, &Gamma },
 	{ DEBUG_METADATA_ENABLE, &DebugMetadataEnable },
 	{ FRAME_WALL_CLOCK, &FrameWallClock },
+	{ WDR_MODE, &WdrMode },
+	{ WDR_STRENGTH, &WdrStrength },
+	{ WDR_MAX_BRIGHT_PIXELS, &WdrMaxBrightPixels },
+	{ LENS_DEWARP_ENABLE, &LensDewarpEnable },
 	{ draft::AE_PRECAPTURE_TRIGGER, &draft::AePrecaptureTrigger },
 	{ draft::NOISE_REDUCTION_MODE, &draft::NoiseReductionMode },
 	{ draft::COLOR_CORRECTION_ABERRATION_MODE, &draft::ColorCorrectionAberrationMode },

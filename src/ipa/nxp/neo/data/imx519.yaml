@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: CC0-1.0
 # CCM matrixes come from RPi imx519.json calibration file
+# Autofocus values come from Arducam calibration data
 %YAML 1.1
 ---
 version: 1
@@ -70,4 +71,46 @@ algorithms:
           }
       ]
   - Agc:
+  - Af:
+      ranges:
+        normal:
+          min: 0.0
+          max: 12.0
+          default: 1.0
+        macro:
+          min: 3.0
+          max: 15.0
+          default: 4.0
+      speeds:
+        # CDAF only - PDAF not supported
+        normal:
+          step_coarse: 1.0
+          step_fine: 0.25
+          contrast_ratio: 0.75
+          retrigger_ratio: 0.8
+          retrigger_delay: 10
+          pdaf_gain: 0
+          pdaf_squelch: 0.125
+          max_slew: 2.0
+          pdaf_frames: 20
+          dropout_frames: 0
+          step_frames: 1
+        fast:
+          step_coarse: 1.25
+          step_fine: 0.0
+          contrast_ratio: 0.75
+          retrigger_ratio: 0.8
+          retrigger_delay: 10
+          pdaf_gain: 0
+          pdaf_squelch: 0.125
+          max_slew: 2.0
+          pdaf_frames: 20
+          dropout_frames: 0
+          step_frames: 1
+      conf_epsilon: 8
+      conf_thresh: 12
+      conf_clip: 512
+      skip_frames: 5
+      check_for_ir: false
+      map: [0.0, 0, 15.0, 4095]
 ...

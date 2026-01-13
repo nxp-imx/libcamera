@@ -28,11 +28,24 @@ namespace ipa {
 namespace nxpneo {
 
 
+class IPAProxyNxpNeoThreaded;
+class IPAProxyNxpNeoIsolated;
+
 class IPAProxyNxpNeo : public IPAProxy, public IPANxpNeoInterface, public Object
 {
 public:
-	IPAProxyNxpNeo(IPAModule *ipam, bool isolate);
-	~IPAProxyNxpNeo();
+	using Threaded = IPAProxyNxpNeoThreaded;
+	using Isolated = IPAProxyNxpNeoIsolated;
+
+protected:
+	using IPAProxy::IPAProxy;
+};
+
+class IPAProxyNxpNeoThreaded : public IPAProxyNxpNeo
+{
+public:
+	IPAProxyNxpNeoThreaded(IPAModule *ipam, const GlobalConfiguration &configuration);
+	~IPAProxyNxpNeoThreaded();
 
 
         int32_t init(
@@ -73,99 +86,23 @@ public:
 
 
 private:
-	void recvMessage(const IPCMessage &data);
 
-
-        int32_t initThread(
-        	const IPASettings &settings,
-        	const InitParams &params,
-        	ControlInfoMap *ipaControls,
-        	SensorConfig *sensorConfig);
-        int32_t initIPC(
-        	const IPASettings &settings,
-        	const InitParams &params,
-        	ControlInfoMap *ipaControls,
-        	SensorConfig *sensorConfig);
-
-        int32_t startThread();
-        int32_t startIPC();
-
-        void stopThread();
-        void stopIPC();
-
-        int32_t configureThread(
-        	const IPAConfigInfo &configInfo,
-        	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
-        	ControlInfoMap *ipaControls);
-        int32_t configureIPC(
-        	const IPAConfigInfo &configInfo,
-        	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
-        	ControlInfoMap *ipaControls);
-
-        void mapBuffersThread(
-        	const std::vector<libcamera::IPABuffer> &buffers);
-        void mapBuffersIPC(
-        	const std::vector<libcamera::IPABuffer> &buffers);
-
-        void unmapBuffersThread(
-        	const std::vector<uint32_t> &ids);
-        void unmapBuffersIPC(
-        	const std::vector<uint32_t> &ids);
-
-        void queueRequestThread(
-        	const uint32_t frame,
-        	const ControlList &reqControls);
-        void queueRequestIPC(
-        	const uint32_t frame,
-        	const ControlList &reqControls);
-
-        void computeParamsThread(
-        	const uint32_t frame,
-        	const IPAContextType context,
-        	const std::map<uint32_t, uint32_t> &bufferIds);
-        void computeParamsIPC(
-        	const uint32_t frame,
-        	const IPAContextType context,
-        	const std::map<uint32_t, uint32_t> &bufferIds);
-
-        void processStatsThread(
-        	const uint32_t frame,
-        	const IPAContextType context,
-        	const std::map<uint32_t, uint32_t> &bufferIds,
-        	const ControlList &sensorControls);
-        void processStatsIPC(
-        	const uint32_t frame,
-        	const IPAContextType context,
-        	const std::map<uint32_t, uint32_t> &bufferIds,
-        	const ControlList &sensorControls);
-
-
-        void paramsComputedThread(
+        void paramsComputedHandler(
         	const uint32_t frame,
         	const IPAContextType context,
         	const uint32_t bytesused);
-	void paramsComputedIPC(
-		std::vector<uint8_t>::const_iterator data,
-		size_t dataSize,
-		const std::vector<SharedFD> &fds);
 
-        void setSensorControlsThread(
+        void setSensorControlsHandler(
         	const uint32_t frame,
-        	const IPAContextType context,
         	const ControlList &sensorControls);
-	void setSensorControlsIPC(
-		std::vector<uint8_t>::const_iterator data,
-		size_t dataSize,
-		const std::vector<SharedFD> &fds);
 
-        void metadataReadyThread(
+        void setLensControlsHandler(
+        	const ControlList &controls);
+
+        void metadataReadyHandler(
         	const uint32_t frame,
         	const IPAContextType context,
         	const ControlList &metadata);
-	void metadataReadyIPC(
-		std::vector<uint8_t>::const_iterator data,
-		size_t dataSize,
-		const std::vector<SharedFD> &fds);
 
 
 	/* Helper class to invoke async functions in another thread. */
@@ -220,8 +157,76 @@ private:
 	Thread thread_;
 	ThreadProxy proxy_;
 	std::unique_ptr<IPANxpNeoInterface> ipa_;
+};
 
-	const bool isolate_;
+class IPAProxyNxpNeoIsolated : public IPAProxyNxpNeo
+{
+public:
+	IPAProxyNxpNeoIsolated(IPAModule *ipam, const GlobalConfiguration &configuration);
+	~IPAProxyNxpNeoIsolated();
+
+
+        int32_t init(
+        	const IPASettings &settings,
+        	const InitParams &params,
+        	ControlInfoMap *ipaControls,
+        	SensorConfig *sensorConfig) override;
+
+        int32_t start() override;
+
+        void stop() override;
+
+        int32_t configure(
+        	const IPAConfigInfo &configInfo,
+        	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
+        	ControlInfoMap *ipaControls) override;
+
+        void mapBuffers(
+        	const std::vector<libcamera::IPABuffer> &buffers) override;
+
+        void unmapBuffers(
+        	const std::vector<uint32_t> &ids) override;
+
+        void queueRequest(
+        	const uint32_t frame,
+        	const ControlList &reqControls) override;
+
+        void computeParams(
+        	const uint32_t frame,
+        	const IPAContextType context,
+        	const std::map<uint32_t, uint32_t> &bufferIds) override;
+
+        void processStats(
+        	const uint32_t frame,
+        	const IPAContextType context,
+        	const std::map<uint32_t, uint32_t> &bufferIds,
+        	const ControlList &sensorControls) override;
+
+
+private:
+	void recvMessage(const IPCMessage &data);
+
+
+	void paramsComputedHandler(
+		std::vector<uint8_t>::const_iterator data,
+		size_t dataSize,
+		const std::vector<SharedFD> &fds);
+
+	void setSensorControlsHandler(
+		std::vector<uint8_t>::const_iterator data,
+		size_t dataSize,
+		const std::vector<SharedFD> &fds);
+
+	void setLensControlsHandler(
+		std::vector<uint8_t>::const_iterator data,
+		size_t dataSize,
+		const std::vector<SharedFD> &fds);
+
+	void metadataReadyHandler(
+		std::vector<uint8_t>::const_iterator data,
+		size_t dataSize,
+		const std::vector<SharedFD> &fds);
+
 
 	std::unique_ptr<IPCPipeUnixSocket> ipc_;
 

@@ -794,7 +794,7 @@ extern const Control<int32_t> Location(LOCATION, "Location", "libcamera", Contro
 
 extern const Control<int32_t> Rotation(ROTATION, "Rotation", "libcamera", ControlId::Direction::Out);
 
-extern const Control<std::string> Model(MODEL, "Model", "libcamera", ControlId::Direction::Out);
+extern const Control<std::string_view> Model(MODEL, "Model", "libcamera", ControlId::Direction::Out);
 
 extern const Control<Size> UnitCellSize(UNIT_CELL_SIZE, "UnitCellSize", "libcamera", ControlId::Direction::Out);
 

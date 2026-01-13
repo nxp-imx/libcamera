@@ -53,7 +53,7 @@ namespace libcamera {
  * \brief Assemble and return a string describing the point
  * \return A string describing the point
  */
-const std::string Point::toString() const
+std::string Point::toString() const
 {
 	std::stringstream ss;
 	ss << *this;
@@ -133,7 +133,7 @@ std::ostream &operator<<(std::ostream &out, const Point &p)
  * \brief Assemble and return a string describing the size
  * \return A string describing the size
  */
-const std::string Size::toString() const
+std::string Size::toString() const
 {
 	std::stringstream ss;
 	ss << *this;
@@ -205,6 +205,16 @@ const std::string Size::toString() const
  * This function subtracts the width and height of the \a margin size from this
  * size. If the width or height of the size are smaller than those of \a
  * margins, the result is clamped to 0.
+ *
+ * \return A reference to this object
+ */
+
+/**
+ * \fn Size::transpose()
+ * \brief Transpose the size in place
+ *
+ * This function swaps width and height of this size. This effectively applies
+ * the \a Transform::Transpose transformation on this size.
  *
  * \return A reference to this object
  */
@@ -676,7 +686,7 @@ std::ostream &operator<<(std::ostream &out, const SizeRange &sr)
  * \brief Assemble and return a string describing the rectangle
  * \return A string describing the Rectangle
  */
-const std::string Rectangle::toString() const
+std::string Rectangle::toString() const
 {
 	std::stringstream ss;
 	ss << *this;

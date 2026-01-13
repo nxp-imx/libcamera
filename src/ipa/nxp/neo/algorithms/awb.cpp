@@ -447,11 +447,13 @@ void Awb::configureCtempStats(IPAContext &context, NxpNeoParams *params)
 /*
  * Generate an RGB vector with the average values for each block.
  */
-void Awb::generateBlocks(const NxpNeoStats *stats)
+void Awb::generateBlocks(IPAContext &context, IPAFrameContext &frameContext,
+			 const NxpNeoStats *stats)
 {
 	auto ctempMemStats = stats->block<BlockStatsType::MCTemp>();
-
-	blocks_.clear();
+	auto &blocks = frameContext.awb.blockAverages;
+	auto &blockSums = context.activeState.awb.blockSums;
+	static_assert(NEO_CTEMP_BLOCK_NB_X * NEO_CTEMP_BLOCK_NB_Y == NEO_CTEMP_PIX_CNT_CNT);
 
 	for (unsigned int i = 0; i < NEO_CTEMP_BLOCK_NB_X * NEO_CTEMP_BLOCK_NB_Y; i++) {
 		/*
@@ -462,6 +464,7 @@ void Awb::generateBlocks(const NxpNeoStats *stats)
 		 */
 		double counted = ctempMemStats->ctemp_pix_cnt[i];
 		unsigned long sumR, sumG, sumB = 0;
+
 		/*
 		 * Each statistics sum has 28 bits mantissa (bit[31:4]) and
 		 * 4 bits exponent (bit[3:0])
@@ -476,7 +479,12 @@ void Awb::generateBlocks(const NxpNeoStats *stats)
 				     static_cast<double>(sumG),
 				     static_cast<double>(sumB) } };
 		block /= counted;
-		blocks_.push_back(block);
+		blocks.push_back(std::move(block));
+
+		unsigned row = i / NEO_CTEMP_BLOCK_NB_X;
+		unsigned col = i % NEO_CTEMP_BLOCK_NB_X;
+		RGB<uint64_t> blockSum{ { sumR, sumG, sumB } };
+		blockSums[row][col] = std::move(blockSum);
 	}
 }
 
@@ -488,7 +496,7 @@ void Awb::awbGreyWorld(IPAActiveState &activeState, IPAFrameContext &frameContex
 	 * Make a separate list of the derivatives for each of red and blue, so
 	 * that we can sort them to exclude the extreme gains.
 	 */
-	std::vector<RGB<double>> &redDerivative(blocks_);
+	std::vector<RGB<double>> &redDerivative(frameContext.awb.blockAverages);
 	std::vector<RGB<double>> blueDerivative(redDerivative);
 	std::sort(redDerivative.begin(), redDerivative.end(),
 		  [](RGB<double> const &a, RGB<double> const &b) {
@@ -571,7 +579,7 @@ void Awb::process(IPAContext &context,
 
 	IPAActiveState &activeState = context.activeState;
 
-	generateBlocks(stats);
+	generateBlocks(context, frameContext, stats);
 	awbGreyWorld(activeState, frameContext, frame);
 
 	frameContext.awb.temperatureK = activeState.awb.temperatureK;

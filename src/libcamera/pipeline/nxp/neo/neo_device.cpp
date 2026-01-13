@@ -102,7 +102,8 @@ int NeoDevice::init(MediaDevice *media)
 	 */
 	ctlInfo = isp_->controlInfo(V4L2_CID_NEOISP_QUERYCAP);
 	if (ctlInfo != nullptr) {
-		ControlList ctrls = isp_->getControls({ V4L2_CID_NEOISP_QUERYCAP });
+		const std::array<uint32_t, 1> cids = { V4L2_CID_NEOISP_QUERYCAP };
+		ControlList ctrls = isp_->getControls(cids);
 		if (!ctrls.empty())
 			hwCapabilities_ = ctrls.get(V4L2_CID_NEOISP_QUERYCAP).get<int32_t>();
 	} else {

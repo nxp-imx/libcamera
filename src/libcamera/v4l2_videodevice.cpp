@@ -30,6 +30,7 @@
 #include "libcamera/internal/framebuffer.h"
 #include "libcamera/internal/media_device.h"
 #include "libcamera/internal/media_object.h"
+#include "libcamera/internal/v4l2_request.h"
 
 /**
  * \file v4l2_videodevice.h
@@ -288,7 +289,7 @@ V4L2BufferCache::Entry::Entry(bool free, uint64_t lastUsed, const FrameBuffer &b
 
 bool V4L2BufferCache::Entry::operator==(const FrameBuffer &buffer) const
 {
-	const std::vector<FrameBuffer::Plane> &planes = buffer.planes();
+	Span<const FrameBuffer::Plane> planes = buffer.planes();
 
 	if (planes_.size() != planes.size())
 		return false;
@@ -429,7 +430,7 @@ bool V4L2BufferCache::Entry::operator==(const FrameBuffer &buffer) const
  * \brief Assemble and return a string describing the format
  * \return A string describing the V4L2DeviceFormat
  */
-const std::string V4L2DeviceFormat::toString() const
+std::string V4L2DeviceFormat::toString() const
 {
 	std::stringstream ss;
 	ss << *this;
@@ -1629,6 +1630,7 @@ int V4L2VideoDevice::releaseBuffers()
 /**
  * \brief Queue a buffer to the video device
  * \param[in] buffer The buffer to be queued
+ * \param[in] request An optional request
  *
  * For capture video devices the \a buffer will be filled with data by the
  * device. For output video devices the \a buffer shall contain valid data and
@@ -1641,9 +1643,11 @@ int V4L2VideoDevice::releaseBuffers()
  * Note that queueBuffer() will fail if the device is in the process of being
  * stopped from a streaming state through streamOff().
  *
+ * If \a request is specified, the buffer will be tied to that request.
+ *
  * \return 0 on success or a negative error code otherwise
  */
-int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer)
+int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer, const V4L2Request *request)
 {
 	struct v4l2_plane v4l2Planes[VIDEO_MAX_PLANES] = {};
 	struct v4l2_buffer buf = {};
@@ -1674,9 +1678,13 @@ int V4L2VideoDevice::queueBuffer(FrameBuffer *buffer)
 	buf.type = bufferType_;
 	buf.memory = memoryType_;
 	buf.field = V4L2_FIELD_NONE;
+	if (request) {
+		buf.flags = V4L2_BUF_FLAG_REQUEST_FD;
+		buf.request_fd = request->fd();
+	}
 
 	bool multiPlanar = V4L2_TYPE_IS_MULTIPLANAR(buf.type);
-	const std::vector<FrameBuffer::Plane> &planes = buffer->planes();
+	Span<const FrameBuffer::Plane> planes = buffer->planes();
 	const unsigned int numV4l2Planes = format_.planesCount;
 
 	/*
@@ -1909,9 +1917,10 @@ FrameBuffer *V4L2VideoDevice::dequeueBuffer()
 	}
 	metadata.sequence -= firstFrame_.value();
 
+	Span<const FrameBuffer::Plane> framebufferPlanes = buffer->planes();
 	unsigned int numV4l2Planes = multiPlanar ? buf.length : 1;
 
-	if (numV4l2Planes != buffer->planes().size()) {
+	if (numV4l2Planes != framebufferPlanes.size()) {
 		/*
 		 * If we have a multi-planar buffer with a V4L2
 		 * single-planar format, split the V4L2 buffer across
@@ -1921,7 +1930,7 @@ FrameBuffer *V4L2VideoDevice::dequeueBuffer()
 		if (numV4l2Planes != 1) {
 			LOG(V4L2, Error)
 				<< "Invalid number of planes (" << numV4l2Planes
-				<< " != " << buffer->planes().size() << ")";
+				<< " != " << framebufferPlanes.size() << ")";
 
 			metadata.status = FrameMetadata::FrameError;
 			return buffer;
@@ -1938,12 +1947,12 @@ FrameBuffer *V4L2VideoDevice::dequeueBuffer()
 				       : buf.bytesused;
 		unsigned int remaining = bytesused;
 
-		for (auto [i, plane] : utils::enumerate(buffer->planes())) {
+		for (auto [i, plane] : utils::enumerate(framebufferPlanes)) {
 			if (!remaining) {
 				LOG(V4L2, Error)
 					<< "Dequeued buffer (" << bytesused
 					<< " bytes) too small for plane lengths "
-					<< utils::join(buffer->planes(), "/",
+					<< utils::join(framebufferPlanes, "/",
 						       [](const FrameBuffer::Plane &p) {
 							       return p.length;
 						       });

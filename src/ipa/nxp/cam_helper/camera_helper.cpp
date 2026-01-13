@@ -54,7 +54,9 @@ constexpr ControlId::Direction kDirection = ControlId::Direction::Out;
  * \var AnalogueGain
  * \brief Real analogue gain applied by the sensor
  *
- * Values correspond to Long and optionally Short and Very Short captures.
+ * Values correspond to:
+ * - HDR mode: Long (0), optionally Short (1) and Very Short (2) captures.
+ * - RGBIr Dual mode: RGB context (0), Ir context (1)
  */
 const Control<Span<const float>>
 	AnalogueGain(ANALOGUE_GAIN, "AnalogueGain", kVendor, kDirection);
@@ -63,7 +65,9 @@ const Control<Span<const float>>
  * \var DigitalGain
  * \brief Real digital gain applied by the sensor
  *
- * Values correspond to Long and optionally Short and Very Short captures.
+ * Values correspond to:
+ * - HDR mode: Long (0), optionally Short (1) and Very Short (2) captures.
+ * - RGBIr Dual mode: RGB context (0), Ir context (1)
  */
 const Control<Span<const float>>
 	DigitalGain(DIGITAL_GAIN, "DigitalGain", kVendor, kDirection);
@@ -72,7 +76,9 @@ const Control<Span<const float>>
  * \var Exposure
  * \brief Exposure in seconds applied by the sensor
  *
- * Values correspond to Long and optionally Short and Very Short captures.
+ * Values correspond to:
+ * - HDR mode: Long (0), optionally Short (1) and Very Short (2) captures.
+ * - RGBIr Dual mode: RGB context (0), Ir context (1)
  */
 const Control<Span<const float>>
 	Exposure(EXPOSURE, "Exposure", kVendor, kDirection);
@@ -81,8 +87,9 @@ const Control<Span<const float>>
  * \var WhiteBalanceGain
  * \brief Real White Balance gains applied by the sensor
  *
- * Values correspond to Red, GreenR, GreenB and Blue color channels for Long
- * and optionally Short and Very Short captures.
+ * Values correspond to Red, GreenR, GreenB and Blue color channels with:
+ * - HDR mode: Long (0), optionally Short (1) and Very Short (2) captures.
+ * - RGBIr Dual mode: RGB context (0), Ir context (1)
  */
 const Control<Span<const float>>
 	WhiteBalanceGain(WB_GAIN, "WhiteBalanceGain", kVendor, kDirection);
@@ -215,6 +222,7 @@ void CameraHelper::setControls(const ControlList *sensorCtrls)
 /**
  * \brief Update sensor control list with AGC configuration
  * \param[inout] ctrls The control list to be updated
+ * \param[in] context The frame context type
  * \param[in] exposure The AGC exposure duration in seconds
  * \param[in] gain The AGC real gain decision
  *
@@ -222,7 +230,8 @@ void CameraHelper::setControls(const ControlList *sensorCtrls)
  * a proprietary programming model.
  */
 void CameraHelper::controlListSetAGC(
-	ControlList *ctrls, Duration exposure, double gain) const
+	ControlList *ctrls, [[maybe_unused]] SensorContextTypes context,
+	Duration exposure, double gain)
 {
 	ctrls->set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gainCode(gain)));
 

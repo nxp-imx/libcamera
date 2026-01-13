@@ -42,6 +42,19 @@ namespace ipa::nxpneo::algorithms {
  * \class Agc
  * \brief A mean-based auto-exposure algorithm
  *
+ * The AGC algorithm is processing separately the RGB channels and
+ * the Ir channel.
+ * In case of RGBIr Dual mode, the algorithm is executing differently
+ * for the RGB and for the Ir context the following operations:
+ * - parsing of the statistics
+ * - calculating the new exposure value for the frame context
+ * It is using for each context a different AgcMeanLuminance instance
+ * from libipa.
+ * For RGB channels, the statistics come from the STAT block of the ISP.
+ * For Ir channel, the statistics come from the RGBIR block of the ISP.
+ * In RGBIr Dual mode, the controls provided part of the capture request
+ * apply the same to each context (RGB and Ir).
+ *
  * The AGC algorithm should run after the AWB and HDR algorithms
  * due to following dependencies:
  * - AGC is using the AWB gains to adapt the calculated luminance.
@@ -51,83 +64,29 @@ namespace ipa::nxpneo::algorithms {
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoAgc)
 
-/* Histogram configuration: This value is used to disable ROI0 */
-#define AGC_ROI_INVALID_IMAGE_GEOMETRY 65535
-
-/* Histogram assignment to RGGB channels */
-#define AGC_HIST_CFG_RED NEO_HIST0_ID
-#define AGC_HIST_CFG_GREEN NEO_HIST1_ID
-#define AGC_HIST_CFG_BLUE NEO_HIST2_ID
-#define AGC_HIST_MEM_RED NEO_HIST0_OFFSET
-#define AGC_HIST_MEM_GREEN NEO_HIST1_OFFSET
-#define AGC_HIST_MEM_BLUE NEO_HIST2_OFFSET
-
-/*
- * Scaling (gain) factor for the histogram bin determination.
- * The value specified is in u8.16 format.
- *
- * The default scaling value is calculated with a default 20bits range.
- * Indeed the expected bit range to reach at the HDR merge unit (prior
- * to the STAT unit) is 20bits range.
- *
- * defaultScaleValue = maxBins * 2^16 / 2^20
- *
- */
-#define AGC_HIST_SCALE_DEFAULT ((NEO_HIST_BIN_SIZE << 16) >> 20)
+const RGB<uint8_t> AgcStatsRgb::kHistIds{ { HistId0, HistId1, HistId2 } };
 
 Agc::Agc()
 {
+	supportsIr_ = true;
+	agcs_[IPAContextTypeRgb] = std::make_unique<AgcStatsRgb>();
+	agcs_[IPAContextTypeIr] = std::make_unique<AgcStatsIr>();
 }
 
 /**
- * \brief Initialise the AGC algorithm from tuning files
+ * \brief Initialise the AGC algorithm from tuning file
  * \param[in] context The shared IPA context
  * \param[in] tuningData The YamlObject containing Agc tuning data
- *
- * This function calls the base class' tuningData parsers to discover which
- * control values are supported.
  *
  * \return 0 on success or errors from the base class
  */
 int Agc::init(IPAContext &context, const YamlObject &tuningData)
 {
-	int ret;
-
-	ret = parseTuningData(tuningData);
-	if (ret)
-		return ret;
-
-	context.ctrlMap.merge(controls());
-
-	/*
-	 * Histogram scale parsing
-	 *
-	 * The scaling factor of the histogram is configured such that
-	 * the targetted value range of the image is covered among the 64 bins
-	 * of the linear histogram.
-	 * 4 histograms can be used from the STAT unit of the ISP.
-	 * The histScale_ list contains the histogram scaling factor to
-	 * program for each of the 4 histograms.
-	 */
-	const YamlObject &obj = tuningData["hist-scale"];
-	if (!obj.size()) {
-		LOG(NxpNeoAlgoAgc, Debug) << "Use default histogram scaling value: "
-					  << AGC_HIST_SCALE_DEFAULT;
-		for (unsigned int i = 0; i < kNumHist; ++i) {
-			histScale_.push_back(AGC_HIST_SCALE_DEFAULT);
-		}
-		return 0;
+	for (const auto &[id, agc] : agcs_) {
+		int ret = agc->init(context, tuningData);
+		if (ret)
+			return ret;
 	}
-
-	histScale_ = obj.getList<uint32_t>()
-			     .value_or(std::vector<uint32_t>{});
-	if (histScale_.size() != kNumHist) {
-		LOG(NxpNeoAlgoAgc, Error)
-			<< "histScale_ list size must be " << kNumHist;
-		return -EINVAL;
-	}
-
-	userConfig_ = true;
 
 	return 0;
 }
@@ -141,90 +100,75 @@ int Agc::init(IPAContext &context, const YamlObject &tuningData)
  */
 int Agc::configure(IPAContext &context, const IPACameraSensorInfo &configInfo)
 {
-	/* Configure the default exposure and gain. */
-	context.activeState.agc.automatic.gain = context.configuration.sensor.minAnalogueGain;
-	context.activeState.agc.automatic.exposure =
-		10ms / context.configuration.sensor.lineDuration;
-	context.activeState.agc.manual.gain = context.activeState.agc.automatic.gain;
-	context.activeState.agc.manual.exposure = context.activeState.agc.automatic.exposure;
-	context.activeState.agc.autoEnabled = true;
-
 	/* ROI set to full image size */
 	context.configuration.agc.roi.xpos = 0;
 	context.configuration.agc.roi.ypos = 0;
 	context.configuration.agc.roi.width = configInfo.outputSize.width;
 	context.configuration.agc.roi.height = configInfo.outputSize.height;
 
-	context.activeState.agc.constraintMode = constraintModes().begin()->first;
-	context.activeState.agc.exposureMode = exposureModeHelpers().begin()->first;
-
-	/* \todo Run this again when FrameDurationLimits is passed in */
-	setLimits(context.configuration.sensor.minExposureTime,
-		  context.configuration.sensor.maxExposureTime,
-		  context.configuration.sensor.minAnalogueGain,
-		  context.configuration.sensor.maxAnalogueGain);
-	resetFrameCount();
-
-	/*
-	 * In HDR mode, the histogram scaling factor is adapted considering
-	 * that it should be configured for the long capture and
-	 * that HDR merge is rescaling input captures as follow:
-	 * - short capture to 20-bits range
-	 * - long capture to the range of the short capture divided by the ratio
-	 *   between the long and the short captures
-	 * Note that AGC_HIST_SCALE_DEFAULT is configured for the default 20-bits
-	 * scaling format.
-	 */
-	IPAModeType &mode = context.configuration.pipelineMode;
-	if (!userConfig_ && mode == IPAModeTypeHdrMerge) {
-		uint16_t ratioL2S = context.configuration.hdr.ratioLong2Short;
-		uint32_t scaleHdr = AGC_HIST_SCALE_DEFAULT * ratioL2S;
-		histScale_ = { scaleHdr, scaleHdr, scaleHdr, scaleHdr };
-	}
+	for (const auto &[id, agc] : agcs_)
+		agc->configure(context);
 
 	return 0;
 }
 
 /**
- * \copydoc libcamera::ipa::Algorithm::queueRequest
+ * \brief Check and process any AGC controls coming from the user request
+ * \param[in] context The shared IPA context
+ * \param[in] frame The frame context sequence number
+ * \param[in] frameContext The current frame context
+ * \param[in] controls The controls provided part of the request
+ *
+ * In RGBIr Dual mode, the requested controls applies the same to each context
+ * (RGB and Ir).
  */
 void Agc::queueRequest(IPAContext &context,
 		       [[maybe_unused]] const uint32_t frame,
 		       IPAFrameContext &frameContext,
 		       const ControlList &controls)
 {
-	auto &agc = context.activeState.agc;
+	/*
+	 * Initialize autoEnabled with any context, it is the same
+	 * for both of them.
+	 */
+	bool autoEnabled = context.activeState.agc[IPAContextTypeRgb].autoEnabled;
 
 	const auto &agcEnable = controls.get(controls::AeEnable);
-	if (agcEnable && *agcEnable != agc.autoEnabled) {
-		agc.autoEnabled = *agcEnable;
-
+	if (agcEnable && *agcEnable != autoEnabled) {
+		autoEnabled = *agcEnable;
 		LOG(NxpNeoAlgoAgc, Debug)
-			<< (agc.autoEnabled ? "Enabling" : "Disabling")
+			<< (autoEnabled ? "Enabling" : "Disabling")
 			<< " AGC";
 	}
 
 	const auto &exposure = controls.get(controls::ExposureTime);
-	if (exposure && !agc.autoEnabled) {
-		agc.manual.exposure = *exposure * 1.0us
-				    / context.configuration.sensor.lineDuration;
-
-		LOG(NxpNeoAlgoAgc, Debug)
-			<< "Set exposure to " << agc.manual.exposure;
-	}
-
 	const auto &gain = controls.get(controls::AnalogueGain);
-	if (gain && !agc.autoEnabled) {
-		agc.manual.gain = *gain;
 
-		LOG(NxpNeoAlgoAgc, Debug) << "Set gain to " << agc.manual.gain;
-	}
+	const std::array<IPAContextType, 2> allContexts = { IPAContextTypeRgb, IPAContextTypeIr };
+	for (const auto &contextType : allContexts) {
+		auto &agc = context.activeState.agc[contextType];
+		agc.autoEnabled = autoEnabled;
+		if (exposure && !autoEnabled) {
+			agc.manual.exposure = *exposure * 1.0us
+				    / context.configuration.sensor.lineDuration;
+			LOG(NxpNeoAlgoAgc, Debug)
+				<< "Context" << contextType
+				<< " Set exposure to " << agc.manual.exposure;
+		}
+		if (gain && !autoEnabled) {
+			agc.manual.gain = *gain;
+			LOG(NxpNeoAlgoAgc, Debug)
+				<< "Context" << contextType
+				<< " Set gain to " << agc.manual.gain;
+		}
 
-	frameContext.agc.autoEnabled = agc.autoEnabled;
+		auto &agcFrameContext = frameContext.agc[contextType];
+		agcFrameContext.autoEnabled = agc.autoEnabled;
 
-	if (!frameContext.agc.autoEnabled) {
-		frameContext.agc.exposure = agc.manual.exposure;
-		frameContext.agc.gain = agc.manual.gain;
+		if (!agcFrameContext.autoEnabled) {
+			agcFrameContext.exposure = agc.manual.exposure;
+			agcFrameContext.gain = agc.manual.gain;
+		}
 	}
 }
 
@@ -234,60 +178,41 @@ void Agc::queueRequest(IPAContext &context,
 void Agc::prepare(IPAContext &context, const uint32_t frame,
 		  IPAFrameContext &frameContext, NxpNeoParams *params)
 {
-	if (frameContext.agc.autoEnabled) {
-		frameContext.agc.exposure = context.activeState.agc.automatic.exposure;
-		frameContext.agc.gain = context.activeState.agc.automatic.gain;
+	unsigned int contextId = frameContext.contextType;
+	auto agcActiveState = context.activeState.agc[contextId].automatic;
+	auto &agcFrameContext = frameContext.agc[contextId];
+
+	if (agcFrameContext.autoEnabled) {
+		agcFrameContext.exposure = agcActiveState.exposure;
+		agcFrameContext.gain = agcActiveState.gain;
 	}
 
-	if (frame > 0)
+	if (frame > 0 || frameContext.contextType == IPAContextTypeIr)
 		return;
 
-	auto config = params->block<BlockParamsType::Stat>();
-	config.setUpdate(true);
-
-	/* Configure histograms */
-	/* Foreground ROI disabled (> Image geometry means invalid ROI) */
-	config->roi0.xpos = AGC_ROI_INVALID_IMAGE_GEOMETRY;
-	config->roi0.ypos = AGC_ROI_INVALID_IMAGE_GEOMETRY;
-	config->roi0.width = AGC_ROI_INVALID_IMAGE_GEOMETRY;
-	config->roi0.height = AGC_ROI_INVALID_IMAGE_GEOMETRY;
-	/* Background ROI: set to full image */
-	config->roi1 = context.configuration.agc.roi;
-
-	/* Histogram control */
-	/* HIST for Red */
-	neoisp_stat_hist_cfg_s *hist_red = &config->hists[AGC_HIST_CFG_RED];
-	hist_red->hist_ctrl_offset = 0;
-	hist_red->hist_ctrl_channel = NEO_HIST_CHANNEL_R;
-	hist_red->hist_ctrl_pattern = 0;
-	hist_red->hist_ctrl_dir_input1_dif = 0;
-	hist_red->hist_ctrl_lin_input1_log = 0;
-	hist_red->hist_scale_scale = histScale_[AGC_HIST_CFG_RED];
-	/* HIST for Gr+Gb */
-	neoisp_stat_hist_cfg_s *hist_green = &config->hists[AGC_HIST_CFG_GREEN];
-	hist_green->hist_ctrl_offset = 0;
-	hist_green->hist_ctrl_channel = NEO_HIST_CHANNEL_GR | NEO_HIST_CHANNEL_GB;
-	hist_green->hist_ctrl_pattern = 0;
-	hist_green->hist_ctrl_dir_input1_dif = 0;
-	hist_green->hist_ctrl_lin_input1_log = 0;
-	hist_green->hist_scale_scale = histScale_[AGC_HIST_CFG_GREEN];
-	/* HIST for Blue */
-	neoisp_stat_hist_cfg_s *hist_blue = &config->hists[AGC_HIST_CFG_BLUE];
-	hist_blue->hist_ctrl_offset = 0;
-	hist_blue->hist_ctrl_channel = NEO_HIST_CHANNEL_B;
-	hist_blue->hist_ctrl_pattern = 0;
-	hist_blue->hist_ctrl_dir_input1_dif = 0;
-	hist_blue->hist_ctrl_lin_input1_log = 0;
-	hist_blue->hist_scale_scale = histScale_[AGC_HIST_CFG_BLUE];
-
+	/*
+	 * The IR histograms used by AGC are provided by the RGBIR ISP block
+	 * whose usage is shared with the RGBIR algorithm.
+	 * Thus, configure the IR histograms at the same time as RGBIR
+	 * algorithm configures the other parts of the RGBIR ISP block
+	 * so that they can be merged at driver level.
+	 * That is the frame 0, on the default context (RGB).
+	 */
+	for (const auto &[id, agc] : agcs_)
+		agc->setupHistograms(context, params);
 }
 
 void Agc::fillMetadata(IPAContext &context, IPAFrameContext &frameContext,
-		       ControlList &metadata)
+		       ControlList &metadata) const
 {
+	/* Metadata are only filled in RGB context. */
+	if (frameContext.contextType == IPAContextTypeIr)
+		return;
+
+	auto agcSensor = frameContext.sensor.agc[frameContext.contextType];
 	utils::Duration exposureTime = context.configuration.sensor.lineDuration *
-				       frameContext.sensor.exposure;
-	metadata.set(controls::AnalogueGain, frameContext.sensor.gain);
+				       agcSensor.exposure;
+	metadata.set(controls::AnalogueGain, agcSensor.gain);
 	metadata.set(controls::ExposureTime, exposureTime.get<std::micro>());
 
 	/* \todo Use VBlank value calculated from each frame exposure. */
@@ -296,6 +221,287 @@ void Agc::fillMetadata(IPAContext &context, IPAFrameContext &frameContext,
 	utils::Duration frameDuration = context.configuration.sensor.lineDuration *
 					vTotal;
 	metadata.set(controls::FrameDuration, frameDuration.get<std::micro>());
+}
+
+/**
+ * \brief Process NxpNeo statistics, and run AGC operations
+ * \param[in] context The shared IPA context
+ * \param[in] frame The frame context sequence number
+ * \param[in] frameContext The current frame context
+ * \param[in] stats The NEO statistics and ISP results
+ * \param[out] metadata Metadata for the frame, to be filled by the algorithm
+ *
+ * Identify the current image brightness, and use that to estimate the optimal
+ * new exposure and gain for the scene.
+ */
+void Agc::process(IPAContext &context, [[maybe_unused]] const uint32_t frame,
+		  IPAFrameContext &frameContext, const NxpNeoStats *stats,
+		  ControlList &metadata)
+{
+	unsigned int contextId = frameContext.contextType;
+
+	if (!stats) {
+		fillMetadata(context, frameContext, metadata);
+		return;
+	}
+
+	agcs_[contextId]->parseStatistics(stats);
+	agcs_[contextId]->setAwbGains(context, frameContext);
+
+	/*
+	 * The Agc algorithm needs to know the effective exposure value that was
+	 * applied to the sensor when the statistics were collected.
+	 */
+	auto agcSensor = frameContext.sensor.agc[contextId];
+	utils::Duration exposureTime = context.configuration.sensor.lineDuration *
+				       agcSensor.exposure;
+	double analogueGain = agcSensor.gain;
+	utils::Duration effectiveExposureValue = exposureTime * analogueGain;
+	utils::Duration newExposureTime;
+	double aGain, qGain, dGain;
+	auto &agcActiveState = context.activeState.agc[contextId];
+
+	std::tie(newExposureTime, aGain, qGain, dGain) =
+		agcs_[contextId]->AgcMeanLuminance::calculateNewEv(
+			agcActiveState.constraintMode,
+			agcActiveState.exposureMode,
+			agcs_[contextId]->histogram(),
+			effectiveExposureValue);
+
+	/* Update the estimated exposure and gain. */
+	agcActiveState.automatic.exposure = newExposureTime /
+					    context.configuration.sensor.lineDuration;
+	agcActiveState.automatic.gain = aGain;
+
+	/*
+	 * Update the frame context of current frame only for frame 0
+	 * to make sure that the frame context has relevant configuration
+	 * whilst processing frame 0.
+	 * Indeed the frame context for each frame is updated whilst
+	 * preparing the next frame.
+	 */
+	auto &agcFrameContext = frameContext.agc[contextId];
+	if (!frame && agcFrameContext.autoEnabled) {
+		agcFrameContext.exposure = agcActiveState.automatic.exposure;
+		agcFrameContext.gain = agcActiveState.automatic.gain;
+	}
+
+	fillMetadata(context, frameContext, metadata);
+}
+
+void AgcStats::configure(IPAContext &context)
+{
+	auto &agcActiveState = context.activeState.agc[contextType_];
+
+	/* Configure the default exposure and gain. */
+	agcActiveState.automatic.gain = context.configuration.sensor.minAnalogueGain;
+	agcActiveState.automatic.exposure =
+		10ms / context.configuration.sensor.lineDuration;
+	agcActiveState.manual.gain = agcActiveState.automatic.gain;
+	agcActiveState.manual.exposure = agcActiveState.automatic.exposure;
+	agcActiveState.autoEnabled = true;
+	agcActiveState.constraintMode = constraintModes().begin()->first;
+	agcActiveState.exposureMode = exposureModeHelpers().begin()->first;
+
+	/* \todo Run this again when FrameDurationLimits is passed in */
+	setLimits(context.configuration.sensor.minExposureTime,
+		  context.configuration.sensor.maxExposureTime,
+		  context.configuration.sensor.minAnalogueGain,
+		  context.configuration.sensor.maxAnalogueGain,
+		  {});
+	resetFrameCount();
+}
+
+/**
+ * \brief Initialise the AGC RGB instance from tuning file
+ * \param[in] context The shared IPA context
+ * \param[in] tuningData The YamlObject containing Agc tuning data
+ *
+ * This function calls the base class' tuningData parsers to discover which
+ * control values are supported.
+ *
+ * \return 0 on success or errors from the base class
+ */
+int AgcStatsRgb::init(IPAContext &context, const YamlObject &tuningData)
+{
+	int ret = parseTuningData(tuningData);
+	if (ret)
+		return ret;
+
+	context.ctrlMap.merge(controls());
+
+	return parseTuningDataRgb(tuningData);
+}
+
+/**
+ * \brief Parse the tuning data required for the RGB context
+ * \param[in] tuningData The YamlObject representing the tuning data
+ *
+ * \return 0 on success or a negative error code
+ */
+int AgcStatsRgb::parseTuningDataRgb(const YamlObject &tuningData)
+{
+	/*
+	 * Histogram scale parsing
+	 *
+	 * The scaling factor of the histogram is configured such that
+	 * the targetted value range of the image is covered among the 64 bins
+	 * of the linear histogram.
+	 * 4 histograms can be used from the STAT unit of the ISP.
+	 * The histScale_ list contains the histogram scaling factor to
+	 * program for each of the 4 histograms.
+	 */
+	const YamlObject &obj = tuningData["hist-scale"];
+	if (!obj.size()) {
+		LOG(NxpNeoAlgoAgc, Debug) << "Use default histogram scaling value: "
+					  << HIST_SCALE_DEFAULT;
+		for (unsigned int i = 0; i < NEO_STAT_HIST_CNT; ++i) {
+			histScale_.push_back(HIST_SCALE_DEFAULT);
+		}
+		return 0;
+	}
+
+	histScale_ = obj.getList<uint32_t>().value_or(std::vector<uint32_t>{});
+	if (histScale_.size() != NEO_STAT_HIST_CNT) {
+		LOG(NxpNeoAlgoAgc, Error)
+			<< "histScale_ list size must be " << NEO_STAT_HIST_CNT;
+		return -EINVAL;
+	}
+
+	userConfig_ = true;
+
+	return 0;
+}
+
+void AgcStatsRgb::configure(IPAContext &context)
+{
+	AgcStats::configure(context);
+
+	configureHistScale(context);
+}
+
+/**
+ * \brief Update histogram scaling factor according to the pipeline mode
+ * \param[in] context The shared IPA context
+ */
+void AgcStatsRgb::configureHistScale(IPAContext &context)
+{
+	/*
+	 * In HDR mode, the histogram scaling factor is adapted considering
+	 * that it should be configured for the long capture and
+	 * that HDR merge is rescaling input captures as follow:
+	 * - short capture to 20-bits range
+	 * - long capture to the range of the short capture divided by the ratio
+	 *   between the long and the short captures
+	 * Note that HIST_SCALE_DEFAULT is configured for the default 20-bits
+	 * scaling format.
+	 */
+	IPAModeType &mode = context.configuration.pipelineMode;
+	if (!userConfig_ && mode == IPAModeTypeHdrMerge) {
+		uint16_t ratioL2S = context.configuration.hdr.ratioLong2Short;
+		uint32_t scaleHdr = HIST_SCALE_DEFAULT * ratioL2S;
+		histScale_ = { scaleHdr, scaleHdr, scaleHdr, scaleHdr };
+	}
+}
+
+/**
+ * \brief Setup the STAT block of the ISP needed for the RGB histograms
+ * \param[in] context The shared IPA context
+ * \param[out] params Params of the ISP to update
+ */
+void AgcStatsRgb::setupHistograms(IPAContext &context, NxpNeoParams *params) const
+{
+	/* STAT Histogram configuration for RGB channels */
+	auto statConfig = params->block<BlockParamsType::Stat>();
+	statConfig.setUpdate(true);
+
+	/* Foreground ROI disabled (> Image geometry means invalid ROI) */
+	statConfig->roi0.xpos = HIST_ROI_INVALID_IMAGE_GEOMETRY;
+	statConfig->roi0.ypos = HIST_ROI_INVALID_IMAGE_GEOMETRY;
+	statConfig->roi0.width = HIST_ROI_INVALID_IMAGE_GEOMETRY;
+	statConfig->roi0.height = HIST_ROI_INVALID_IMAGE_GEOMETRY;
+	/* Background ROI: set to full image */
+	statConfig->roi1 = context.configuration.agc.roi;
+
+	/* STAT Histogram configuration */
+	/* HIST for Red */
+	neoisp_stat_hist_cfg_s *histRed = &statConfig->hists[kHistIds.r()];
+	histRed->hist_ctrl_offset = 0;
+	histRed->hist_ctrl_channel = NEO_HIST_CHANNEL_R;
+	histRed->hist_ctrl_pattern = 0;
+	histRed->hist_ctrl_dir_input1_dif = 0;
+	histRed->hist_ctrl_lin_input1_log = 0;
+	histRed->hist_scale_scale = histScale_[kHistIds.r()];
+	/* HIST for Gr+Gb */
+	neoisp_stat_hist_cfg_s *histGreen = &statConfig->hists[kHistIds.g()];
+	histGreen->hist_ctrl_offset = 0;
+	histGreen->hist_ctrl_channel = NEO_HIST_CHANNEL_GR | NEO_HIST_CHANNEL_GB;
+	histGreen->hist_ctrl_pattern = 0;
+	histGreen->hist_ctrl_dir_input1_dif = 0;
+	histGreen->hist_ctrl_lin_input1_log = 0;
+	histGreen->hist_scale_scale = histScale_[kHistIds.g()];
+	/* HIST for Blue */
+	neoisp_stat_hist_cfg_s *histBlue = &statConfig->hists[kHistIds.b()];
+	histBlue->hist_ctrl_offset = 0;
+	histBlue->hist_ctrl_channel = NEO_HIST_CHANNEL_B;
+	histBlue->hist_ctrl_pattern = 0;
+	histBlue->hist_ctrl_dir_input1_dif = 0;
+	histBlue->hist_ctrl_lin_input1_log = 0;
+	histBlue->hist_scale_scale = histScale_[kHistIds.b()];
+}
+
+/**
+ * \brief Store AWB gains needed to adjust the luminance estimation of
+ *        the RGB channels
+ * \param[in] context The shared IPA context
+ * \param[out] params Params of the ISP to update
+ *
+ * The AWB gains computed for the frame context are stored to be used
+ * by the luminance estimation of the RGB channels.
+ */
+void AgcStatsRgb::setAwbGains(IPAContext &context, IPAFrameContext &frameContext)
+{
+	auto &awb = context.activeState.awb;
+	std::array<bool, 3> &awbEnabled = frameContext.awb.colorGainsSet;
+
+	/* If the AWB algorithm is disabled, use 1.0 for the gains. */
+	if (std::find(awbEnabled.begin(), awbEnabled.end(), true) != awbEnabled.end())
+		awbGains_ = (awb.autoEnabled ? awb.gains.automatic : awb.gains.manual);
+	else
+		awbGains_ = (RGB<double>{ 1.0 });
+}
+
+/**
+ * \brief Parse histogram statistics from STAT block of the ISP
+ * \param[in] stats Histogram statistics from ISP
+ *
+ * Store bin values of each channel for further processing from
+ * estimateLuminance.
+ * This function also updates the histogram provided to libipa for
+ * brightness estimation.
+ */
+void AgcStatsRgb::parseStatistics(const NxpNeoStats *stats)
+{
+	auto histMemStats = stats->block<BlockStatsType::MHist>();
+
+	const uint32_t *binRed = &(histMemStats->hist_stat[GET_HIST_MEM_OFFSET(
+							kHistIds.r(), RoiId1)]);
+	const uint32_t *binGreen = &(histMemStats->hist_stat[GET_HIST_MEM_OFFSET(
+							kHistIds.g(), RoiId1)]);
+	const uint32_t *binBlue = &(histMemStats->hist_stat[GET_HIST_MEM_OFFSET(
+							kHistIds.b(), RoiId1)]);
+	histogram_ = Histogram(Span<const uint32_t>(binGreen, NEO_HIST_BIN_SIZE));
+
+	rgbTriples_.clear();
+
+	/* rgbTriples contains the bin value for each channel */
+	for (unsigned int i = 0; i < NEO_HIST_BIN_SIZE; i++) {
+		rgbTriples_.push_back({
+			binRed[i],
+			binGreen[i],
+			binBlue[i],
+		});
+	}
 }
 
 /**
@@ -321,7 +527,7 @@ void Agc::fillMetadata(IPAContext &context, IPAFrameContext &frameContext,
  *
  * \return The relative luminance
  */
-double Agc::estimateLuminance(double gain) const
+double AgcStatsRgb::estimateLuminance(double gain) const
 {
 	RGB<double> sums{ 0.0 };
 	RGB<double> means{ 0.0 };
@@ -346,120 +552,95 @@ double Agc::estimateLuminance(double gain) const
 	 * Apply the AWB gains to approximate colours correctly, use the Rec.
 	 * 601 formula to calculate the relative luminance, and normalize it.
 	 */
-	double ySum = rec601LuminanceFromRGB(means * gains_);
+	double ySum = rec601LuminanceFromRGB(means * awbGains_);
 	return ySum / (NEO_HIST_BIN_SIZE - 1);
 }
 
 /**
- * \brief Parse histogram statistics from ISP
- * \param[in] stats Histogram statistics from ISP
+ * \brief Initialise the AGC IR instance from tuning file
+ * \param[in] context The shared IPA context
+ * \param[in] tuningData The YamlObject containing Agc tuning data
  *
- * Store bin values of each channel for further processing from estimateLuminance.
- * This function also provides pointer to histogram used for
- * brightness estimation.
+ * This function calls the base class' tuningData parsers.
+ * The controls discovered by the AgcMeanLuminance parsers are the same
+ * for each context (RGb and Ir) and are merged from the RGB context,
+ * see AgcStatsIr::init().
  *
- * \return Histogram used for brightness estimation
+ * \return 0 on success or errors from the base class
  */
-Histogram Agc::parseStatistics(const NxpNeoStats *stats)
+int AgcStatsIr::init([[maybe_unused]] IPAContext &context,
+		     const YamlObject &tuningData)
 {
-	auto histMemStats = stats->block<BlockStatsType::MHist>();
-
-	const uint32_t *binRed = &(histMemStats->hist_stat[AGC_HIST_MEM_RED]);
-	const uint32_t *binGreen = &(histMemStats->hist_stat[AGC_HIST_MEM_GREEN]);
-	const uint32_t *binBlue = &(histMemStats->hist_stat[AGC_HIST_MEM_BLUE]);
-	Histogram histGreen{ Span<const uint32_t>(binGreen, NEO_HIST_BIN_SIZE) };
-
-	rgbTriples_.clear();
-
-	/* rgbTriples contains the bin value for each channel */
-	for (unsigned int i = 0; i < NEO_HIST_BIN_SIZE; i++) {
-		rgbTriples_.push_back({
-			binRed[i],
-			binGreen[i],
-			binBlue[i],
-		});
-	}
-
-	/* return the green histogram for brightness estimation */
-	return histGreen;
+	return parseTuningData(tuningData);
 }
 
 
 /**
- * \brief Process NxpNeo statistics, and run AGC operations
+ * \brief Setup the RGBIR block of the ISP needed for the Ir channel histogram
  * \param[in] context The shared IPA context
- * \param[in] frame The frame context sequence number
- * \param[in] frameContext The current frame context
- * \param[in] stats The NEO statistics and ISP results
- * \param[out] metadata Metadata for the frame, to be filled by the algorithm
- *
- * Identify the current image brightness, and use that to estimate the optimal
- * new exposure and gain for the scene.
+ * \param[out] params Params of the ISP to update
  */
-void Agc::process(IPAContext &context, [[maybe_unused]] const uint32_t frame,
-		  IPAFrameContext &frameContext, const NxpNeoStats *stats,
-		  ControlList &metadata)
+void AgcStatsIr::setupHistograms(IPAContext &context, NxpNeoParams *params) const
 {
-	if (!stats) {
-		fillMetadata(context, frameContext, metadata);
-		return;
-	}
+	/* RGBIR Histogram configuration for the Ir channel*/
+	auto rgbirConfig = params->block<BlockParamsType::RgbIr>();
+	rgbirConfig.setUpdate(true);
 
-	Histogram hist = parseStatistics(stats);
-	auto &awb = context.activeState.awb;
-	std::array<bool, 3> &awbEnabled = frameContext.awb.colorGainsSet;
+	rgbirConfig->roi[0].xpos = HIST_ROI_INVALID_IMAGE_GEOMETRY;
+	rgbirConfig->roi[0].ypos = HIST_ROI_INVALID_IMAGE_GEOMETRY;
+	rgbirConfig->roi[0].width = HIST_ROI_INVALID_IMAGE_GEOMETRY;
+	rgbirConfig->roi[0].height = HIST_ROI_INVALID_IMAGE_GEOMETRY;
+	/* Background ROI: set to full image */
+	rgbirConfig->roi[1] = context.configuration.agc.roi;
 
-	/* If the AWB algorithm is disabled, use 1.0 for the gains. */
-	if (std::find(awbEnabled.begin(), awbEnabled.end(), true) != awbEnabled.end())
-		gains_ = awb.autoEnabled ? awb.gains.automatic : awb.gains.manual;
-	else
-		gains_ = RGB<double>{ 1.0 };
+	neoisp_stat_hist_cfg_s *histIr = &rgbirConfig->hists[kHistId];
+	histIr->hist_ctrl_offset = 0;
+	histIr->hist_ctrl_channel = kHistChannelIr;
+	histIr->hist_ctrl_pattern = 0;
+	histIr->hist_ctrl_dir_input1_dif = 0;
+	histIr->hist_ctrl_lin_input1_log = 0;
+	histIr->hist_scale_scale = HIST_SCALE_DEFAULT;
+}
 
-	/*
-	 * The Agc algorithm needs to know the effective exposure value that was
-	 * applied to the sensor when the statistics were collected.
-	 */
-	utils::Duration exposureTime = context.configuration.sensor.lineDuration *
-				       frameContext.sensor.exposure;
-	double analogueGain = frameContext.sensor.gain;
-	utils::Duration effectiveExposureValue = exposureTime * analogueGain;
-	LOG(NxpNeoAlgoAgc, Debug)
-		<< "Sensor[Exposure, Gain]= "
-		<< exposureTime << ", " << analogueGain << " - frame=" << frame;
+/**
+ * \brief Parse histogram statistics from RGBIR block of the ISP
+ * \param[in] stats Histogram statistics from ISP
+ *
+ * Store bin values of the Ir channel for further processing from
+ * estimateLuminance.
+ * This function also updates the histogram provided to libipa for
+ * brightness estimation.
+ */
+void AgcStatsIr::parseStatistics(const NxpNeoStats *stats)
+{
+	auto rgbIrMemStats = stats->block<BlockStatsType::MRgbIr>();
+	const uint32_t *binChIr = &(rgbIrMemStats->rgbir_hist[GET_HIST_MEM_OFFSET(
+							kHistId, RoiId1)]);
+	histogram_ = Histogram(Span<const uint32_t>(binChIr, NEO_HIST_BIN_SIZE));
+}
 
-	utils::Duration newExposureTime;
-	double aGain, dGain;
-	std::tie(newExposureTime, aGain, dGain) =
-		calculateNewEv(context.activeState.agc.constraintMode,
-			       context.activeState.agc.exposureMode, hist,
-			       effectiveExposureValue);
-
-	LOG(NxpNeoAlgoAgc, Debug)
-		<< "Divided up exposure time, analogue gain and digital gain are "
-		<< newExposureTime << ", " << aGain << " and " << dGain;
-
-	IPAActiveState &activeState = context.activeState;
-	/* Update the estimated exposure and gain. */
-	activeState.agc.automatic.exposure = newExposureTime / context.configuration.sensor.lineDuration;
-	activeState.agc.automatic.gain = aGain;
-
-	/*
-	 * Update the frame context of current frame only for frame 0
-	 * to make sure that the frame context has relevant configuration
-	 * whilst processing frame 0.
-	 * Indeed the frame context for each frame is updated whilst
-	 * preparing the next frame.
-	 */
-	if (!frame && frameContext.agc.autoEnabled) {
-		frameContext.agc.exposure = activeState.agc.automatic.exposure;
-		frameContext.agc.gain = activeState.agc.automatic.gain;
-	}
-
-	fillMetadata(context, frameContext, metadata);
+/**
+ * \brief Estimate the relative luminance of the frame with a given gain
+ * \param[in] gain The gain to apply in estimating luminance
+ *
+ * This function estimates the average relative luminance of the frame that
+ * would be output by the sensor if an additional \a gain was applied.
+ *
+ * The estimation is based on the RGBIR statistics for the current frame.
+ * The average of the Ir channel histogram is multiplied by the gain and
+ * normalized to the [0.0, 1.0] range, where 1.0 corresponds to a
+ * theoretical perfect reflector of 100% reference white.
+ *
+ * \return The relative luminance
+ */
+double AgcStatsIr::estimateLuminance(double gain) const
+{
+	double yLevel = std::min(histogram_.interQuantileMean(0, 1) * gain,
+				 histogram_.bins() * 1.0);
+	return yLevel / histogram_.bins();
 }
 
 REGISTER_IPA_ALGORITHM(Agc, "Agc")
-
 } /* namespace ipa::nxpneo::algorithms */
 
 } /* namespace libcamera */

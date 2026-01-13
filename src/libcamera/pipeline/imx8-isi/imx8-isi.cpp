@@ -73,8 +73,6 @@ public:
 	std::vector<Stream *> enabledStreams_;
 
 	unsigned int xbarSourceOffset_ = 0;
-
-	const std::string &cameraName() const { return sensor_->entity()->name(); }
 };
 
 class ISICameraConfiguration : public CameraConfiguration
@@ -122,7 +120,6 @@ protected:
 	int queueRequestDevice(Camera *camera, Request *request) override;
 
 	bool acquireDevice(Camera *camera) override;
-	void releaseDevice(Camera *camera) override;
 
 private:
 	static constexpr Size kPreviewSize = { 1920, 1080 };
@@ -148,12 +145,10 @@ private:
 
 	std::vector<MediaEntity *> locateSensors(MediaDevice *media);
 
-	MediaDevice *isiDev_;
+	std::shared_ptr<MediaDevice> isiDev_;
 
 	std::unique_ptr<V4L2Subdevice> crossbar_;
 	std::vector<Pipe> pipes_;
-
-	unsigned int acquireCount_ = 0;
 
 	V4L2Subdevice::Routing routing_ = {};
 };
@@ -598,17 +593,17 @@ CameraConfiguration::Status ISICameraConfiguration::validate()
 	}
 
 	/*
-	 * When ISP is used, previous test may not return any valid size.
-	 * Indeed, in such case ISP is considered as the sensor element in
-	 * the pipeline. Moreover, size taken in consideration is the largest
-	 * size reported by the driver (max value is considered even if min/max
-	 * range is shared). Then ISP (sensor) size becomes much bigger than
-	 * requested size.
-	 *
-	 * In such case, we can use value reported by resolution() callback,
-	 * which is the size corresponding to the attached sensor, actually
-	 * smaller than ISP size.
-	 */
+	* When ISP is used, previous test may not return any valid size.
+	* Indeed, in such case ISP is considered as the sensor element in
+	* the pipeline. Moreover, size taken in consideration is the largest
+	* size reported by the driver (max value is considered even if min/max
+	* range is shared). Then ISP (sensor) size becomes much bigger than
+	* requested size.
+	*
+	* In such case, we can use value reported by resolution() callback,
+	* which is the size corresponding to the attached sensor, actually
+	* smaller than ISP size.
+	*/
 	if (bestSize.isNull()) {
 		Size s = sensor->resolution();
 
@@ -993,34 +988,17 @@ int PipelineHandlerISI::queueRequestDevice(Camera *camera, Request *request)
 	return 0;
 }
 
-bool PipelineHandlerISI::acquireDevice(Camera *camera)
+bool PipelineHandlerISI::acquireDevice([[maybe_unused]] Camera *camera)
 {
-	ISICameraData *data = cameraData(camera);
-	int ret;
-
-	acquireCount_++;
-	LOG(ISI, Debug) << "acquireDevice " << data->cameraName()
-			<< " count " << acquireCount_;
-
-	if (acquireCount_ > 1)
+	if (useCount() > 0)
 		return true;
 
 	/* Enable routing for all available sensors once */
-	ret = crossbar_->setRouting(&routing_, V4L2Subdevice::ActiveFormat);
+	int ret = crossbar_->setRouting(&routing_, V4L2Subdevice::ActiveFormat);
 	if (ret)
-		return ret;
+		return false;
 
 	return true;
-}
-
-void PipelineHandlerISI::releaseDevice(Camera *camera)
-{
-	ISICameraData *data = cameraData(camera);
-
-	ASSERT(acquireCount_);
-	acquireCount_--;
-	LOG(ISI, Debug) << "releaseDevice " << data->cameraName()
-			<< " count " << acquireCount_;
 }
 
 bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
@@ -1035,8 +1013,8 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 		return false;
 
 	/* Count the number of sensors, to create one camera per sensor. */
-	std::vector<MediaEntity *> sensorEntities = locateSensors(isiDev_);
-	unsigned cameraCount = sensorEntities.size();
+	std::vector<MediaEntity *> sensorEntities = locateSensors(isiDev_.get());
+	unsigned int cameraCount = sensorEntities.size();
 
 	if (!cameraCount) {
 		LOG(ISI, Error) << "No camera sensor found";
@@ -1047,7 +1025,7 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 	 * Acquire the subdevs and video nodes for the crossbar switch and the
 	 * processing pipelines.
 	 */
-	crossbar_ = V4L2Subdevice::fromEntityName(isiDev_, "crossbar");
+	crossbar_ = V4L2Subdevice::fromEntityName(isiDev_.get(), "crossbar");
 	if (!crossbar_)
 		return false;
 
@@ -1058,7 +1036,7 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 	for (unsigned int i = 0; ; ++i) {
 		std::string entityName = "mxc_isi." + std::to_string(i);
 		std::unique_ptr<V4L2Subdevice> isi =
-			V4L2Subdevice::fromEntityName(isiDev_, entityName);
+			V4L2Subdevice::fromEntityName(isiDev_.get(), entityName);
 		if (!isi)
 			break;
 
@@ -1068,7 +1046,7 @@ bool PipelineHandlerISI::match(DeviceEnumerator *enumerator)
 
 		entityName += ".capture";
 		std::unique_ptr<V4L2VideoDevice> capture =
-			V4L2VideoDevice::fromEntityName(isiDev_, entityName);
+			V4L2VideoDevice::fromEntityName(isiDev_.get(), entityName);
 		if (!capture)
 			return false;
 

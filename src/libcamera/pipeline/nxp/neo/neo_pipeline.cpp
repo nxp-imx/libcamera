@@ -225,8 +225,6 @@ public:
 	std::pair<Info *, ContextType> find(FrameBuffer *buffer) const;
 	Info *find(Request *request) const;
 
-	Signal<> bufferAvailable_;
-
 private:
 	FrameBuffer *allocBuffer(BufferType bufferType);
 	Info *createRaw(Request *request);
@@ -253,7 +251,7 @@ public:
 	int start(const ControlList *controls);
 	void stopDevice();
 
-	void queuePendingRequests();
+	int queueRequestDevice(Request *request);
 
 	int init(DeviceEnumerator *enumerator);
 	PipelineHandlerNxpNeo *pipe();
@@ -285,11 +283,6 @@ public:
 	Stream streamIr_;
 	Stream streamRaw_;
 
-	/* Requests for which no buffer has been queued to the frontend  device yet */
-	std::queue<Request *> pendingRequests_;
-	/* Requests in-flight not yet completed */
-	std::queue<Request *> processingRequests_;
-
 private:
 	friend NxpNeoFrames;
 
@@ -313,7 +306,6 @@ private:
 	int enumerateFormatsRaw();
 	int enumerateFormatsYuv();
 
-	void clearRequest(NxpNeoFrames::Info *info);
 	void cancelCompleteRequest(NxpNeoFrames::Info *info);
 	void tryCompleteRequest(NxpNeoFrames::Info *info);
 
@@ -321,7 +313,7 @@ private:
 	void isiImage0BufferReady(FrameBuffer *buffer);
 	void isiImage1BufferReady(FrameBuffer *buffer);
 	void isiEmbeddedDataBufferReady(FrameBuffer *buffer);
-	void applySensorControls(NxpNeoFrames::Info *info, ContextType context);
+	void applySensorControls(NxpNeoFrames::Info *info);
 
 	void neoInput0BufferReady(FrameBuffer *buffer);
 	void neoInput1BufferReady(FrameBuffer *buffer);
@@ -333,12 +325,14 @@ private:
 			       unsigned int bytesused);
 	void ipaMetadataReady(unsigned int id, ipa::nxpneo::IPAContextType context,
 			      const ControlList &metadata);
-	void ipaSetSensorControls(unsigned int id, ipa::nxpneo::IPAContextType context,
+	void ipaSetSensorControls(unsigned int id,
 				  const ControlList &sensorControls);
+	void ipaSetLensControls(const ControlList &lensControls);
 	unsigned int contextCount() { return mode_ == ModeTypeRgbIrDual ? 2 : 1; }
 
 	std::unique_ptr<CameraSensor> sensor_;
 	std::unique_ptr<NeoDevice> neo_;
+	std::shared_ptr<MediaDevice> neoMedia_;
 	const CameraInfo *cameraInfo_;
 	std::optional<Orientation> defaultOrientation_;
 	std::map<Size, std::vector<unsigned int>> formatsSizeToCodes_;
@@ -354,7 +348,7 @@ private:
 	std::unique_ptr<ipa::nxpneo::IPAProxyNxpNeo> ipa_;
 	ControlInfoMap ipaControls_;
 	std::vector<IPABuffer> ipaBuffers_;
-	std::map<ContextType, std::unique_ptr<DelayedControls>> delayedCtrls_;
+	std::unique_ptr<DelayedControls> delayedCtrls_;
 
 	unsigned int sequence_ = 0;
 	bool sensorIsRgbIr_ = false;
@@ -367,7 +361,7 @@ private:
 	std::vector<std::unique_ptr<FrameBuffer>> frameBuffersPool_;
 	std::vector<std::unique_ptr<FrameBuffer>> irBuffersPool_;
 
-	std::map<ContextType, std::unique_ptr<Timer>> controlsTimers_;
+	std::unique_ptr<Timer> controlsTimer_;
 };
 
 class NxpNeoCameraConfiguration : public CameraConfiguration
@@ -396,11 +390,27 @@ private:
 	Transform combinedTransform_;
 };
 
+namespace {
+
+/*
+ * Maximum number of requests that shall be queued into the pipeline to keep
+ * the regulation fast.
+ */
+static constexpr unsigned int kNeoIspMaxQueuedRequests = 4;
+
+/*
+ * This many internal buffers (or rather parameter and statistics buffer
+ * pairs) ensures that the pipeline runs smoothly, without frame drops.
+ */
+static constexpr unsigned int kNeoIspMinBufferCount = 4;
+
+} /* namespace */
+
 class PipelineHandlerNxpNeo : public PipelineHandler
 {
 public:
 	PipelineHandlerNxpNeo(CameraManager *manager)
-		: PipelineHandler(manager) {}
+		: PipelineHandler(manager, kNeoIspMaxQueuedRequests) {}
 
 	std::unique_ptr<CameraConfiguration> generateConfiguration(Camera *camera,
 								   Span<const StreamRole> roles) override;
@@ -418,7 +428,6 @@ public:
 	bool match(DeviceEnumerator *enumerator) override;
 
 	bool acquireDevice(Camera *camera) override;
-	void releaseDevice(Camera *camera) override;
 
 	ISIDevice *isiDevice() const { return isi_.get(); }
 	const PipelineConfig *pipelineConfig() { return &pipelineConfig_; }
@@ -450,8 +459,8 @@ private:
 
 	unsigned int numCamerasRaw_ = 0;
 	unsigned int numCamerasYuv_ = 0;
-	unsigned int acquireCount_ = 0;
 	std::shared_ptr<ISIDevice> isi_;
+	std::shared_ptr<MediaDevice> isiMedia_;
 };
 
 namespace {
@@ -551,8 +560,10 @@ NxpNeoFrames::NxpNeoFrames(NxpNeoCameraData *data)
 int NxpNeoFrames::destroy(unsigned int id)
 {
 	Info *info = find(id);
-	if (!info)
+	if (!info) {
+		LOG(NxpNeoPipe, Error) << "Info frame could not be destroyed";
 		return -ENOENT;
+	}
 
 	/* Return internal buffers for reuse. */
 	for (const auto &[context, infoContext] : info->contexts_) {
@@ -569,13 +580,14 @@ int NxpNeoFrames::destroy(unsigned int id)
 	/* Delete the extended frame information. */
 	frameInfo_.erase(info->id_);
 
-	bufferAvailable_.emit();
-
 	return 0;
 }
 
 void NxpNeoFrames::clear()
 {
+	for (const auto &[id, infoContext] : frameInfo_)
+		destroy(id);
+
 	frameInfo_.clear();
 }
 
@@ -1062,9 +1074,10 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validateRaw()
 			return Invalid;
 		}
 
-		const GlobalInfo &globalInfo =
-			data_->pipe()->pipelineConfig()->globalInfo();
-		cfg->bufferCount = globalInfo.bufferCount;
+		if (cfg->bufferCount < kNeoIspMinBufferCount) {
+			cfg->bufferCount = kNeoIspMinBufferCount;
+			status = Adjusted;
+		}
 
 		if (cfg->pixelFormat != originalCfg.pixelFormat ||
 		    cfg->size != originalCfg.size) {
@@ -1159,9 +1172,10 @@ CameraConfiguration::Status NxpNeoCameraConfiguration::validateYuv()
 	cfg.stride = devFormat.planes[0].bpl;
 	cfg.frameSize = devFormat.planes[0].size;
 
-	const GlobalInfo &globalInfo =
-		data_->pipe()->pipelineConfig()->globalInfo();
-	cfg.bufferCount = globalInfo.bufferCount;
+	if (cfg.bufferCount < kNeoIspMinBufferCount) {
+		cfg.bufferCount = kNeoIspMinBufferCount;
+		status = Adjusted;
+	}
 
 	if (cfg.pixelFormat != originalCfg.pixelFormat ||
 	    cfg.size != originalCfg.size) {
@@ -1215,11 +1229,7 @@ void PipelineHandlerNxpNeo::stopDevice(Camera *camera)
 int PipelineHandlerNxpNeo::queueRequestDevice(Camera *camera, Request *request)
 {
 	NxpNeoCameraData *data = cameraData(camera);
-
-	data->pendingRequests_.push(request);
-	data->queuePendingRequests();
-
-	return 0;
+	return data->queueRequestDevice(request);
 }
 
 bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
@@ -1235,12 +1245,12 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 	isi.add(ISIDevice::kSDevPipeEntityName(0));
 	isi.add(ISIDevice::kVDevPipeEntityName(0));
 
-	MediaDevice *isiMedia = acquireMediaDevice(enumerator, isi);
-	if (!isiMedia)
+	isiMedia_ = acquireMediaDevice(enumerator, isi);
+	if (!isiMedia_)
 		return false;
 
 	isi_ = std::make_shared<ISIDevice>();
-	ret = isi_->init(isiMedia);
+	ret = isi_->init(isiMedia_.get());
 	if (ret) {
 		LOG(NxpNeoPipe, Debug) << "ISI media device init failed";
 		return false;
@@ -1251,7 +1261,7 @@ bool PipelineHandlerNxpNeo::match(DeviceEnumerator *enumerator)
 		return false;
 
 	/* Discover camera entities from the frontend media controller device. */
-	std::vector<MediaEntity *> sensorsEntities = locateSensors(isiMedia);
+	std::vector<MediaEntity *> sensorsEntities = locateSensors(isiMedia_.get());
 	for (MediaEntity *entity : sensorsEntities) {
 		ret = createCamera(entity, enumerator);
 		if (ret)
@@ -1270,11 +1280,9 @@ bool PipelineHandlerNxpNeo::acquireDevice(Camera *camera)
 	NxpNeoCameraData *data = cameraData(camera);
 
 	LOG(NxpNeoPipe, Debug) << "acquireDevice " << data->cameraName()
-			       << " count " << acquireCount_;
-	if (acquireCount_ > 0) {
-		acquireCount_++;
+			       << " count " << useCount();
+	if (useCount() > 0)
 		return true;
-	}
 
 	/*
 	 * Frontend media controller device has been locked by the process.
@@ -1291,18 +1299,7 @@ bool PipelineHandlerNxpNeo::acquireDevice(Camera *camera)
 	if (ret)
 		return false;
 
-	acquireCount_++;
 	return true;
-}
-
-void PipelineHandlerNxpNeo::releaseDevice(Camera *camera)
-{
-	NxpNeoCameraData *data = cameraData(camera);
-
-	ASSERT(acquireCount_);
-	acquireCount_--;
-	LOG(NxpNeoPipe, Debug) << "releaseDevice " << data->cameraName()
-			       << " count " << acquireCount_;
 }
 
 /**
@@ -1736,7 +1733,6 @@ int NxpNeoCameraData::start([[maybe_unused]] const ControlList *controls)
 
 	LOG(NxpNeoPipe, Debug) << "Start " << cameraName();
 	sequence_ = 0;
-	const std::array<ContextType, 2> allContexts = { ContextTypeRgb, ContextTypeIr };
 
 	/* Allocate buffers for internal pipeline usage. */
 	ret = allocateBuffers();
@@ -1748,8 +1744,7 @@ int NxpNeoCameraData::start([[maybe_unused]] const ControlList *controls)
 		if (ret)
 			goto error;
 
-		for (const auto context : allContexts)
-			delayedCtrls_[context]->reset();
+		delayedCtrls_->reset();
 
 		ret = neo_->start();
 		if (ret)
@@ -1800,30 +1795,6 @@ void NxpNeoCameraData::stopDevice()
 
 	LOG(NxpNeoPipe, Debug) << "Stop device " << cameraName();
 
-	/*
-	 * Requests in the pending queue have not been pushed into the pipeline,
-	 * thus cancelled buffers and requests can be completed immediately.
-	 * Conversely, requests in the processing list are in flight in the
-	 * pipeline. Associated buffers are cancelled and completed along with
-	 * their requests. Bundled Frame::Info object is deleted so that those
-	 * will be ignored during pipeline termination.
-	 */
-	while (!pendingRequests_.empty()) {
-		Request *request = pendingRequests_.front();
-		pipe()->cancelRequest(request);
-		pendingRequests_.pop();
-	}
-
-	while (!processingRequests_.empty()) {
-		Request *request = processingRequests_.front();
-		NxpNeoFrames::Info *info = frameInfos_.find(request);
-		if (!info) {
-			LOG(NxpNeoPipe, Warning) << "Frame info for request not found";
-			break;
-		}
-		cancelCompleteRequest(info);
-	}
-
 	ret = pipes_[StreamTypeImage0]->stop();
 	for (auto [stream, pipe] : pipes_) {
 		if (stream == StreamTypeImage0)
@@ -1836,57 +1807,64 @@ void NxpNeoCameraData::stopDevice()
 		ret |= neo_->stop();
 	}
 
+	/*
+	 * Queued requests with buffers queued in V4L2 devices have been
+	 * synchronously cancelled by the stop() calls above. There may be some
+	 * requests left that are pending on a IPA operation completion event.
+	 * Cancel them now to clean up the pipeline state.
+	 */
+	std::list<Request *> requests(queuedRequests_);
+	for (Request *request : requests) {
+		if (request->status() == Request::RequestCancelled)
+			continue;
+		NxpNeoFrames::Info *frameInfo = frameInfos_.find(request);
+		ASSERT(frameInfo);
+		cancelCompleteRequest(frameInfo);
+	}
+
+	ASSERT(queuedRequests_.empty());
+	frameInfos_.clear();
+
 	freeBuffers();
 
-	for (auto const &[context, timer] : controlsTimers_) {
-		if (timer.get())
-			timer->stop();
-	}
+	if (controlsTimer_.get())
+		controlsTimer_->stop();
 
 	if (ret)
 		LOG(NxpNeoPipe, Warning) << "Failed to stop camera " << cameraName();
 }
 
-void NxpNeoCameraData::queuePendingRequests()
+int NxpNeoCameraData::queueRequestDevice(Request *request)
 {
 	NxpNeoFrames::Info *info;
 	int ret = 0;
 
-	while (!pendingRequests_.empty()) {
-		Request *request = pendingRequests_.front();
+	info = frameInfos_.create(request);
+	if (!info)
+		return -EAGAIN;
 
-		info = frameInfos_.create(request);
-		if (!info)
-			break;
-
-		for (const auto &[context, infoContext] : info->contexts_) {
-			for (auto [stream, pipe] : pipes_) {
-				V4L2VideoDevice *dev = pipe->output_.get();
-				BufferType bufferType = streamToBufferType.at(stream);
-				FrameBuffer *buffer = infoContext.buffer(bufferType);
-				if (!buffer)
-					continue;
-				ret |= dev->queueBuffer(buffer);
-			}
+	for (const auto &[context, infoContext] : info->contexts_) {
+		for (auto [stream, pipe] : pipes_) {
+			V4L2VideoDevice *dev = pipe->output_.get();
+			BufferType bufferType = streamToBufferType.at(stream);
+			FrameBuffer *buffer = infoContext.buffer(bufferType);
+			if (!buffer)
+				continue;
+			ret |= dev->queueBuffer(buffer);
 		}
-
-		if (ret) {
-			LOG(NxpNeoPipe, Error)
-				<< "Failed to queue buffers, unbalanced queues";
-			pipe()->cancelRequest(request);
-			frameInfos_.destroy(info->id_);
-			pendingRequests_.pop();
-			return;
-		}
-
-		if (isRawCamera())
-			ipa_->queueRequest(info->id_, request->controls());
-
-		pendingRequests_.pop();
-		processingRequests_.push(request);
 	}
 
-	return;
+	if (ret) {
+		LOG(NxpNeoPipe, Error)
+			<< "Failed to queue buffers, unbalanced queues";
+		cancelCompleteRequest(info);
+		return -EIO;
+	}
+
+	if (isRawCamera())
+		ipa_->queueRequest(info->id_, request->controls());
+
+	return 0;
 }
 
 /**
@@ -1920,9 +1898,8 @@ int NxpNeoCameraData::init(DeviceEnumerator *enumerator)
 		isp.add(NeoDevice::kVDevEntityIrName());
 		isp.add(NeoDevice::kVDevEntityStatsName());
 
-		MediaDevice *neoDevice =
-			pipe()->acquireMediaDevice(enumerator, isp);
-		if (!neoDevice)
+		neoMedia_ = pipe()->acquireMediaDevice(enumerator, isp);
+		if (!neoMedia_)
 			return -EINVAL;
 
 		/*
@@ -1930,7 +1907,7 @@ int NxpNeoCameraData::init(DeviceEnumerator *enumerator)
 		 * cameras already detected.
 		 */
 		neo_ = std::make_unique<NeoDevice>(pipe()->numCamerasRaw());
-		ret = neo_->init(neoDevice);
+		ret = neo_->init(neoMedia_.get());
 		if (ret)
 			return ret;
 
@@ -1945,11 +1922,7 @@ int NxpNeoCameraData::init(DeviceEnumerator *enumerator)
 		else
 			mode_ = sensorIsRgbIr() ? ModeTypeRgbIrDual : ModeTypeHdrMerge;
 
-		for (const auto context : { ContextTypeRgb, ContextTypeIr }) {
-			std::unique_ptr<Timer> timer =
-				controlsDelay().has_value() ? std::make_unique<Timer>() : nullptr;
-			controlsTimers_.insert({ context, std::move(timer) });
-		}
+		controlsTimer_ = controlsDelay().has_value() ? std::make_unique<Timer>() : nullptr;
 	}
 
 	/* Initialize the camera properties. */
@@ -1974,12 +1947,8 @@ int NxpNeoCameraData::init(DeviceEnumerator *enumerator)
 		}
 		defaultOrientation_ = tryOrientation;
 	}
-	if (multiCamera() && !defaultOrientation_.has_value()) {
-		const auto &rotation = properties_.get(properties::Rotation);
-		Orientation mountingOrientation =
-			orientationFromRotation(rotation.value_or(0));
-		defaultOrientation_ = mountingOrientation;
-	}
+	if (multiCamera() && !defaultOrientation_.has_value())
+		defaultOrientation_ = sensor_->mountingOrientation();
 
 	/*
 	 * Connect video devices' 'bufferReady' signals to their
@@ -2165,6 +2134,7 @@ int NxpNeoCameraData::loadIPA()
 		return -ENOENT;
 
 	ipa_->setSensorControls.connect(this, &NxpNeoCameraData::ipaSetSensorControls);
+	ipa_->setLensControls.connect(this, &NxpNeoCameraData::ipaSetLensControls);
 	ipa_->paramsComputed.connect(this, &NxpNeoCameraData::ipaParamsComputed);
 	ipa_->metadataReady.connect(this, &NxpNeoCameraData::ipaMetadataReady);
 
@@ -2190,7 +2160,8 @@ int NxpNeoCameraData::loadIPA()
 					       neo_->apiVersion(),
 					       entity->name(), sensorInfo,
 					       sensor->controls(),
-					       sensor_->getControls(ids) };
+					       sensor_->getControls(ids),
+					       !!sensor_->focusLens() };
 	ret = ipa_->init(IPASettings{ ipaTuningFile, sensor->model() },
 			 initParams, &ipaControls_, &sensorConfig);
 	if (ret) {
@@ -2207,26 +2178,26 @@ int NxpNeoCameraData::loadIPA()
 	 */
 	std::map<int32_t, ipa::nxpneo::DelayedControlsParams> &ipaDelayParams =
 		sensorConfig.delayedControlsParams;
-	std::unordered_map<uint32_t, DelayedControls::ControlParams> delayParams;
-	for (const auto &[k, v] : ipaDelayParams) {
-		DelayedControls::ControlParams controlParams = { v.delay, v.priorityWrite };
-		delayParams.emplace(k, controlParams);
+	std::unordered_map<uint32_t, DelayedControls::ControlParams>
+		delayedControlsParams;
+	for (const auto &kv : ipaDelayParams) {
+		auto k = kv.first;
+		auto v = kv.second;
+		DelayedControls::ControlParams params = { v.delay, v.priorityWrite };
+		delayedControlsParams.emplace(k, params);
 	}
-	if (!delayParams.size()) {
+	if (!delayedControlsParams.size()) {
 		const CameraSensorProperties::SensorDelays &delays =
 			sensor->sensorDelays();
-		delayParams = {
+		delayedControlsParams = {
 			{ V4L2_CID_ANALOGUE_GAIN, { delays.gainDelay, false } },
 			{ V4L2_CID_EXPOSURE, { delays.exposureDelay, false } },
 		};
 	}
 
-	V4L2Subdevice *device = sensor->device();
-	const std::array<ContextType, 2> allContexts = { ContextTypeRgb, ContextTypeIr };
-	for (const auto &context : allContexts) {
-		delayedCtrls_.emplace(
-			context, std::make_unique<DelayedControls>(device, delayParams));
-	}
+	delayedCtrls_ =
+		std::make_unique<DelayedControls>(sensor->device(),
+						  delayedControlsParams);
 
 	return 0;
 }
@@ -2244,35 +2215,25 @@ int NxpNeoCameraData::loadIPA()
  */
 int NxpNeoCameraData::allocateBuffers()
 {
-	int ret;
 	if (isRawCamera())
-		ret = allocateBuffersRaw();
+		return allocateBuffersRaw();
 	else
-		ret = allocateBuffersYuv();
-
-	if (ret)
-		return ret;
-
-	frameInfos_.bufferAvailable_.connect(
-		this, &NxpNeoCameraData::queuePendingRequests);
-	return 0;
+		return allocateBuffersYuv();
 }
 
 int NxpNeoCameraData::allocateBuffersRaw()
 {
-	unsigned int bufferCount;
-	bufferCount = std::max({
-		streamFrame_.configuration().bufferCount,
-		streamIr_.configuration().bufferCount,
-		streamRaw_.configuration().bufferCount,
-	});
-
+	unsigned int bufferCount = kNeoIspMaxQueuedRequests;
 	unsigned int ipaBufferId = 1;
+
 	auto registerPoolBuffers =
 		[&](std::vector<std::unique_ptr<FrameBuffer>> *_pool, BufferType _bufferType) {
 			for (const std::unique_ptr<FrameBuffer> &buffer : *_pool) {
+				Span<const FrameBuffer::Plane> planes = buffer->planes();
 				buffer->setCookie(ipaBufferId++);
-				ipaBuffers_.emplace_back(buffer->cookie(), buffer->planes());
+				ipaBuffers_.emplace_back(buffer->cookie(),
+							 std::vector<FrameBuffer::Plane>{ planes.begin(),
+											  planes.end() });
 				availableBuffersMap_[_bufferType].push(buffer.get());
 			}
 		};
@@ -2362,17 +2323,10 @@ int NxpNeoCameraData::allocateBuffersYuv()
 
 int NxpNeoCameraData::freeBuffers()
 {
-	frameInfos_.bufferAvailable_.disconnect(
-		this, &NxpNeoCameraData::queuePendingRequests);
-	frameInfos_.clear();
-
-	int ret;
 	if (isRawCamera())
-		ret = freeBuffersRaw();
+		return freeBuffersRaw();
 	else
-		ret = freeBuffersYuv();
-
-	return ret;
+		return freeBuffersYuv();
 }
 
 int NxpNeoCameraData::freeBuffersRaw()
@@ -2666,6 +2620,9 @@ int NxpNeoCameraData::configureRaw(CameraConfiguration *c)
 	std::vector<uint32_t> ids = utils::map_keys(sensor_->controls().idmap());
 	configInfo.sensorControls = sensor_->controls();
 	configInfo.sensorControlList = sensor_->getControls(ids);
+	if (sensor_->focusLens())
+		configInfo.lensControls = sensor_->focusLens()->controls();
+
 	configInfo.sensorInfo = sensorInfo;
 
 	configInfo.colorSpace = ipa::nxpneo::IPAColorSpace(
@@ -2892,20 +2849,8 @@ int NxpNeoCameraData::enumerateFormatsYuv()
 		if (bppFilter && info.bitsPerPixel != bppFilter.value())
 			continue;
 
-		std::vector<Size> sizes = sensor_->sizes(code);
-		/*
-		 * This is a workaround for external ISP that advertise a single
-		 * (min, max) size range corresponding to its full rescaling
-		 * capability. The CameraSensor::size() function reports only
-		 * the max value of the range that may fall out of ISI support.
-		 * For that case, make sure that at least the sensor native
-		 * resolution is considered.
-		 */
-		Size resolution = sensor_->resolution();
-		if (sizes.size() == 1 &&
-		    std::find(sizes.begin(), sizes.end(), resolution) == sizes.end()) {
-			sizes.push_back(std::move(resolution));
-		}
+		std::vector<Size> sizes;
+		cameraSizes(sensor_.get(), code, sizes);
 
 		for (const Size &size : sizes) {
 			if (size.width > ISIPipe::kChainedWidthMax)
@@ -2977,55 +2922,21 @@ int NxpNeoCameraData::enumerateFormatsYuv()
  */
 
 /**
- * \brief Clear an active request by removing its reference from the pipeline
- * \param[in] info The frame Info bound to the request to be cleared
- *
- * Active requests in flight in the pipeline are tracked in the
- * processingRequest queue where they are processed in order.
- * When such request has been completed, the references to this request should
- * be removed from the pipeline handler.
- */
-void NxpNeoCameraData::clearRequest(NxpNeoFrames::Info *info)
-{
-	Request *request = info->request_;
-
-	if (processingRequests_.empty() || processingRequests_.front() != request)
-		LOG(NxpNeoPipe, Warning) << "Processing request not found";
-	else
-		processingRequests_.pop();
-
-	int ret = frameInfos_.destroy(info->id_);
-	if (ret)
-		LOG(NxpNeoPipe, Warning) << "Info frame could not be destroyed";
-}
-
-/**
- * \brief Complete an active request in the pipeline
+ * \brief Cancel an active request in the pipeline
  * \param[in] request The frame Info bound to the request to be cancelled
- *
- * Active requests in flight in the pipeline are tracked in the
- * processingRequest queue where they are processed in order.
- * When such request is cancelled, associated pending buffers should be marked
- * as cancelled before being individually completed. Then all the references
- * to this request should be removed from the pipeline handler.
  */
 void NxpNeoCameraData::cancelCompleteRequest(NxpNeoFrames::Info *info)
 {
 	Request *request = info->request_;
-	pipe()->cancelRequest(request);
 
-	clearRequest(info);
+	frameInfos_.destroy(info->id_);
+
+	pipe()->cancelRequest(request);
 }
 
 /**
  * \brief Complete an active request if no longer in use by the pipeline
- * \param[in] info The frame Info associated to the request
- *
- * Active requests in flight in the pipeline are tracked in the
- * processingRequest queue where they are processed in order.
- * When no more operation is needed by the pipeline handler on a request,
- * it can be completed. In that case, all the references to this request should
- * be removed from the pipeline handler.
+ * \param[in] info The frame Info associated to the request to be completed
  */
 void NxpNeoCameraData::tryCompleteRequest(NxpNeoFrames::Info *info)
 {
@@ -3034,9 +2945,9 @@ void NxpNeoCameraData::tryCompleteRequest(NxpNeoFrames::Info *info)
 	if (!info->isFrameComplete())
 		return;
 
-	pipe()->completeRequest(request);
+	frameInfos_.destroy(info->id_);
 
-	clearRequest(info);
+	pipe()->completeRequest(request);
 }
 
 /* -----------------------------------------------------------------------------
@@ -3121,7 +3032,7 @@ void NxpNeoCameraData::isiImage0BufferReady(FrameBuffer *buffer)
 	if (isRawCamera()) {
 		isiInputBufferReady(info, context);
 
-		applySensorControls(info, context);
+		applySensorControls(info);
 	} else {
 		tryCompleteRequest(info);
 	}
@@ -3157,7 +3068,7 @@ void NxpNeoCameraData::isiImage1BufferReady(FrameBuffer *buffer)
 	isiInputBufferReady(info, context);
 
 	if (mode_ == ModeTypeRgbIrDual)
-		applySensorControls(info, context);
+		applySensorControls(info);
 }
 
 /**
@@ -3186,15 +3097,14 @@ void NxpNeoCameraData::isiEmbeddedDataBufferReady(FrameBuffer *buffer)
 /**
  * \brief Apply the sensor controls update for the current request
  * \param[in] info The frame Info object associated to the request
- * \param[in] context The context of the sensor to be updated
  */
-void NxpNeoCameraData::applySensorControls(NxpNeoFrames::Info *info, ContextType context)
+void NxpNeoCameraData::applySensorControls(NxpNeoFrames::Info *info)
 {
 	if (!isRawCamera())
 		return;
 
 	unsigned int id = info->id_;
-	DelayedControls *delayedControls = delayedCtrls_.at(context).get();
+	DelayedControls *delayedControls = delayedCtrls_.get();
 
 	auto apply = [id, delayedControls]() {
 		delayedControls->applyControls(id);
@@ -3205,7 +3115,7 @@ void NxpNeoCameraData::applySensorControls(NxpNeoFrames::Info *info, ContextType
 		return;
 	}
 
-	Timer *timer = controlsTimers_.at(context).get();
+	Timer *timer = controlsTimer_.get();
 	if (timer->isRunning()) {
 		LOG(NxpNeoPipe, Debug) << "Controls timer is running";
 		timer->stop();
@@ -3313,7 +3223,7 @@ void NxpNeoCameraData::neoStatsBufferReady(FrameBuffer *buffer)
 	ipa_->processStats(sequence,
 			   static_cast<ipa::nxpneo::IPAContextType>(context),
 			   bufferIds,
-			   delayedCtrls_[context]->get(sequence));
+			   delayedCtrls_->get(sequence));
 
 	tryCompleteRequest(info);
 }
@@ -3401,10 +3311,19 @@ void NxpNeoCameraData::ipaMetadataReady(unsigned int id,
 }
 
 void NxpNeoCameraData::ipaSetSensorControls([[maybe_unused]] unsigned int id,
-					    ipa::nxpneo::IPAContextType context,
 					    const ControlList &sensorControls)
 {
-	delayedCtrls_[static_cast<ContextType>(context)]->push(sensorControls);
+	delayedCtrls_->push(sensorControls);
+}
+
+void NxpNeoCameraData::ipaSetLensControls(const ControlList &lensControls)
+{
+	CameraLens *lens = sensor_->focusLens();
+
+	if (lens && lensControls.contains(V4L2_CID_FOCUS_ABSOLUTE)) {
+		ControlValue const &focusValue = lensControls.get(V4L2_CID_FOCUS_ABSOLUTE);
+		lens->setFocusPosition(focusValue.get<int32_t>());
+	}
 }
 
 REGISTER_PIPELINE_HANDLER(PipelineHandlerNxpNeo, "nxp/neo")

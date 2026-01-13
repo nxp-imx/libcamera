@@ -7,6 +7,8 @@
 
 #include "rkisp1_path.h"
 
+#include <array>
+
 #include <linux/media-bus-format.h>
 
 #include <libcamera/formats.h>
@@ -62,16 +64,16 @@ RkISP1Path::RkISP1Path(const char *name, const Span<const PixelFormat> &formats,
 {
 }
 
-bool RkISP1Path::init(MediaDevice *media)
+bool RkISP1Path::init(std::shared_ptr<MediaDevice> media)
 {
 	std::string resizer = std::string("rkisp1_resizer_") + name_ + "path";
 	std::string video = std::string("rkisp1_") + name_ + "path";
 
-	resizer_ = V4L2Subdevice::fromEntityName(media, resizer);
+	resizer_ = V4L2Subdevice::fromEntityName(media.get(), resizer);
 	if (resizer_->open() < 0)
 		return false;
 
-	video_ = V4L2VideoDevice::fromEntityName(media, video);
+	video_ = V4L2VideoDevice::fromEntityName(media.get(), video);
 	if (video_->open() < 0)
 		return false;
 
@@ -341,7 +343,7 @@ RkISP1Path::validate(const CameraSensor *sensor,
 					    : cfg->size;
 
 		V4L2SubdeviceFormat sensorFormat =
-			sensor->getFormat({ mbusCode }, rawSize);
+			sensor->getFormat(std::array{ mbusCode }, rawSize);
 
 		if (sensorConfig &&
 		    sensorConfig->outputSize != sensorFormat.size)
@@ -362,7 +364,7 @@ RkISP1Path::validate(const CameraSensor *sensor,
 
 		uint32_t mbusCode = formatToMediaBus.at(rawFormat);
 		V4L2SubdeviceFormat sensorFormat =
-			sensor->getFormat({ mbusCode }, sensorSize);
+			sensor->getFormat(std::array{ mbusCode }, sensorSize);
 
 		if (sensorFormat.size != sensorSize)
 			return CameraConfiguration::Invalid;

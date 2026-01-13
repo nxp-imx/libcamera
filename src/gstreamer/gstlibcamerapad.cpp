@@ -95,6 +95,10 @@ gst_libcamera_stream_role_get_type()
 	static GType type = 0;
 	static const GEnumValue values[] = {
 		{
+			static_cast<gint>(StreamRole::Raw),
+			"libcamera::Raw",
+			"raw",
+		}, {
 			static_cast<gint>(StreamRole::StillCapture),
 			"libcamera::StillCapture",
 			"still-capture",
@@ -192,12 +196,13 @@ void gst_libcamera_pad_set_video_info(GstPad *pad, const GstVideoInfo *info)
 Stream *
 gst_libcamera_pad_get_stream(GstPad *pad)
 {
-	auto *self = GST_LIBCAMERA_PAD(pad);
+	return static_cast<Stream *>(gst_pad_get_element_private(pad));
+}
 
-	if (self->pool)
-		return gst_libcamera_pool_get_stream(self->pool);
-
-	return nullptr;
+void
+gst_libcamera_pad_set_stream(GstPad *pad, Stream *stream)
+{
+	gst_pad_set_element_private(pad, stream);
 }
 
 void

@@ -81,7 +81,7 @@ LOG_DEFINE_CATEGORY(CameraSensorProperties)
 const CameraSensorProperties *CameraSensorProperties::get(const std::string &sensor)
 {
 	static const std::map<std::string, const CameraSensorProperties> sensorProps = {
-		{ "ap130x", {
+		{ "ap1302", {
 			/* Camera module based on AR0144 with AP1302 ISP */
 			.unitCellSize = { 3000, 3000 },
 			.testPatternModes = { },
@@ -156,6 +156,38 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
 				 */
 			},
 			.sensorDelays = { },
+		} },
+		{ "hm1246", {
+			.unitCellSize = { 3000, 3000 },
+			.testPatternModes =  {
+				{ controls::draft::TestPatternModeOff, 0 },
+				/* Solid white. */
+				{ controls::draft::TestPatternModeSolidColor, 6 },
+				/* The six vertical bars (left-to-right) are as follows: black,
+				 * blue, red, magenta, green and cyan.
+				 */
+				{ controls::draft::TestPatternModeCustom1, 5 },
+				/*
+				 * No corresponding test pattern mode for:
+				 *  1: "Checkboard"
+				 *  2: "Ramp"
+				 *  3: "Moving ones"
+				 *  4: "Blending color bars"
+				 *  7: "Solid black"
+				 *  8: "Solid red"
+				 *  9: "Solid green"
+				 * 10: "Solid blue"
+				 *
+				 * Even though the sensor supports color bars and faded color bars as test patterns, these are
+				 * not offered because these patterns do not meet the expected properties.
+				 */
+			},
+			.sensorDelays = {
+				.exposureDelay = 2,
+				.gainDelay = 2,
+				.vblankDelay = 2,
+				.hblankDelay = 2
+			},
 		} },
 		{ "imx214", {
 			.unitCellSize = { 1120, 1120 },
@@ -248,7 +280,12 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
 		{ "imx462", {
 			.unitCellSize = { 2900, 2900 },
 			.testPatternModes = {},
-			.sensorDelays = { },
+			.sensorDelays = {
+				.exposureDelay = 2,
+				.gainDelay = 2,
+				.vblankDelay = 2,
+				.hblankDelay = 2
+			},
 		} },
 		{ "imx477", {
 			.unitCellSize = { 1550, 1550 },
@@ -500,6 +537,23 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
 			.sensorDelays = {
 				.exposureDelay = 2,
 				.gainDelay = 1,
+				.vblankDelay = 2,
+				.hblankDelay = 2
+			},
+		} },
+		{ "vd55g1", {
+			.unitCellSize = { 2160, 2160 },
+			.testPatternModes = {
+				{ controls::draft::TestPatternModeOff, 0 },
+				{ controls::draft::TestPatternModePn9, 2},
+				/*
+				 * No corresponding test pattern mode for:
+				 * 1: "Diagonal Gray Scale"
+				 */
+			},
+			.sensorDelays = {
+				.exposureDelay = 2,
+				.gainDelay = 2,
 				.vblankDelay = 2,
 				.hblankDelay = 2
 			},

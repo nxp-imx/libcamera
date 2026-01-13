@@ -44,7 +44,7 @@ A C++ toolchain: [required]
         Either {g++, clang}
 
 Meson Build system: [required]
-        meson (>= 0.63) ninja-build pkg-config
+        meson (>= 1.0.1) ninja-build pkg-config
 
 for the libcamera core: [required]
         libyaml-dev python3-yaml python3-ply python3-jinja2
@@ -67,8 +67,8 @@ for device hotplug enumeration: [optional]
         libudev-dev
 
 for documentation: [optional]
-        doxygen graphviz python3-sphinx python3-sphinxcontrib.doxylink (>= 1.6.1)
-        texlive-latex-extra
+        doxygen graphviz python3-sphinx python3-sphinx-book-theme
+        python3-sphinxcontrib.doxylink (>= 1.6.1) texlive-latex-extra
 
 for gstreamer: [optional]
         libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev

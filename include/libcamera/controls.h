@@ -10,9 +10,9 @@
 #include <assert.h>
 #include <map>
 #include <optional>
-#include <set>
 #include <stdint.h>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -96,7 +96,7 @@ struct control_type<float> {
 };
 
 template<>
-struct control_type<std::string> {
+struct control_type<std::string_view> {
 	static constexpr ControlType value = ControlTypeString;
 	static constexpr std::size_t size = 0;
 };
@@ -138,7 +138,7 @@ public:
 #ifndef __DOXYGEN__
 	template<typename T, std::enable_if_t<!details::is_span<T>::value &&
 					      details::control_type<T>::value &&
-					      !std::is_same<std::string, std::remove_cv_t<T>>::value,
+					      !std::is_same<std::string_view, std::remove_cv_t<T>>::value,
 					      std::nullptr_t> = nullptr>
 	ControlValue(const T &value)
 		: type_(ControlTypeNone), numElements_(0)
@@ -148,7 +148,7 @@ public:
 	}
 
 	template<typename T, std::enable_if_t<details::is_span<T>::value ||
-					      std::is_same<std::string, std::remove_cv_t<T>>::value,
+					      std::is_same<std::string_view, std::remove_cv_t<T>>::value,
 					      std::nullptr_t> = nullptr>
 #else
 	template<typename T>
@@ -182,7 +182,7 @@ public:
 
 #ifndef __DOXYGEN__
 	template<typename T, std::enable_if_t<!details::is_span<T>::value &&
-					      !std::is_same<std::string, std::remove_cv_t<T>>::value,
+					      !std::is_same<std::string_view, std::remove_cv_t<T>>::value,
 					      std::nullptr_t> = nullptr>
 	T get() const
 	{
@@ -193,7 +193,7 @@ public:
 	}
 
 	template<typename T, std::enable_if_t<details::is_span<T>::value ||
-					      std::is_same<std::string, std::remove_cv_t<T>>::value,
+					      std::is_same<std::string_view, std::remove_cv_t<T>>::value,
 					      std::nullptr_t> = nullptr>
 #else
 	template<typename T>
@@ -210,7 +210,7 @@ public:
 
 #ifndef __DOXYGEN__
 	template<typename T, std::enable_if_t<!details::is_span<T>::value &&
-					      !std::is_same<std::string, std::remove_cv_t<T>>::value,
+					      !std::is_same<std::string_view, std::remove_cv_t<T>>::value,
 					      std::nullptr_t> = nullptr>
 	void set(const T &value)
 	{
@@ -219,7 +219,7 @@ public:
 	}
 
 	template<typename T, std::enable_if_t<details::is_span<T>::value ||
-					      std::is_same<std::string, std::remove_cv_t<T>>::value,
+					      std::is_same<std::string_view, std::remove_cv_t<T>>::value,
 					      std::nullptr_t> = nullptr>
 #else
 	template<typename T>
@@ -334,8 +334,6 @@ public:
 			     const ControlValue &def = {});
 	explicit ControlInfo(Span<const ControlValue> values,
 			     const ControlValue &def = {});
-	explicit ControlInfo(std::set<bool> values, bool def);
-	explicit ControlInfo(bool value);
 
 	const ControlValue &min() const { return min_; }
 	const ControlValue &max() const { return max_; }

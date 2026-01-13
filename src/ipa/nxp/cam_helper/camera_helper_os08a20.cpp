@@ -47,7 +47,8 @@ public:
 	uint32_t gainCode(double gain) const override;
 	double gain(uint32_t gainCode) const override;
 	void controlListSetAGC(
-		ControlList *ctrls, Duration exposure, double gain) const override;
+		ControlList *ctrls, SensorContextTypes context,
+		Duration exposure, double gain) override;
 	int sensorControlsToMetaData(
 		const ControlList *sensorCtrls, ControlList *mdCtrls) const override;
 	void controlInfoMapGetExposureRange(
@@ -126,11 +127,12 @@ double CameraHelperOs08a20::gain(uint32_t gainCode) const
 }
 
 void CameraHelperOs08a20::controlListSetAGC(
-	ControlList *ctrls, Duration exposure, double gain) const
+	ControlList *ctrls, SensorContextTypes context,
+	Duration exposure, double gain)
 {
 	/* In non-HDR mode, the standard single-capture controls are used. */
 	if (mode_.streamMode != SensorStreamHdr)
-		return CameraHelper::controlListSetAGC(ctrls, exposure, gain);
+		return CameraHelper::controlListSetAGC(ctrls, context, exposure, gain);
 
 	/* In HDR mode, the multi-capture controls are used. */
 

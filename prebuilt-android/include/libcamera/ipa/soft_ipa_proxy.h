@@ -28,11 +28,24 @@ namespace ipa {
 namespace soft {
 
 
+class IPAProxySoftThreaded;
+class IPAProxySoftIsolated;
+
 class IPAProxySoft : public IPAProxy, public IPASoftInterface, public Object
 {
 public:
-	IPAProxySoft(IPAModule *ipam, bool isolate);
-	~IPAProxySoft();
+	using Threaded = IPAProxySoftThreaded;
+	using Isolated = IPAProxySoftIsolated;
+
+protected:
+	using IPAProxy::IPAProxy;
+};
+
+class IPAProxySoftThreaded : public IPAProxySoft
+{
+public:
+	IPAProxySoftThreaded(IPAModule *ipam, const GlobalConfiguration &configuration);
+	~IPAProxySoftThreaded();
 
 
         int32_t init(
@@ -65,79 +78,15 @@ public:
 
 
 private:
-	void recvMessage(const IPCMessage &data);
 
-
-        int32_t initThread(
-        	const IPASettings &settings,
-        	const SharedFD &fdStats,
-        	const SharedFD &fdParams,
-        	const IPACameraSensorInfo &sensorInfo,
-        	const ControlInfoMap &sensorControls,
-        	ControlInfoMap *ipaControls,
-        	bool *ccmEnabled);
-        int32_t initIPC(
-        	const IPASettings &settings,
-        	const SharedFD &fdStats,
-        	const SharedFD &fdParams,
-        	const IPACameraSensorInfo &sensorInfo,
-        	const ControlInfoMap &sensorControls,
-        	ControlInfoMap *ipaControls,
-        	bool *ccmEnabled);
-
-        int32_t startThread();
-        int32_t startIPC();
-
-        void stopThread();
-        void stopIPC();
-
-        int32_t configureThread(
-        	const IPAConfigInfo &configInfo);
-        int32_t configureIPC(
-        	const IPAConfigInfo &configInfo);
-
-        void queueRequestThread(
-        	const uint32_t frame,
-        	const ControlList &sensorControls);
-        void queueRequestIPC(
-        	const uint32_t frame,
+        void setSensorControlsHandler(
         	const ControlList &sensorControls);
 
-        void computeParamsThread(
-        	const uint32_t frame);
-        void computeParamsIPC(
-        	const uint32_t frame);
+        void setIspParamsHandler();
 
-        void processStatsThread(
-        	const uint32_t frame,
-        	const uint32_t bufferId,
-        	const ControlList &sensorControls);
-        void processStatsIPC(
-        	const uint32_t frame,
-        	const uint32_t bufferId,
-        	const ControlList &sensorControls);
-
-
-        void setSensorControlsThread(
-        	const ControlList &sensorControls);
-	void setSensorControlsIPC(
-		std::vector<uint8_t>::const_iterator data,
-		size_t dataSize,
-		const std::vector<SharedFD> &fds);
-
-        void setIspParamsThread();
-	void setIspParamsIPC(
-		std::vector<uint8_t>::const_iterator data,
-		size_t dataSize,
-		const std::vector<SharedFD> &fds);
-
-        void metadataReadyThread(
+        void metadataReadyHandler(
         	const uint32_t frame,
         	const ControlList &metadata);
-	void metadataReadyIPC(
-		std::vector<uint8_t>::const_iterator data,
-		size_t dataSize,
-		const std::vector<SharedFD> &fds);
 
 
 	/* Helper class to invoke async functions in another thread. */
@@ -189,8 +138,63 @@ private:
 	Thread thread_;
 	ThreadProxy proxy_;
 	std::unique_ptr<IPASoftInterface> ipa_;
+};
 
-	const bool isolate_;
+class IPAProxySoftIsolated : public IPAProxySoft
+{
+public:
+	IPAProxySoftIsolated(IPAModule *ipam, const GlobalConfiguration &configuration);
+	~IPAProxySoftIsolated();
+
+
+        int32_t init(
+        	const IPASettings &settings,
+        	const SharedFD &fdStats,
+        	const SharedFD &fdParams,
+        	const IPACameraSensorInfo &sensorInfo,
+        	const ControlInfoMap &sensorControls,
+        	ControlInfoMap *ipaControls,
+        	bool *ccmEnabled) override;
+
+        int32_t start() override;
+
+        void stop() override;
+
+        int32_t configure(
+        	const IPAConfigInfo &configInfo) override;
+
+        void queueRequest(
+        	const uint32_t frame,
+        	const ControlList &sensorControls) override;
+
+        void computeParams(
+        	const uint32_t frame) override;
+
+        void processStats(
+        	const uint32_t frame,
+        	const uint32_t bufferId,
+        	const ControlList &sensorControls) override;
+
+
+private:
+	void recvMessage(const IPCMessage &data);
+
+
+	void setSensorControlsHandler(
+		std::vector<uint8_t>::const_iterator data,
+		size_t dataSize,
+		const std::vector<SharedFD> &fds);
+
+	void setIspParamsHandler(
+		std::vector<uint8_t>::const_iterator data,
+		size_t dataSize,
+		const std::vector<SharedFD> &fds);
+
+	void metadataReadyHandler(
+		std::vector<uint8_t>::const_iterator data,
+		size_t dataSize,
+		const std::vector<SharedFD> &fds);
+
 
 	std::unique_ptr<IPCPipeUnixSocket> ipc_;
 

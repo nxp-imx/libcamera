@@ -90,31 +90,31 @@ public:
                 	const size_t fdParamsFdStart = fdStatsFdStart + fdStatsFdsSize;
 
                 	IPASettings settings =
-                        IPADataSerializer<IPASettings>::deserialize(
+                        IPADataSerializer<libcamera::IPASettings>::deserialize(
                         	_ipcMessage.data().cbegin() + settingsStart,
                         	_ipcMessage.data().cbegin() + settingsStart + settingsBufSize);
 
                 	SharedFD fdStats =
-                        IPADataSerializer<SharedFD>::deserialize(
+                        IPADataSerializer<libcamera::SharedFD>::deserialize(
                         	_ipcMessage.data().cbegin() + fdStatsStart,
                         	_ipcMessage.data().cbegin() + fdStatsStart + fdStatsBufSize,
                         	_ipcMessage.fds().cbegin() + fdStatsFdStart,
                         	_ipcMessage.fds().cbegin() + fdStatsFdStart + fdStatsFdsSize);
 
                 	SharedFD fdParams =
-                        IPADataSerializer<SharedFD>::deserialize(
+                        IPADataSerializer<libcamera::SharedFD>::deserialize(
                         	_ipcMessage.data().cbegin() + fdParamsStart,
                         	_ipcMessage.data().cbegin() + fdParamsStart + fdParamsBufSize,
                         	_ipcMessage.fds().cbegin() + fdParamsFdStart,
                         	_ipcMessage.fds().cbegin() + fdParamsFdStart + fdParamsFdsSize);
 
                 	IPACameraSensorInfo sensorInfo =
-                        IPADataSerializer<IPACameraSensorInfo>::deserialize(
+                        IPADataSerializer<libcamera::IPACameraSensorInfo>::deserialize(
                         	_ipcMessage.data().cbegin() + sensorInfoStart,
                         	_ipcMessage.data().cbegin() + sensorInfoStart + sensorInfoBufSize);
 
                 	ControlInfoMap sensorControls =
-                        IPADataSerializer<ControlInfoMap>::deserialize(
+                        IPADataSerializer<libcamera::ControlInfoMap>::deserialize(
                         	_ipcMessage.data().cbegin() + sensorControlsStart,
                         	_ipcMessage.data().cend(),
                         	&controlSerializer_);
@@ -135,12 +135,10 @@ public:
 		                
                 	std::vector<uint8_t> ipaControlsBuf;
                 	std::tie(ipaControlsBuf, std::ignore) =
-                		IPADataSerializer<ControlInfoMap>::serialize(ipaControls
-                , &controlSerializer_);
+                		IPADataSerializer<libcamera::ControlInfoMap>::serialize(ipaControls, &controlSerializer_);
                 	std::vector<uint8_t> ccmEnabledBuf;
                 	std::tie(ccmEnabledBuf, std::ignore) =
-                		IPADataSerializer<bool>::serialize(ccmEnabled
-                );
+                		IPADataSerializer<bool>::serialize(ccmEnabled);
                 	appendPOD<uint32_t>(_response.data(), ipaControlsBuf.size());
                 	appendPOD<uint32_t>(_response.data(), ccmEnabledBuf.size());
                 	_response.data().insert(_response.data().end(), ipaControlsBuf.begin(), ipaControlsBuf.end());
@@ -205,7 +203,7 @@ ipa_->stop();
 
 
                 	IPAConfigInfo configInfo =
-                        IPADataSerializer<IPAConfigInfo>::deserialize(
+                        IPADataSerializer<ipa::soft::IPAConfigInfo>::deserialize(
                         	_ipcMessage.data().cbegin() + configInfoStart,
                         	_ipcMessage.data().cend(),
                         	&controlSerializer_);
@@ -244,7 +242,7 @@ ipa_->stop();
                         	_ipcMessage.data().cbegin() + frameStart + frameBufSize);
 
                 	ControlList sensorControls =
-                        IPADataSerializer<ControlList>::deserialize(
+                        IPADataSerializer<libcamera::ControlList>::deserialize(
                         	_ipcMessage.data().cbegin() + sensorControlsStart,
                         	_ipcMessage.data().cend(),
                         	&controlSerializer_);
@@ -292,7 +290,7 @@ ipa_->computeParams(frame);
                         	_ipcMessage.data().cbegin() + bufferIdStart + bufferIdBufSize);
 
                 	ControlList sensorControls =
-                        IPADataSerializer<ControlList>::deserialize(
+                        IPADataSerializer<libcamera::ControlList>::deserialize(
                         	_ipcMessage.data().cbegin() + sensorControlsStart,
                         	_ipcMessage.data().cend(),
                         	&controlSerializer_);
@@ -357,8 +355,7 @@ private:
 		
 	std::vector<uint8_t> sensorControlsBuf;
 	std::tie(sensorControlsBuf, std::ignore) =
-		IPADataSerializer<ControlList>::serialize(sensorControls
-, &controlSerializer_);
+		IPADataSerializer<libcamera::ControlList>::serialize(sensorControls, &controlSerializer_);
 	_message.data().insert(_message.data().end(), sensorControlsBuf.begin(), sensorControlsBuf.end());
 
 		int _ret = socket_.send(_message.payload());
@@ -400,12 +397,10 @@ private:
 		
 	std::vector<uint8_t> frameBuf;
 	std::tie(frameBuf, std::ignore) =
-		IPADataSerializer<uint32_t>::serialize(frame
-);
+		IPADataSerializer<uint32_t>::serialize(frame);
 	std::vector<uint8_t> metadataBuf;
 	std::tie(metadataBuf, std::ignore) =
-		IPADataSerializer<ControlList>::serialize(metadata
-, &controlSerializer_);
+		IPADataSerializer<libcamera::ControlList>::serialize(metadata, &controlSerializer_);
 	appendPOD<uint32_t>(_message.data(), frameBuf.size());
 	appendPOD<uint32_t>(_message.data(), metadataBuf.size());
 	_message.data().insert(_message.data().end(), frameBuf.begin(), frameBuf.end());

@@ -31,9 +31,17 @@ neo_ipa_deps = [
     nxp_ipa_cam_helper_dep,
 ]
 
+# include path to region_stats.h for af
+ipa_rpi_controller = '..' / '..' / 'rpi' / 'controller'
+
+neo_ipa_includes = [
+    ipa_includes,
+    ipa_rpi_controller,
+]
+
 mod = shared_module(ipa_name, neo_ipa_sources,
                     name_prefix : '',
-                    include_directories : [ipa_includes],
+                    include_directories : [neo_ipa_includes],
                     dependencies : [neo_ipa_deps],
                     install : true,
                     install_dir : ipa_install_dir)

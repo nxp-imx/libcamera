@@ -31,7 +31,7 @@ public:
 	int x;
 	int y;
 
-	const std::string toString() const;
+	std::string toString() const;
 
 	constexpr Point operator-() const
 	{
@@ -64,7 +64,7 @@ public:
 	unsigned int height;
 
 	bool isNull() const { return !width && !height; }
-	const std::string toString() const;
+	std::string toString() const;
 
 	Size &alignDownTo(unsigned int hAlignment, unsigned int vAlignment)
 	{
@@ -105,6 +105,12 @@ public:
 	{
 		width = width > margins.width ? width - margins.width : 0;
 		height = height > margins.height ? height - margins.height : 0;
+		return *this;
+	}
+
+	Size &transpose()
+	{
+		std::swap(width, height);
 		return *this;
 	}
 
@@ -275,7 +281,7 @@ public:
 	unsigned int height;
 
 	bool isNull() const { return !width && !height; }
-	const std::string toString() const;
+	std::string toString() const;
 
 	Point center() const;
 

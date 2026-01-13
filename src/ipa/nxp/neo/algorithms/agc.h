@@ -25,7 +25,80 @@ namespace libcamera {
 
 namespace ipa::nxpneo::algorithms {
 
-class Agc : public Algorithm, public AgcMeanLuminance
+class AgcStats : public AgcMeanLuminance
+{
+public:
+	AgcStats() {}
+	virtual ~AgcStats() = default;
+
+	virtual int init(IPAContext &context, const YamlObject &tuningData) = 0;
+	virtual void configure(IPAContext &context);
+	virtual void setupHistograms(IPAContext &context,
+				     NxpNeoParams *params) const = 0;
+	virtual void setAwbGains([[maybe_unused]] IPAContext &context,
+				 [[maybe_unused]] IPAFrameContext &frameContext)
+	{
+	}
+	virtual void parseStatistics(const NxpNeoStats *stats) = 0;
+	const Histogram &histogram() const { return histogram_; }
+
+protected:
+	enum HistId {
+		HistId0 = 0,
+		HistId1,
+		HistId2,
+		HistId3,
+	};
+	enum RoiId {
+		RoiId0 = 0,
+		RoiId1,
+	};
+
+	Histogram histogram_;
+	IPAContextType contextType_;
+};
+
+class AgcStatsRgb : public AgcStats
+{
+public:
+	AgcStatsRgb() { contextType_ = IPAContextTypeRgb; }
+
+	int init(IPAContext &context, const YamlObject &tuningData) override;
+	void configure(IPAContext &context) override;
+	void setupHistograms(IPAContext &context, NxpNeoParams *params) const override;
+	void setAwbGains(IPAContext &context, IPAFrameContext &frameContext) override;
+	void parseStatistics(const NxpNeoStats *stats) override;
+
+private:
+	int parseTuningDataRgb(const YamlObject &tuningData);
+	void configureHistScale(IPAContext &context);
+	double estimateLuminance(double gain) const override;
+
+	static const RGB<uint8_t> kHistIds;
+	std::vector<uint32_t> histScale_;
+	bool userConfig_ = false;
+	std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> rgbTriples_;
+	RGB<double> awbGains_;
+};
+
+class AgcStatsIr : public AgcStats
+{
+public:
+	AgcStatsIr() { contextType_ = IPAContextTypeIr; }
+
+	int init(IPAContext &context, const YamlObject &tuningData) override;
+	void setupHistograms(IPAContext &context, NxpNeoParams *params) const override;
+	void parseStatistics(const NxpNeoStats *stats) override;
+
+private:
+	double estimateLuminance(double gain) const override;
+
+	static constexpr HistId kHistId = HistId0;
+	/* The Ir pixel is the 4th channel within 2x2 pattern RGGIr or BGGIr. */
+	static constexpr uint8_t kHistChannelIr = NEO_HIST_CHANNEL4;
+};
+
+class Agc : public Algorithm
 {
 public:
 	Agc();
@@ -46,17 +119,10 @@ public:
 		     ControlList &metadata) override;
 
 private:
-	double estimateLuminance(double gain) const override;
 	void fillMetadata(IPAContext &context, IPAFrameContext &frameContext,
-			  ControlList &metadata);
-	Histogram parseStatistics(const NxpNeoStats *stats);
+			  ControlList &metadata) const;
 
-	RGB<double> gains_;
-	std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> rgbTriples_;
-
-	static constexpr size_t kNumHist = 4;
-	std::vector<uint32_t> histScale_;
-	bool userConfig_ = false;
+	std::map<unsigned, std::unique_ptr<AgcStats>> agcs_;
 };
 
 } /* namespace ipa::nxpneo::algorithms */

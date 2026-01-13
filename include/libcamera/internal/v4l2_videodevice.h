@@ -33,6 +33,7 @@
 #include "libcamera/internal/formats.h"
 #include "libcamera/internal/v4l2_device.h"
 #include "libcamera/internal/v4l2_pixelformat.h"
+#include "libcamera/internal/v4l2_request.h"
 
 namespace libcamera {
 
@@ -178,7 +179,7 @@ public:
 	std::array<Plane, 3> planes;
 	unsigned int planesCount = 0;
 
-	const std::string toString() const;
+	std::string toString() const;
 };
 
 std::ostream &operator<<(std::ostream &out, const V4L2DeviceFormat &f);
@@ -217,7 +218,7 @@ public:
 	int importBuffers(unsigned int count);
 	int releaseBuffers();
 
-	int queueBuffer(FrameBuffer *buffer);
+	int queueBuffer(FrameBuffer *buffer, const V4L2Request *request = nullptr);
 	Signal<FrameBuffer *> bufferReady;
 
 	int streamOn();
