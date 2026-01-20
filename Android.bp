@@ -22,6 +22,16 @@ genrule {
     cmd: "$(location utils/codegen/gen-ipa-pub-key.py) $(in) $(out)",
 }
 
+genrule {
+    name: "libcamera_HDR",
+    srcs: ["src/libcamera/pipeline/nxp/neo/data/config.yaml"],
+    out: ["config_HDR.yaml"],
+    cmd: "sed -e '/^%YAML/,/^\\.\\.\\./ { " +
+        "s/^#\\s\\+streams:/    streams:/ " +
+        "/^#\\s\\+Uncomment/d " +
+        "}' $(in) > $(out)"
+}
+
 filegroup {
     name: "libcamera_sources",
     srcs: [
@@ -490,26 +500,15 @@ cc_binary {
     ]
 }
 
-// config.yaml
+// NXP neo pipeline and NXP IPA configuration files
 prebuilt_etc {
-    name: "config.yaml",
+    name: "libcamera_yaml",
     sub_dir: "configs/libcamera/nxp/neo",
-    src: "src/libcamera/pipeline/nxp/neo/data/config.yaml",
-    vendor: true,
-}
-
-// os08a20.yaml
-prebuilt_etc {
-    name: "os08a20.yaml",
-    sub_dir: "configs/libcamera/nxp/neo",
-    src: "src/ipa/nxp/neo/data/os08a20.yaml",
-    vendor: true,
-}
-
-// mx95mbcam.yaml
-prebuilt_etc {
-    name: "mx95mbcam.yaml",
-    sub_dir: "configs/libcamera/nxp/neo",
-    src: "src/ipa/nxp/neo/data/mx95mbcam.yaml",
+    srcs: [
+        "src/libcamera/pipeline/nxp/neo/data/config.yaml",
+        "src/ipa/nxp/neo/data/os08a20.yaml",
+        "src/ipa/nxp/neo/data/mx95mbcam.yaml",
+        ":libcamera_HDR",
+    ],
     vendor: true,
 }
