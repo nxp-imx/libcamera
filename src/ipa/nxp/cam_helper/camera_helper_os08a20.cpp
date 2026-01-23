@@ -3,7 +3,7 @@
  * camera_helper_os08a20.c
  * Helper class that performs sensor-specific parameter computations
  * for Omnivision OS08A20 sensor
- * Copyright 2024-2025 NXP
+ * Copyright 2024-2026 NXP
  */
 
 #include <cmath>
@@ -47,8 +47,8 @@ public:
 	uint32_t gainCode(double gain) const override;
 	double gain(uint32_t gainCode) const override;
 	void controlListSetAGC(
-		ControlList *ctrls, SensorContextTypes context,
-		Duration exposure, double gain) override;
+		ControlList *ctrls,
+		Span<const Duration> exposures, Span<const double> gains) override;
 	int sensorControlsToMetaData(
 		const ControlList *sensorCtrls, ControlList *mdCtrls) const override;
 	void controlInfoMapGetExposureRange(
@@ -127,23 +127,23 @@ double CameraHelperOs08a20::gain(uint32_t gainCode) const
 }
 
 void CameraHelperOs08a20::controlListSetAGC(
-	ControlList *ctrls, SensorContextTypes context,
-	Duration exposure, double gain)
+	ControlList *ctrls,
+	Span<const Duration> exposures, Span<const double> gains)
 {
 	/* In non-HDR mode, the standard single-capture controls are used. */
 	if (mode_.streamMode != SensorStreamHdr)
-		return CameraHelper::controlListSetAGC(ctrls, context, exposure, gain);
+		return CameraHelper::controlListSetAGC(ctrls, exposures, gains);
 
 	/* In HDR mode, the multi-capture controls are used. */
 
 	/* Exposure time and gain provided by AGC apply to long capture. */
-	uint32_t expRowsLong = exposureLines(exposure, hblankToLineLength(mode_.hblank));
-	double aGainLong = gain;
+	uint32_t expRowsLong = exposureLines(exposures[0], hblankToLineLength(mode_.hblank));
+	double aGainLong = gains[0];
 	uint32_t expRowsShort = std::clamp(maxExposureLines() - expRowsLong,
 					   kMinShortExposureLines,
 					   kMaxShortExposureLines);
 	double aGainShort;
-	double expTotalLong = expRowsLong * gain;
+	double expTotalLong = expRowsLong * aGainLong;
 	/* Total short exposure is total long exposure divided by ratio. */
 	double expTotalShort = expTotalLong / kRatioL2S;
 

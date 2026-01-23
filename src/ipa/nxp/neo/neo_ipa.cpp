@@ -90,14 +90,13 @@ private:
 			    ControlInfoMap *ipaControls);
 	void updateFrameContextSensorMeta(const uint32_t frame, const IPAContextType context);
 	void setInitialControls();
-	void setControls(unsigned int frame, IPAContextType context);
+	void setControls(unsigned int frame);
 	std::string controlListToString(const ControlList *ctrls) const;
 	std::string logSensorParams(const unsigned int frame,
 				    const ControlList *ctrlsApplied,
 				    const ControlList *ctrlsToApply) const;
 
 	static const std::map<const IPAModeType, SensorStreamModes> kSensorStreamModeMap;
-	static const std::map<const IPAContextType, SensorContextTypes> kSensorContextMap;
 	std::map<unsigned int, FrameBuffer> buffers_;
 	std::map<unsigned int, MappedFrameBuffer> mappedBuffers_;
 
@@ -116,11 +115,6 @@ const std::map<const IPAModeType, SensorStreamModes> IPANxpNeo::kSensorStreamMod
 	{ IPAModeTypeHdrMerge, SensorStreamHdr },
 	{ IPAModeTypeRgbIr, SensorStreamRgbIr },
 	{ IPAModeTypeRgbIrDual, SensorStreamDualContext },
-};
-
-const std::map<const IPAContextType, SensorContextTypes> IPANxpNeo::kSensorContextMap = {
-	{ IPAContextTypeRgb, SensorContextRgb },
-	{ IPAContextTypeIr, SensorContextIr },
 };
 
 namespace {
@@ -480,7 +474,7 @@ void IPANxpNeo::processStats(const uint32_t frame, const IPAContextType context,
 	/* Set processed flag for this context. */
 	frameContext.processed.at(context) = true;
 
-	setControls(frame, context);
+	setControls(frame);
 	metadataReady.emit(frame, context, metadata);
 }
 
@@ -691,19 +685,20 @@ void IPANxpNeo::setInitialControls()
 	setSensorControls.emit(frame, ctrls);
 }
 
-void IPANxpNeo::setControls(unsigned int frame, IPAContextType context)
+void IPANxpNeo::setControls(unsigned int frame)
 {
 	/*
 	 * \todo The frame number is most likely wrong here, we need to take
 	 * internal sensor delays and other timing parameters into account.
 	 */
 	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
-	auto agcFrameContext = frameContext.agcs.at(context);
+
+	/* Send controls only if algo are processed for all active contexts. */
+	for (const auto &processedIt : frameContext.processed)
+		if (!processedIt.second)
+			return;
 
 	ControlList ctrls(sensorControls_);
-
-	Duration exposure = context_.camHelper->exposure(agcFrameContext.exposure,
-							 context_.configuration.sensor.lineDuration);
 
 	/*
 	 * Skip control setting for frame 0 for which the frame context
@@ -716,8 +711,21 @@ void IPANxpNeo::setControls(unsigned int frame, IPAContextType context)
 	 * frames to be hidden.
 	 */
 	if (frame) {
-		context_.camHelper->controlListSetAGC(&ctrls, kSensorContextMap.at(context),
-						      exposure, agcFrameContext.gain);
+		Duration lineLength = context_.configuration.sensor.lineDuration;
+		std::vector<Duration> exposures;
+		std::vector<double> gains;
+
+		for (const auto &agcIt : frameContext.agcs) {
+			auto agcFrameContext = agcIt.second;
+			Duration exposure =
+				context_.camHelper->exposure(agcFrameContext.exposure,
+							     lineLength);
+			exposures.push_back(exposure);
+			gains.push_back(agcFrameContext.gain);
+		}
+		context_.camHelper->controlListSetAGC(&ctrls,
+						      Span<Duration>(exposures),
+						      Span<double>(gains));
 
 		if (context_.configuration.awb.awbGainInSensor) {
 			std::array<double, 4> wbGains;
@@ -735,16 +743,7 @@ void IPANxpNeo::setControls(unsigned int frame, IPAContextType context)
 				   &frameContext.sensor.mdControls,
 				   &ctrls);
 
-	/*
-	 * In RGBIr dual mode, the controls should be sent for one context only:
-	 * - the RGB context should be used as long as the single-capture
-	 *   controls are used from the CameraHelper in RGBIr dual mode.
-	 */
-	if (context_.configuration.pipelineMode != IPAModeTypeRgbIrDual ||
-	    (context_.configuration.pipelineMode == IPAModeTypeRgbIrDual &&
-	     context == IPAContextTypeRgb)) {
-		setSensorControls.emit(frame, ctrls);
-	}
+	setSensorControls.emit(frame, ctrls);
 }
 
 std::string IPANxpNeo::controlListToString(const ControlList *ctrls) const

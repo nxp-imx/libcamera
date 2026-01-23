@@ -44,17 +44,14 @@ public:
 			{ V4L2_CID_AGAIN_MULTI, { 1, false } },
 			{ V4L2_CID_EXPOSURE_MULTI, { 2, false } },
 		};
-		/* Multi controls values cache - minimum values by default. */
-		multiExposures_ = { kMinexposureLines, kMinexposureLines };
-		multiGains_ = { gainCode(kMinAnalogGain), gainCode(kMinAnalogGain) };
 	}
 
 	uint32_t gainCode(double gain) const override;
 	double gain(uint32_t gainCode) const override;
 
 	void controlListSetAGC(
-		ControlList *ctrls, SensorContextTypes context,
-		Duration exposure, double gain) override;
+		ControlList *ctrls,
+		Span<const Duration> exposures, Span<const double> gains) override;
 	int sensorControlsToMetaData(
 		const ControlList *sensorCtrls, ControlList *mdCtrls) const override;
 
@@ -64,9 +61,6 @@ private:
 
 	static constexpr double kMinAnalogGain = 1.0;
 	static constexpr uint32_t kMinexposureLines = 6;
-
-	std::array<uint32_t, 2> multiExposures_;
-	std::array<uint32_t, 2> multiGains_;
 };
 
 uint32_t CameraHelperOx05b1s::gainCode(double gain) const
@@ -92,32 +86,37 @@ double CameraHelperOx05b1s::gain(uint32_t gainCode) const
 }
 
 void CameraHelperOx05b1s::controlListSetAGC(
-	ControlList *ctrls, SensorContextTypes context,
-	Duration exposure, double gain)
+	ControlList *ctrls,
+	Span<const Duration> exposures, Span<const double> gains)
 {
 	/* In non Dual Context mode, the standard single-capture controls are used. */
 	if (mode_.streamMode != SensorStreamDualContext)
-		return CameraHelper::controlListSetAGC(ctrls, context, exposure, gain);
+		return CameraHelper::controlListSetAGC(ctrls, exposures, gains);
 
 #ifndef DUAL_MULTI_CAPTURES
 	/*
 	 * For now, the standard single-capture controls are used in Dual Context mode.
 	 * \todo Remove when multi capture controls are enabled.
 	 */
-	return CameraHelper::controlListSetAGC(ctrls, context, exposure, gain);
+	return CameraHelper::controlListSetAGC(ctrls, exposures, gains);
 #else
 	/*
 	 * The multi-capture controls will be enabled in RGBIr dual mode when
 	 * the sensor driver will have proper context switch operation.
 	 */
-	unsigned int indexMulti = 0;
-	if (context == SensorContextIr)
-		indexMulti = 1;
-	multiExposures_[indexMulti] = exposureLines(exposure, hblankToLineLength(mode_.hblank));
-	multiGains_[indexMulti] = gainCode(gain);
+	std::array<uint32_t, 2> exposureLines;
+	std::array<uint32_t, 2> gainCodes;
+	Duration lineLength = hblankToLineLength(mode_.hblank);
+	ASSERT(exposures.size() == 2);
+	ASSERT(gains.size() == 2);
+	for (size_t i = 0; i < 2; i++) {
+		exposureLines[i] = CameraHelper::exposureLines(exposures[i],
+							       lineLength);
+		gainCodes[i] = gainCode(gains[i]);
+	}
 
-	ctrls->set(V4L2_CID_AGAIN_MULTI, Span<uint32_t>(multiGains_));
-	ctrls->set(V4L2_CID_EXPOSURE_MULTI, Span<uint32_t>(multiExposures_));
+	ctrls->set(V4L2_CID_AGAIN_MULTI, Span<uint32_t>(gainCodes));
+	ctrls->set(V4L2_CID_EXPOSURE_MULTI, Span<uint32_t>(exposureLines));
 #endif
 }
 

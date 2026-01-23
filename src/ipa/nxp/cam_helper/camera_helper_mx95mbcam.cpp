@@ -3,7 +3,7 @@
  * camera_helper_mx95mbcam.c
  * Helper class that performs sensor-specific parameter computations
  * for MX95MBCAM module (OX03C10 camera and a Maxim MAX96717 GMSL2 serializer)
- * Copyright 2024-2025 NXP
+ * Copyright 2024-2026 NXP
  */
 
 #include <cmath>
@@ -179,8 +179,8 @@ public:
 #if USE_CUSTOM_CONTROLS
 	void setControls(const ControlList *sensorCtrls) override;
 	void controlListSetAGC(
-		ControlList *ctrls, SensorContextTypes context,
-		Duration exposure, double gain) override;
+		ControlList *ctrls,
+		Span<const Duration> exposures, Span<const double> gains) override;
 #endif
 
 	virtual void controlInfoMapGetExposureRange(
@@ -517,15 +517,15 @@ void CameraHelperMx95mbcam::setControls(const ControlList *sensorCtrls)
 }
 
 void CameraHelperMx95mbcam::controlListSetAGC(
-	ControlList *ctrls, [[maybe_unused]] SensorContextTypes context,
-	Duration exposure, double gain)
+	ControlList *ctrls,
+	Span<const Duration> exposures, Span<const double> gains)
 {
 	const uint32_t sensorConversionRatio = calcConvRatio(convGainQ16_);
 
 	uint64_t lAgainL, lAgainS, lAgainSPD, lAgainVS;
 	uint32_t lDgainL, lDgainS, lDgainSPD, lDgainVS;
 	uint64_t lAddGain;
-	uint32_t lExpIn = static_cast<uint32_t>(exposure / 1.0us); // to usec
+	uint32_t lExpIn = static_cast<uint32_t>(exposures[0] / 1.0us); // to usec
 	uint32_t lExpLdoubleRows, lExpSPDdoubleRows, lExpVSdoubleRows;
 	uint64_t lExpTotalDoubleRows;
 	uint64_t lExpTotalL;
@@ -572,7 +572,7 @@ void CameraHelperMx95mbcam::controlListSetAGC(
 	}
 
 	/* L gain set to AEC total gain decision */
-	lAgainL = static_cast<uint64_t>(gain * Q16_1); // to UQ.16
+	lAgainL = static_cast<uint64_t>(gains[0] * Q16_1); // to UQ.16
 
 	/* check lAgainL for minimum converted level, and re-calc for MIN */
 	if (lAgainL < lMinGainL) {

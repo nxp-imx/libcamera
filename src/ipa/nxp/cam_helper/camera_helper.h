@@ -6,7 +6,7 @@
  *
  * camera_helper.h
  * Helper class that performs sensor-specific parameter computations
- * Copyright 2024-2025 NXP
+ * Copyright 2024-2026 NXP
  */
 
 #pragma once
@@ -60,12 +60,6 @@ enum SensorStreamModes {
 	SensorStreamDualContext,
 };
 
-/* Sensor frame context types */
-enum SensorContextTypes {
-	SensorContextRgb = 0,
-	SensorContextIr,
-};
-
 /* Subset of IPACameraSensorInfo structure*/
 struct CameraMode {
 	/* bit depth of the raw camera output */
@@ -91,8 +85,8 @@ public:
 	virtual void setControls(const ControlList *sensorCtrls);
 
 	virtual void controlListSetAGC(
-		ControlList *ctrls, SensorContextTypes context,
-		Duration exposure, double gain);
+		ControlList *ctrls,
+		Span<const Duration> exposures, Span<const double> gains);
 
 	virtual void controlInfoMapGetExposureRange(
 		const ControlInfoMap *ctrls, std::vector<Duration> *minExposure,
