@@ -1855,9 +1855,10 @@ int NxpNeoCameraData::queueRequestDevice(Request *request)
 	}
 
 	if (ret) {
+		/* Request will be cancelled as an error is returned. */
 		LOG(NxpNeoPipe, Error)
 			<< "Failed to queue buffers, unbalanced queues";
-		cancelCompleteRequest(info);
+		frameInfos_.destroy(info->id_);
 		return -EIO;
 	}
 
