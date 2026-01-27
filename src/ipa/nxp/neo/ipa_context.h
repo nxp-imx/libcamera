@@ -207,6 +207,7 @@ struct IPAFrameContext : public FrameContext {
 	} goc;
 
 	IPAContextType contextType;
+	std::map<IPAContextType, bool> processed;
 };
 
 struct IPAContext {

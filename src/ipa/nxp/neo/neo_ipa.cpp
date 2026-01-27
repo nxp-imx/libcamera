@@ -342,6 +342,9 @@ void IPANxpNeo::queueRequest(const uint32_t frame, const ControlList &controls)
 {
 	IPAFrameContext &frameContext = context_.frameContexts.alloc(frame);
 
+	for (const auto &ctxt : context_.configuration.activeContexts)
+		frameContext.processed[ctxt] = false;
+
 	for (auto const &a : algorithms()) {
 		Algorithm *algo = static_cast<Algorithm *>(a.get());
 		if (algo->disabled_)
@@ -473,6 +476,9 @@ void IPANxpNeo::processStats(const uint32_t frame, const IPAContextType context,
 			continue;
 		algo->process(context_, frame, frameContext, &stats, metadata);
 	}
+
+	/* Set processed flag for this context. */
+	frameContext.processed.at(context) = true;
 
 	setControls(frame, context);
 	metadataReady.emit(frame, context, metadata);
