@@ -106,8 +106,10 @@ int Agc::configure(IPAContext &context, const IPACameraSensorInfo &configInfo)
 	context.configuration.agc.roi.width = configInfo.outputSize.width;
 	context.configuration.agc.roi.height = configInfo.outputSize.height;
 
-	for (const auto &[id, agc] : agcs_)
-		agc->configure(context);
+	for (const auto &ctxt : context.configuration.activeContexts) {
+		context.activeState.agcs[ctxt] = {};
+		agcs_[ctxt]->configure(context);
+	}
 
 	return 0;
 }
@@ -131,7 +133,7 @@ void Agc::queueRequest(IPAContext &context,
 	 * Initialize autoEnabled with any context, it is the same
 	 * for both of them.
 	 */
-	bool autoEnabled = context.activeState.agc[IPAContextTypeRgb].autoEnabled;
+	bool autoEnabled = context.activeState.agcs.at(IPAContextTypeRgb).autoEnabled;
 
 	const auto &agcEnable = controls.get(controls::AeEnable);
 	if (agcEnable && *agcEnable != autoEnabled) {
@@ -144,9 +146,7 @@ void Agc::queueRequest(IPAContext &context,
 	const auto &exposure = controls.get(controls::ExposureTime);
 	const auto &gain = controls.get(controls::AnalogueGain);
 
-	const std::array<IPAContextType, 2> allContexts = { IPAContextTypeRgb, IPAContextTypeIr };
-	for (const auto &contextType : allContexts) {
-		auto &agc = context.activeState.agc[contextType];
+	for (auto &[contextType, agc] : context.activeState.agcs) {
 		agc.autoEnabled = autoEnabled;
 		if (exposure && !autoEnabled) {
 			agc.manual.exposure = *exposure * 1.0us
@@ -162,8 +162,8 @@ void Agc::queueRequest(IPAContext &context,
 				<< " Set gain to " << agc.manual.gain;
 		}
 
-		auto &agcFrameContext = frameContext.agc[contextType];
-		agcFrameContext.autoEnabled = agc.autoEnabled;
+		frameContext.agcs[contextType].autoEnabled = agc.autoEnabled;
+		auto &agcFrameContext = frameContext.agcs.at(contextType);
 
 		if (!agcFrameContext.autoEnabled) {
 			agcFrameContext.exposure = agc.manual.exposure;
@@ -178,9 +178,9 @@ void Agc::queueRequest(IPAContext &context,
 void Agc::prepare(IPAContext &context, const uint32_t frame,
 		  IPAFrameContext &frameContext, NxpNeoParams *params)
 {
-	unsigned int contextId = frameContext.contextType;
-	auto agcActiveState = context.activeState.agc[contextId].automatic;
-	auto &agcFrameContext = frameContext.agc[contextId];
+	IPAContextType contextId = frameContext.contextType;
+	auto agcActiveState = context.activeState.agcs.at(contextId).automatic;
+	auto &agcFrameContext = frameContext.agcs.at(contextId);
 
 	if (agcFrameContext.autoEnabled) {
 		agcFrameContext.exposure = agcActiveState.exposure;
@@ -209,7 +209,7 @@ void Agc::fillMetadata(IPAContext &context, IPAFrameContext &frameContext,
 	if (frameContext.contextType == IPAContextTypeIr)
 		return;
 
-	auto agcSensor = frameContext.sensor.agc[frameContext.contextType];
+	auto agcSensor = frameContext.sensor.agcs.at(frameContext.contextType);
 	utils::Duration exposureTime = context.configuration.sensor.lineDuration *
 				       agcSensor.exposure;
 	metadata.set(controls::AnalogueGain, agcSensor.gain);
@@ -238,7 +238,7 @@ void Agc::process(IPAContext &context, [[maybe_unused]] const uint32_t frame,
 		  IPAFrameContext &frameContext, const NxpNeoStats *stats,
 		  ControlList &metadata)
 {
-	unsigned int contextId = frameContext.contextType;
+	IPAContextType contextId = frameContext.contextType;
 
 	if (!stats) {
 		fillMetadata(context, frameContext, metadata);
@@ -252,14 +252,14 @@ void Agc::process(IPAContext &context, [[maybe_unused]] const uint32_t frame,
 	 * The Agc algorithm needs to know the effective exposure value that was
 	 * applied to the sensor when the statistics were collected.
 	 */
-	auto agcSensor = frameContext.sensor.agc[contextId];
+	auto agcSensor = frameContext.sensor.agcs.at(contextId);
 	utils::Duration exposureTime = context.configuration.sensor.lineDuration *
 				       agcSensor.exposure;
 	double analogueGain = agcSensor.gain;
 	utils::Duration effectiveExposureValue = exposureTime * analogueGain;
 	utils::Duration newExposureTime;
 	double aGain, qGain, dGain;
-	auto &agcActiveState = context.activeState.agc[contextId];
+	auto &agcActiveState = context.activeState.agcs.at(contextId);
 
 	std::tie(newExposureTime, aGain, qGain, dGain) =
 		agcs_[contextId]->AgcMeanLuminance::calculateNewEv(
@@ -280,7 +280,7 @@ void Agc::process(IPAContext &context, [[maybe_unused]] const uint32_t frame,
 	 * Indeed the frame context for each frame is updated whilst
 	 * preparing the next frame.
 	 */
-	auto &agcFrameContext = frameContext.agc[contextId];
+	auto &agcFrameContext = frameContext.agcs.at(contextId);
 	if (!frame && agcFrameContext.autoEnabled) {
 		agcFrameContext.exposure = agcActiveState.automatic.exposure;
 		agcFrameContext.gain = agcActiveState.automatic.gain;
@@ -291,7 +291,7 @@ void Agc::process(IPAContext &context, [[maybe_unused]] const uint32_t frame,
 
 void AgcStats::configure(IPAContext &context)
 {
-	auto &agcActiveState = context.activeState.agc[contextType_];
+	auto &agcActiveState = context.activeState.agcs.at(contextType_);
 
 	/* Configure the default exposure and gain. */
 	agcActiveState.automatic.gain = context.configuration.sensor.minAnalogueGain;

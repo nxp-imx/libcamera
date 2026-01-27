@@ -5,7 +5,7 @@
  * Copyright (C) 2021-2022, Ideas On Board
  *
  * ipa_context.h - NXP NEO IPA Context
- * Copyright 2024-2025 NXP
+ * Copyright 2024-2026 NXP
  */
 
 #pragma once
@@ -38,8 +38,6 @@ struct IPAHwSettings {
 	uint32_t hwCapabilities;
 	uint32_t apiVersion;
 };
-
-static constexpr unsigned int kContextTypes = 2;
 
 struct IPASessionConfiguration {
 	struct {
@@ -100,6 +98,7 @@ struct IPASessionConfiguration {
 	} drc;
 
 	std::map<IPAStreamType, IPAStream> streams;
+	std::vector<IPAContextType> activeContexts;
 
 	IPAColorSpace colorSpace;
 	IPAModeType pipelineMode;
@@ -126,7 +125,7 @@ struct IPAActiveState {
 		uint32_t exposureMode;
 		bool autoEnabled;
 	};
-	std::array<agc, kContextTypes> agc;
+	std::map<IPAContextType, agc> agcs;
 
 	struct {
 		struct {
@@ -171,7 +170,7 @@ struct IPAFrameContext : public FrameContext {
 		double gain;
 		bool autoEnabled;
 	};
-	std::array<agc, kContextTypes> agc;
+	std::map<IPAContextType, agc> agcs;
 
 	struct {
 		RGB<double> gains;
@@ -192,7 +191,7 @@ struct IPAFrameContext : public FrameContext {
 			uint32_t exposure;
 			double gain;
 		};
-		std::array<agc, kContextTypes> agc;
+		std::map<IPAContextType, agc> agcs;
 		RGB<double> wbGains;
 		ControlList mdControls;
 		bool metaDataValid;

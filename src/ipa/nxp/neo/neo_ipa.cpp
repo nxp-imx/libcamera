@@ -267,6 +267,12 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 
 	context_.configuration.pipelineMode = ipaConfig.mode;
 
+	/* Initialize active RGB/Ir contexts. */
+	context_.configuration.activeContexts =
+		context_.configuration.pipelineMode == IPAModeTypeRgbIrDual ?
+		std::vector<IPAContextType> { IPAContextTypeRgb, IPAContextTypeIr } :
+		std::vector<IPAContextType> { IPAContextTypeRgb };
+
 	const IPACameraSensorInfo &info = ipaConfig.sensorInfo;
 	sensorControlList_ = ipaConfig.sensorControlList;
 
@@ -619,9 +625,10 @@ void IPANxpNeo::updateFrameContextSensorMeta(const uint32_t frame, const IPACont
 		exposure = context_.configuration.sensor.minExposureTime;
 	}
 
-	frameContext.sensor.agc[context].exposure = context_.camHelper->exposureLines(
-		exposure,
-		context_.configuration.sensor.lineDuration);
+	frameContext.sensor.agcs[context].exposure =
+		context_.camHelper->exposureLines(
+			exposure,
+			context_.configuration.sensor.lineDuration);
 
 	float aGain = 1.0f;
 	if (mdControls.contains(md::AnalogueGain.id())) {
@@ -647,7 +654,7 @@ void IPANxpNeo::updateFrameContextSensorMeta(const uint32_t frame, const IPACont
 		LOG(NxpNeoIPA, Warning) << "No digital gain metadata";
 	}
 
-	frameContext.sensor.agc[context].gain = aGain * dGain;
+	frameContext.sensor.agcs[context].gain = aGain * dGain;
 
 	std::array<float, 4> wbGainsArray = { 1.0f, 1.0f, 1.0f, 1.0f };
 	if (mdControls.contains(md::WhiteBalanceGain.id())) {
@@ -684,9 +691,8 @@ void IPANxpNeo::setControls(unsigned int frame, IPAContextType context)
 	 * \todo The frame number is most likely wrong here, we need to take
 	 * internal sensor delays and other timing parameters into account.
 	 */
-
 	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
-	auto agcFrameContext = frameContext.agc[context];
+	auto agcFrameContext = frameContext.agcs.at(context);
 
 	ControlList ctrls(sensorControls_);
 
