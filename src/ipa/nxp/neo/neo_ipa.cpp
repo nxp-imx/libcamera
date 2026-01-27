@@ -89,6 +89,7 @@ private:
 			    const ControlInfoMap &sensorControls,
 			    ControlInfoMap *ipaControls);
 	void updateFrameContextSensorMeta(const uint32_t frame, const IPAContextType context);
+	void setInitialControls();
 	void setControls(unsigned int frame, IPAContextType context);
 	std::string controlListToString(const ControlList *ctrls) const;
 	std::string logSensorParams(const unsigned int frame,
@@ -245,9 +246,7 @@ int IPANxpNeo::init(const IPASettings &settings, const InitParams &params,
 
 int IPANxpNeo::start()
 {
-	const std::array<IPAContextType, 2> allContexts = { IPAContextTypeRgb, IPAContextTypeIr };
-	for (const auto &context : allContexts)
-		setControls(0, context);
+	setInitialControls();
 
 	return 0;
 }
@@ -667,6 +666,16 @@ void IPANxpNeo::updateFrameContextSensorMeta(const uint32_t frame, const IPACont
 	frameContext.sensor.wbGains.r() = wbGainsArray[0];
 	frameContext.sensor.wbGains.g() = wbGainsArray[1];
 	frameContext.sensor.wbGains.b() = wbGainsArray[3];
+}
+
+void IPANxpNeo::setInitialControls()
+{
+	const uint32_t frame = 0;
+	ControlList ctrls(sensorControls_);
+
+	/* No sensor controls are sent as initial settings. */
+
+	setSensorControls.emit(frame, ctrls);
 }
 
 void IPANxpNeo::setControls(unsigned int frame, IPAContextType context)
