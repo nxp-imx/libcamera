@@ -707,13 +707,6 @@ void IPANxpNeo::setControls(unsigned int frame, IPAContextType context)
 			wbGains[3] = frameContext.awb.gains.b();
 			context_.camHelper->controlListSetAWB(&ctrls, Span<const double, 4>(wbGains));
 		}
-	} else if (!context_.configuration.awb.awbGainInSensor) {
-		/*
-		 * Set unitary white balance gains in sensor
-		 * when white balance gains are applied in the ISP.
-		 */
-		std::array<double, 4> wbGains = { 1.0f, 1.0f, 1.0f, 1.0f };
-		context_.camHelper->controlListSetAWB(&ctrls, Span<const double, 4>(wbGains));
 	}
 
 	LOG(NxpNeoControlList, Debug)
