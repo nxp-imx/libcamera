@@ -1,0 +1,110 @@
+# SPDX-License-Identifier: CC0-1.0
+# CCM matrixes come from the RPi imx708.json calibration file
+%YAML 1.1
+---
+version: 1
+algorithms:
+  - PipeConf:
+  - Awb:
+  - BlackLevelCorrection:
+      # offset 64 for 10-bit bitdepth
+      R: 4096
+      Gr: 4096
+      Gb: 4096
+      B: 4096
+  - Ccm:
+      ccms: [
+          {
+              ct: 2964,
+              ccm:
+              [
+                  1.72129, -0.45961, -0.26169,
+                  -0.30042, 1.56924, -0.26882,
+                  0.15133, -1.13293, 1.98161
+              ]
+          },
+          {
+              ct: 3610,
+              ccm:
+              [
+                  1.54474, -0.35082, -0.19391,
+                  -0.36989, 1.67926, -0.30936,
+                  -0.00524, -0.55197, 1.55722
+              ]
+          },
+          {
+              ct: 4640,
+              ccm:
+              [
+                  1.52972, -0.35168, -0.17804,
+                  -0.28309, 1.67098, -0.38788,
+                  0.01695, -0.57209, 1.55515
+              ]
+          },
+          {
+              ct: 5910,
+              ccm:
+              [
+                  1.56879, -0.42159, -0.14719,
+                  -0.27275, 1.59354, -0.32079,
+                  -0.02862, -0.40662, 1.43525
+              ]
+          },
+          {
+              ct: 7590,
+              ccm:
+              [
+                  1.41424, -0.21092, -0.20332,
+                  -0.17646, 1.71734, -0.54087,
+                  0.01297, -0.63111, 1.61814
+              ]
+          }
+      ]
+  - Agc:
+  - Af:
+      ranges:
+        normal:
+          min: 0.0
+          max: 12.0
+          default: 1.0
+        macro:
+          min: 3.0
+          max: 15.0
+          default: 4.0
+      speeds:
+        # CDAF only - PDAF not supported
+        normal:
+          step_coarse: 1.0
+          step_fine: 0.25
+          contrast_ratio: 0.75
+          retrigger_ratio: 0.8
+          retrigger_delay: 10
+          pdaf_gain: 0
+          pdaf_squelch: 0.125
+          max_slew: 1.5
+          pdaf_frames: 20
+          dropout_frames: 0
+          step_frames: 5
+        fast:
+          step_coarse: 1.25
+          step_fine: 0.0
+          contrast_ratio: 0.75
+          retrigger_ratio: 0.8
+          retrigger_delay: 8
+          pdaf_gain: 0
+          pdaf_squelch: 0.125
+          max_slew: 2.0
+          pdaf_frames: 16
+          dropout_frames: 0
+          step_frames: 4
+      conf_epsilon: 8
+      conf_thresh: 16
+      conf_clip: 512
+      skip_frames: 5
+      check_for_ir: false
+      map:
+        - 0.0
+        - 445
+        - 15.0
+        - 925
+...

@@ -65,6 +65,7 @@ libcamera_ipa_headers += custom_target('core_ipa_serializer_h',
 pipeline_ipa_mojom_mapping = {
     'ipu3': 'ipu3.mojom',
     'mali-c55': 'mali-c55.mojom',
+    'nxp/neo': 'nxpneo.mojom',
     'rkisp1': 'rkisp1.mojom',
     'rpi/pisp': 'raspberrypi.mojom',
     'rpi/vc4': 'raspberrypi.mojom',
