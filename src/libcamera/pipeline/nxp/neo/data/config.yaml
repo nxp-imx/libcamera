@@ -1,0 +1,113 @@
+# SPDX-License-Identifier: CC0-1.0
+
+# Neo pipeline platform config file example
+#
+# This config file format is experimental and subject to change.
+#
+# It consists in multiple sections whose definitions are optional:
+# - global: configure the parameters common to all cameras
+# - cameras: configure some attributes for particular cameras
+#
+# The global section defines the parameters that are common to all cameras. It
+# consists in a mapping of properties with their values. The supported global
+# properties are:
+#
+# buffer-count      = number of buffers to allocate for a stream
+#                     optional, default value is 4
+#
+# The cameras section consists in a list of camera definitions, that gives the
+# options to specify some attributes for a given camera. A camera is defined
+# either by its model or by its unique entity name to designate a specific
+# camera, as the model may be shared by multiple instances of the same camera.
+#
+# Cameras nodes definition:
+#
+# cameras           = sequence of camera-entry
+#
+# camera-entry      = mapping of {model, entity, streams, format, orientation,
+#                                 controls-delay}
+#   model           = camera model
+#                     optional if entity is defined
+#   entity          = camera entity name
+#                     optional, if model is defined
+#   streams         = sequence of extra streams to be enabled for that camera
+#                     stream values belong to [image1, edata]
+#                     - image1 stream is used for ISP-based HDR merge and RGBIr
+#                       context switch
+#                     - edata means that there is a dedicated stream available
+#                       for embedded data
+#                     optional - no extra streams by default
+#                     Support of streams configuration is experimental.
+#   format          = mapping of {bpp, size}
+#                     filter applied to the formats exposed by the camera driver
+#                     optional - no format filtering by default
+#     bpp           = restricts the camera formats to the ones whose mbus-code
+#                     bit-per-pixel matches this value
+#                     optional
+#     size          = sequence of two values (<width>, <height>)
+#                     restricts the camera formats exposed to the user to the
+#                     ones whose size matches this value
+#                     optional
+#   rgbir-cfa     = sensor CFA pattern is RGBIr 4x4, boolean value
+#                   optional - false by default
+#   orientation   = camera orientation
+#                   requires both hflip and vflip support from camera driver
+#                   values in [1..4]:
+#                     1: rotate 0
+#                     2: rotate 0 + mirror
+#                     3: rotate 180
+#                     4: rotate 180 + mirror
+#                   optional - default is the camera mounting orientation
+#   controls-delay =
+#                   delay in ms applied to the front-end frame done event before
+#                   updating the camera controls, to workaround device-specific
+#                   issues (experimental)
+#                   optional - default is 0
+#
+#   vivid-instances = sequence of vivid camera instance configurations
+#                     Optional, specific to vivid-camera virtual camera driver
+#     pixel-format  = pixel format string (e.g. SBGGR12, SGRBG10)
+#                     mandatory when configuration is present
+#     size          = sequence of two values (<width>, <height>)
+#                     mandatory when configuration is present
+#     loopback      = input/output loopback mode enabled, boolean value
+#                     optional - false by default
+#     tpg-pattern   = test pattern generator pattern selection [0..20]
+#                     optional - 0 by default
+#     tpg-hmove     = test pattern generator horizontal movement speed [0..6]
+#                     optional - 3 by default (None)
+#     tpg-vmove     = test pattern generator vertical movement speed [0..6]
+#                     optional - 3 by default (None)
+#
+# 'cameras' section definition example:
+#
+# cameras:
+#   - model: os08a20
+#     streams: [image1]
+#     format: {bpp: 10, size: [1920, 1080]}
+#
+
+%YAML 1.1
+---
+version: 1.0
+global:
+  buffer-count: 8
+cameras:
+  - model: os08a20
+# Uncomment the line below to enable os08a20 HDR operation
+#    streams: [image1]
+  - model: mx95mbcam
+    controls-delay: 3
+  - model: ox05b1s
+    rgbir-cfa: true
+# Uncomment the line below to enable RGBIr context switch
+#    streams: [image1]
+  - model: vivid
+    vivid-instances:
+        - pixel-format: SBGGR12
+          size: [1920, 1080]
+          loopback: false
+          tpg-pattern: 0
+          tpg-hmove: 3
+          tpg-vmove: 3
+...
