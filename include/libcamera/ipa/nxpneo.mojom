@@ -1,0 +1,145 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+/*
+ * Based on rkisp1.mojom
+ * Copyright 2024-2026 NXP
+ */
+
+/*
+ * \todo Document the interface and remove the related EXCLUDE_PATTERNS entry.
+ */
+
+module ipa.nxpneo;
+
+import "include/libcamera/ipa/core.mojom";
+
+/*
+ * The IPAColorSpace struct and associated enums are mirrored with the
+ * libcamera ColorSpace class definition.
+ */
+[scopedEnum] enum IPAPrimaries {
+	Raw,
+	Smpte170m,
+	Rec709,
+	Rec2020,
+};
+
+[scopedEnum] enum IPATransferFunction {
+	Linear,
+	Srgb,
+	Rec709,
+};
+
+[scopedEnum] enum IPAYcbcrEncoding {
+	None,
+	Rec601,
+	Rec709,
+	Rec2020,
+};
+
+[scopedEnum] enum IPARange {
+	Full,
+	Limited,
+};
+
+struct IPAColorSpace {
+	IPAPrimaries primaries;
+	IPATransferFunction transferFunction;
+	IPAYcbcrEncoding ycbcrEncoding;
+	IPARange range;
+};
+
+struct InitParams {
+	uint32 hwRevision;
+	uint32 hwCapabilities;
+	uint64 supportedParamsBlocks;
+	string sensorEntity;
+	libcamera.IPACameraSensorInfo sensorInfo;
+	libcamera.ControlInfoMap sensorControls;
+	libcamera.ControlList sensorControlList;
+	bool lensPresent;
+};
+
+struct IPAConfigInfo {
+	libcamera.IPACameraSensorInfo sensorInfo;
+	libcamera.ControlInfoMap sensorControls;
+	libcamera.ControlInfoMap lensControls;
+	libcamera.ControlList sensorControlList;
+	IPAPipelineMode mode;
+	IPAColorSpace colorSpace;
+	/* \todo remove when available from IPACameraSensorInfo */
+	uint32 bitsPerPixelAuxiliary;
+};
+
+struct DelayedControlsParams {
+	uint32 delay;
+	bool priorityWrite;
+};
+
+struct SensorConfig {
+	map<int32, DelayedControlsParams> delayedControlsParams;
+	uint32 embeddedTopLines;
+};
+
+/* ISP output stream */
+[scopedEnum] enum IPAStreamType {
+	Frame,
+	Ir,
+};
+
+/*
+ * Those enums are mirrored in neo pipeline handler definitions in order to keep
+ * both interfaces self-contained though keeping trivial enums conversion.
+ */
+
+/* Buffer types used as key in buffersId maps */
+[scopedEnum] enum IPABufferType {
+	Image0,
+	Image1,
+	EData,
+	Params,
+	Stats,
+	Frame,
+	Ir,
+};
+
+[scopedEnum] enum IPACameraContext {
+	Rgb,
+	Ir,
+};
+
+[scopedEnum] enum IPAPipelineMode {
+	Standard,
+	HdrMerge,
+	RgbIr,
+	RgbIrDual,
+};
+
+interface IPANxpNeoInterface {
+	init(libcamera.IPASettings settings, InitParams params)
+		=> (int32 ret,
+		    libcamera.ControlInfoMap ipaControls,
+		    SensorConfig sensorConfig);
+	start() => (int32 ret);
+	stop();
+
+	configure(IPAConfigInfo configInfo,
+		  map<IPAStreamType, libcamera.IPAStream> streamConfig)
+		=> (int32 ret, libcamera.ControlInfoMap ipaControls);
+
+	mapBuffers(array<libcamera.IPABuffer> buffers);
+	unmapBuffers(array<uint32> ids);
+
+	[async] queueRequest(uint32 frame, libcamera.ControlList reqControls);
+	[async] computeParams(uint32 frame, IPACameraContext context,
+			      map<IPABufferType, uint32> bufferIds);
+	[async] processStats(uint32 frame, IPACameraContext context,
+			     map<IPABufferType, uint32> bufferIds,
+			     libcamera.ControlList sensorControls);
+};
+
+interface IPANxpNeoEventInterface {
+	paramsComputed(uint32 frame, IPACameraContext context, uint32 bytesused);
+	setSensorControls(uint32 frame, libcamera.ControlList sensorControls);
+	setLensControls(libcamera.ControlList controls);
+	metadataReady(uint32 frame, IPACameraContext context, libcamera.ControlList metadata);
+};
