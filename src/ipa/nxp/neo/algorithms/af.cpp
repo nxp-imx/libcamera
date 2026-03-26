@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * Copyright 2025 NXP
+ * Copyright 2025-2026 NXP
  *
  * Autofocus control algorithm
  */
@@ -118,8 +118,8 @@ int Af::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData)
 		out = defaultShift;
 		if (shift) {
 			uint8_t value = shift.value();
-			if (value > kShitMax)
-				LOG(NxpNeoAlgoAf, Warning) << "Invalid shit value for " << name;
+			if (value > kShiftMax)
+				LOG(NxpNeoAlgoAf, Warning) << "Invalid shift value for " << name;
 			else
 				out = value;
 		}

@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
+ * Copyright 2024-2026 NXP
+ *
+ * ISI device
+ *
  * Based on Intel IPU3 CIO2
  *     src/libcamera/pipeline/ipu3/cio2.h
  * Copyright (C) 2019, Google Inc.
- *
- * Copyright 2024-2025 NXP
- * isi_device.h - NXP ISI
  */
 
 #pragma once

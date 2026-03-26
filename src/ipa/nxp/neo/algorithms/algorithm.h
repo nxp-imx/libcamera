@@ -5,7 +5,7 @@
  * Copyright (C) 2021, Ideas On Board
  *
  * algorithm.h - NXP NEO control algorithm interface
- * Copyright 2024 NXP
+ * Copyright 2024-2026 NXP
  */
 
 #pragma once
@@ -18,16 +18,26 @@ namespace libcamera {
 
 namespace ipa::nxpneo {
 
+enum AlgorithmIrOps : uint32_t {
+	IrOpNone = 0,
+	IrOpPrepare = (1 << 0),
+	IrOpProcess = (1 << 1),
+	IrOpAll = (IrOpPrepare | IrOpProcess),
+};
+
 class Algorithm : public libcamera::ipa::Algorithm<Module>
 {
 public:
 	Algorithm()
-		: disabled_(false), supportsIr_(false)
+		: irOps_(IrOpNone)
 	{
 	}
 
-	bool disabled_;
-	bool supportsIr_;
+	uint32_t irOps() const { return irOps_; };
+	void setIrOps(uint32_t ops) { irOps_ = ops; }
+
+private:
+	uint32_t irOps_;
 };
 
 } /* namespace ipa::nxpneo */

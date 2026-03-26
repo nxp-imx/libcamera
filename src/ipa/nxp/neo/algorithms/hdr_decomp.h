@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * hdr_decomp.h - NXP NEO HDR Decompression configuration
- * Copyright 2024-2025 NXP
+ * Copyright 2024-2026 NXP
  */
 
 #pragma once
@@ -21,7 +21,7 @@ namespace ipa::nxpneo::algorithms {
 class HdrDecomp : public Algorithm
 {
 public:
-	HdrDecomp() {}
+	HdrDecomp();
 	~HdrDecomp() = default;
 
 	int init(IPAContext &context, const YamlObject &tuningData) override;

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * blc.cpp - NXP NEO Black Level Correction
- * Copyright 2025 NXP
+ * Copyright 2025-2026 NXP
  */
 
 #include "blc.h"
@@ -117,6 +117,7 @@ const std::map<const std::string, std::vector<uint8_t>> BlackLevelCorrection::kO
 BlackLevelCorrection::BlackLevelCorrection()
 	: enabled_(false), obwbs_(kObwbMap.at(kDefaultObwb))
 {
+	setIrOps(IrOpPrepare);
 }
 
 /**

@@ -200,6 +200,7 @@ CameraSensor::~CameraSensor() = default;
  */
 
 /**
+ * \fn CameraSensor::imageStream()
  * \brief Retrieve the image source stream
  *
  * Sensors that produce multiple streams do not guarantee that the image stream

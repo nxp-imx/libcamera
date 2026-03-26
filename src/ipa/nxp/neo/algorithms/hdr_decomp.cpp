@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * hdr_decomp.cpp - NXP NEO HDR Decompression configuration
- * Copyright 2025 NXP
+ * Copyright 2025-2026 NXP
  */
 
 #include "hdr_decomp.h"
@@ -114,6 +114,11 @@ namespace ipa::nxpneo::algorithms {
  */
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoHdrDecomp)
+
+HdrDecomp::HdrDecomp()
+{
+	setIrOps(IrOpPrepare);
+}
 
 /**
  * \copydoc libcamera::ipa::Algorithm::init

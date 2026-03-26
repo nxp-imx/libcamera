@@ -27,6 +27,7 @@
 #include "libcamera/internal/media_device.h"
 #include "libcamera/internal/media_pipeline.h"
 #include "libcamera/internal/pipeline_handler.h"
+#include "libcamera/internal/request.h"
 #include "libcamera/internal/v4l2_subdevice.h"
 #include "libcamera/internal/v4l2_videodevice.h"
 
@@ -1148,7 +1149,7 @@ void PipelineHandlerISI::bufferReady(FrameBuffer *buffer)
 	Request *request = buffer->request();
 
 	/* Record the sensor's timestamp in the request metadata. */
-	ControlList &metadata = request->metadata();
+	ControlList &metadata = request->_d()->metadata();
 	if (!metadata.contains(controls::SensorTimestamp.id()))
 		metadata.set(controls::SensorTimestamp,
 			     buffer->metadata().timestamp);

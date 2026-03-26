@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * neo-utils.cpp - Helpers for NXP NEO pipeline
- * Copyright 2024-2025 NXP
+ * Copyright 2024-2026 NXP
+ *
+ * Neo ISP pipeline utilities
  */
 
 #include "neo_utils.h"

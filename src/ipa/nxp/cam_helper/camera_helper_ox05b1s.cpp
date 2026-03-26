@@ -3,7 +3,7 @@
  * camera_helper_ox05b1s.c
  * Helper class that performs sensor-specific parameter computations
  * for Omnivision ox05b1s sensor
- * Copyright 2024-2025 NXP
+ * Copyright 2024-2026 NXP
  */
 
 #include <cmath>
@@ -44,26 +44,23 @@ public:
 			{ V4L2_CID_AGAIN_MULTI, { 1, false } },
 			{ V4L2_CID_EXPOSURE_MULTI, { 2, false } },
 		};
-		/* Multi controls values cache - minimum values by default. */
-		multiExposures_ = { kMinexposureLines, kMinexposureLines };
-		multiGains_ = { gainCode(kMinAnalogGain), gainCode(kMinAnalogGain) };
 	}
 
 	uint32_t gainCode(double gain) const override;
 	double gain(uint32_t gainCode) const override;
 
 	void controlListSetAGC(
-		ControlList *ctrls, SensorContextTypes context,
-		Duration exposure, double gain) override;
+		ControlList *ctrls,
+		Span<const Duration> exposures, Span<const double> gains) override;
 	int sensorControlsToMetaData(
 		const ControlList *sensorCtrls, ControlList *mdCtrls) const override;
 
 private:
+	int sensorControlsToMetaDataDualContext(
+		const ControlList *sensorCtrls, ControlList *mdCtrls) const;
+
 	static constexpr double kMinAnalogGain = 1.0;
 	static constexpr uint32_t kMinexposureLines = 6;
-
-	std::array<uint32_t, 2> multiExposures_;
-	std::array<uint32_t, 2> multiGains_;
 };
 
 uint32_t CameraHelperOx05b1s::gainCode(double gain) const
@@ -89,38 +86,60 @@ double CameraHelperOx05b1s::gain(uint32_t gainCode) const
 }
 
 void CameraHelperOx05b1s::controlListSetAGC(
-	ControlList *ctrls, SensorContextTypes context,
-	Duration exposure, double gain)
+	ControlList *ctrls,
+	Span<const Duration> exposures, Span<const double> gains)
 {
-	/* For now, the standard single-capture controls are used for all stream modes. */
-	if (mode_.streamMode <= SensorStreamDualContext)
-		return CameraHelper::controlListSetAGC(ctrls, context, exposure, gain);
+	/* In non Dual Context mode, the standard single-capture controls are used. */
+	if (mode_.streamMode != SensorStreamDualContext)
+		return CameraHelper::controlListSetAGC(ctrls, exposures, gains);
 
+#ifndef DUAL_MULTI_CAPTURES
+	/*
+	 * For now, the standard single-capture controls are used in Dual Context mode.
+	 * \todo Remove when multi capture controls are enabled.
+	 */
+	return CameraHelper::controlListSetAGC(ctrls, exposures, gains);
+#else
 	/*
 	 * The multi-capture controls will be enabled in RGBIr dual mode when
 	 * the sensor driver will have proper context switch operation.
 	 */
-	unsigned int indexMulti = 0;
-	if (context == SensorContextIr)
-		indexMulti = 1;
-	multiExposures_[indexMulti] = exposureLines(exposure, hblankToLineLength(mode_.hblank));
-	multiGains_[indexMulti] = gainCode(gain);
+	std::array<uint32_t, 2> exposureLines;
+	std::array<uint32_t, 2> gainCodes;
+	Duration lineLength = hblankToLineLength(mode_.hblank);
+	ASSERT(exposures.size() == 2);
+	ASSERT(gains.size() == 2);
+	for (size_t i = 0; i < 2; i++) {
+		exposureLines[i] = CameraHelper::exposureLines(exposures[i],
+							       lineLength);
+		gainCodes[i] = gainCode(gains[i]);
+	}
 
-	ctrls->set(V4L2_CID_AGAIN_MULTI, Span<uint32_t>(multiGains_));
-	ctrls->set(V4L2_CID_EXPOSURE_MULTI, Span<uint32_t>(multiExposures_));
+	ctrls->set(V4L2_CID_AGAIN_MULTI, Span<uint32_t>(gainCodes));
+	ctrls->set(V4L2_CID_EXPOSURE_MULTI, Span<uint32_t>(exposureLines));
+#endif
 }
 
 int CameraHelperOx05b1s::sensorControlsToMetaData(const ControlList *sensorCtrls,
 						  ControlList *mdCtrls) const
 {
-	int ret = 0;
-
 	/* In non Dual Context mode, the standard single-capture controls are used. */
 	if (mode_.streamMode != SensorStreamDualContext)
 		return CameraHelper::sensorControlsToMetaData(sensorCtrls,
 							      mdCtrls);
 
-	/* In Dual Context mode, the multi-capture controls are used. */
+#ifndef DUAL_MULTI_CAPTURES
+	/*
+	 * For now, the standard single-capture controls are used in Dual Context mode.
+	 * \todo Remove when multi capture controls are enabled.
+	 */
+	return sensorControlsToMetaDataDualContext(sensorCtrls, mdCtrls);
+#else
+	/*
+	 * The multi-capture controls will be enabled in RGBIr dual mode when
+	 * the sensor driver will have proper context switch operation.
+	 */
+	int ret = 0;
 	const ControlValue &aGainCtrl = sensorCtrls->get(V4L2_CID_AGAIN_MULTI);
 	std::array<float, 2> aGainsArray = { 1.0f, 1.0f };
 	if (!aGainCtrl.isNone()) {
@@ -146,6 +165,67 @@ int CameraHelperOx05b1s::sensorControlsToMetaData(const ControlList *sensorCtrls
 		Duration lineLength = hblankToLineLength(mode_.hblank);
 		exposureArray[0] = exposure(exposures[0], lineLength) / 1.0s;
 		exposureArray[1] = exposure(exposures[1], lineLength) / 1.0s;
+	} else {
+		LOG(NxpCameraHelper, Warning) << "Invalid exposure control";
+		ret = -EINVAL;
+	}
+	mdCtrls->set(md::Exposure, Span<float>(exposureArray));
+
+	/* Unitary gains for white balance */
+	std::array<float, 4> wbGains = { 1.0f, 1.0f, 1.0f, 1.0f };
+	mdCtrls->set(md::WhiteBalanceGain, Span<float>(wbGains));
+
+	/* Arbitrary temperature value */
+	mdCtrls->set(md::Temperature, 25.0);
+
+	return ret;
+#endif
+}
+
+/**
+ * \brief Convert a sensor control list to its associated metadata control list
+ * (RGBIr dual mode relying on single-capture controls)
+ *
+ * This implementation is used in RGBIr dual mode when relying on the
+ * single-capture controls to get the sensor metadata.
+ * In such case, the sensor AEC is controlled only for the RGB context and also
+ * applies to IR. Thus, the same AEC values from the RGB context are
+ * reported in the both RGB and IR metadata.
+ *
+ * \param[in] sensorCtrls The sensor control list
+ * \param[out] mdCtrls The metadata control list
+ *
+ * \return 0 on success, or a negative error code otherwise
+ */
+int CameraHelperOx05b1s::sensorControlsToMetaDataDualContext(
+	const ControlList *sensorCtrls,
+	ControlList *mdCtrls) const
+{
+	int ret = 0;
+
+	const ControlValue &aGainCtrl = sensorCtrls->get(V4L2_CID_ANALOGUE_GAIN);
+	std::array<float, 2> aGainsArray = { 1.0f, 1.0f };
+	if (!aGainCtrl.isNone()) {
+		uint32_t aGainCode = aGainCtrl.get<int32_t>();
+		aGainsArray[0] = gain(aGainCode);
+		aGainsArray[1] = aGainsArray[0];
+	} else {
+		LOG(NxpCameraHelper, Warning) << "Invalid analog gain control";
+		ret = -EINVAL;
+	}
+	mdCtrls->set(md::AnalogueGain, Span<float>(aGainsArray));
+
+	/* Unitary gain for digital gain */
+	std::array<float, 2> dGainsArray = { 1.0f, 1.0f };
+	mdCtrls->set(md::DigitalGain, Span<float>(dGainsArray));
+
+	const ControlValue &exposureCtrl = sensorCtrls->get(V4L2_CID_EXPOSURE);
+	std::array<float, 2> exposureArray = { 0.01f, 0.01f };
+	if (!exposureCtrl.isNone()) {
+		int32_t exposureLines = exposureCtrl.get<int32_t>();
+		Duration lineLength = hblankToLineLength(mode_.hblank);
+		exposureArray[0] = exposure(exposureLines, lineLength) / 1.0s;
+		exposureArray[1] = exposureArray[0];
 	} else {
 		LOG(NxpCameraHelper, Warning) << "Invalid exposure control";
 		ret = -EINVAL;

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * rgbir.h - NXP NEO RGBIR to RGB,IR block configuration
- * Copyright 2024 NXP
+ * Copyright 2024-2026 NXP
  */
 
 #pragma once
@@ -21,7 +21,7 @@ namespace ipa::nxpneo::algorithms {
 class RgbIr : public Algorithm
 {
 public:
-	RgbIr() = default;
+	RgbIr();
 	~RgbIr() = default;
 
 	int init(IPAContext &context, const YamlObject &tuningData) override;

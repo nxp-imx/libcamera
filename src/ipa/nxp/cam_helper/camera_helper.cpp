@@ -6,7 +6,7 @@
  *
  * camera_helper.c
  * Helper class that performs sensor-specific parameter computations
- * Copyright 2024-2025 NXP
+ * Copyright 2024-2026 NXP
  */
 #include "camera_helper.h"
 
@@ -222,20 +222,21 @@ void CameraHelper::setControls(const ControlList *sensorCtrls)
 /**
  * \brief Update sensor control list with AGC configuration
  * \param[inout] ctrls The control list to be updated
- * \param[in] context The frame context type
- * \param[in] exposure The AGC exposure duration in seconds
- * \param[in] gain The AGC real gain decision
+ * \param[in] exposures Span of AGC exposures duration in seconds
+ * \param[in] gains Span of AGC real gains decision
  *
  * This function aims to abstract the AGC control for sensor having
  * a proprietary programming model.
+ * The span used for the exposures and gains provides a set of values
+ * for multiple contexts (such as RGBIr dual mode with RGB and Ir contexts).
  */
 void CameraHelper::controlListSetAGC(
-	ControlList *ctrls, [[maybe_unused]] SensorContextTypes context,
-	Duration exposure, double gain)
+	ControlList *ctrls,
+	Span<const Duration> exposures, Span<const double> gains)
 {
-	ctrls->set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gainCode(gain)));
+	ctrls->set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gainCode(gains[0])));
 
-	int32_t lines = exposureLines(exposure, hblankToLineLength(mode_.hblank));
+	int32_t lines = exposureLines(exposures[0], hblankToLineLength(mode_.hblank));
 	ctrls->set(V4L2_CID_EXPOSURE, lines);
 }
 

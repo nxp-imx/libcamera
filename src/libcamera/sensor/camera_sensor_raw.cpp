@@ -176,10 +176,12 @@ CameraSensorRaw::~CameraSensorRaw() = default;
 std::variant<std::unique_ptr<CameraSensor>, int>
 CameraSensorRaw::match(MediaEntity *entity)
 {
+	using libcamera::_log;
+
 	/* Check the entity type. */
 	if (entity->type() != MediaEntity::Type::V4L2Subdevice ||
 	    entity->function() != MEDIA_ENT_F_CAM_SENSOR) {
-		libcamera::LOG(CameraSensor, Debug)
+		LOG(CameraSensor, Debug)
 			<< entity->name() << ": unsupported entity type ("
 			<< utils::to_underlying(entity->type())
 			<< ") or function (" << utils::hex(entity->function()) << ")";
@@ -204,7 +206,7 @@ CameraSensorRaw::match(MediaEntity *entity)
 			break;
 
 		default:
-			libcamera::LOG(CameraSensor, Debug)
+			LOG(CameraSensor, Debug)
 				<< entity->name() << ": unsupported pad " << pad->index()
 				<< " type " << utils::hex(pad->flags());
 			return { 0 };
@@ -212,7 +214,7 @@ CameraSensorRaw::match(MediaEntity *entity)
 	}
 
 	if (numSinks < 1 || numSinks > 3 || numSources != 1) {
-		libcamera::LOG(CameraSensor, Debug)
+		LOG(CameraSensor, Debug)
 			<< entity->name() << ": unsupported number of sinks ("
 			<< numSinks << ") or sources (" << numSources << ")";
 		return { 0 };
@@ -978,22 +980,20 @@ V4L2SubdeviceFormat CameraSensorRaw::embeddedDataFormat() const
 
 int CameraSensorRaw::setEmbeddedDataEnabled(bool enable)
 {
-	int ret;
-
 	if (!streams_.edata)
 		return enable ? -ENOSTR : 0;
 
-	V4L2Subdevice::Routing routing;
-	ret = subdev_->getRouting(&routing);
-	if (ret)
-		return ret;
+	V4L2Subdevice::Routing routing{ 2 };
 
-	for (V4L2Subdevice::Route &route : routing) {
-		if (route.source != streams_.edata->source)
-			continue;
-		route.flags = enable ? V4L2_SUBDEV_ROUTE_FL_ACTIVE : 0;
-	}
-	ret = subdev_->setRouting(&routing);
+	routing[0].sink = streams_.image.sink;
+	routing[0].source = streams_.image.source;
+	routing[0].flags = V4L2_SUBDEV_ROUTE_FL_ACTIVE;
+
+	routing[1].sink = streams_.edata->sink;
+	routing[1].source = streams_.edata->source;
+	routing[1].flags = enable ? V4L2_SUBDEV_ROUTE_FL_ACTIVE : 0;
+
+	int ret = subdev_->setRouting(&routing);
 	if (ret)
 		return ret;
 

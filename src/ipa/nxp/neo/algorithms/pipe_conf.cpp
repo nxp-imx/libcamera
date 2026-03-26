@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * pipe_conf.cpp - NXP NEO PIPE_CONF configuration
- * Copyright 2025 NXP
+ * Copyright 2025-2026 NXP
  */
 
 #include "pipe_conf.h"
@@ -66,11 +66,8 @@ namespace ipa::nxpneo::algorithms {
  * INALIGN0/1 configures, for the 10, 12, 14 and 20-bit pixel formats, if the
  * significant bits should be fetched MSB or LSB-aligned from the 16-bit aligned
  * words in the DDR buffer. On i.MX95 SoC, the DDR buffers produced by the ISI
- * device have the significant data bits MSB-aligned because of a hardware
+ * device have the significant data bits MSB-aligned because of hardware
  * limitation.
- * INALIGN0/1 are currently not exposed to the calibration file as they are
- * related to the underlying SoC - as of now, intent is to keep the calibration
- * file independent from the hardware.
  *
  * LPALIGN0/1 configure for each input path how the N-bit pixel data fetched
  * from the DDR buffer will be stored into the ISP internal pipeline.
@@ -80,9 +77,9 @@ namespace ipa::nxpneo::algorithms {
  *   - 20-bit MSB alignment for input0
  *   - 16-bit MSB alignment for input1
  * However there is a hardware peculiarity in the ISP hardware revision V2
- * (i.MX95 rev B0, i.MX952) and with 12-bit sensor pixel format:
- * - Rescaling for input0 and input1 is done to 16-bit regardless of the
- *   PIPECONF.LPALIGN setting.
+ * (i.MX95 rev B0, i.MX952) with 12-bit sensor pixel format: rescaling for
+ * input0 and input1 is done to 16-bit regardless of the PIPECONF.LPALIGN
+ * setting.
  *
  * Tables below recaps the ISP internal pipeline pixel data alignment depending
  * on the input camera bit per pixel (ibpp), LPALIGN0/1 configuration and the
@@ -115,6 +112,8 @@ namespace ipa::nxpneo::algorithms {
  * keys:
  *   lpalign0: LPALIGN0 value (0/1)
  *   lpalign1: LPALIGN1 value (0/1)
+ *   inalign0: INALIGN0 value (0/1)
+ *   inalign1: INALIGN1 value (0/1)
  *
  * When LPALIGN0/1 is explicitly configured in the calibration file with above
  * entries, those are applied with priority. If not configured, the algorithm
@@ -122,6 +121,14 @@ namespace ipa::nxpneo::algorithms {
  * - For non HDR-merge mode of operation, configure LPALIGN0/1=1
  * - For HDR-merge mode of operation, configure LPALIGN0/1=0 to keep the native
  *   camera pixel format, as required for the HDR merge block.
+ *
+ * When INALIGN0/1 is explicitly configured in the calibration file with above
+ * entries, those are applied with priority. If not configured, the algorithm
+ * falls back into automatic configuration mode using the following logic:
+ * - By default use INALIGN0/1=0 (pixel data LSB-aligned) which is V4L2 buffer
+ *   standard
+ * - For the platforms producing MSB-aligned pixel data because of hardware
+ *   limitation, configure INALIGN0/1=1 instead
  *
  * Note: for non-linear pixel format decompression using HDR Decompression unit,
  * a pixel format lower or equal to 16-bit is required to be able to define the
@@ -135,6 +142,7 @@ PipeConf::PipeConf()
 	: inAlign0_(0), lpAlign0_(kLpAlignDefault),
 	  inAlign1_(0), lpAlign1_(kLpAlignDefault)
 {
+	setIrOps(IrOpPrepare);
 }
 
 /**

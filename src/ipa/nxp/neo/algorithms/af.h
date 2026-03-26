@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * Copyright 2025 NXP
+ * Copyright 2025-2026 NXP
  *
  * Autofocus control algorithm
  */
@@ -62,7 +62,7 @@ private:
 		kFilter1Default{ -1, -2, -1, 0, 0, 0, 1, 2, 1 };
 
 	static constexpr unsigned kShiftDefault = 8;
-	static constexpr unsigned kShitMax = 31;
+	static constexpr unsigned kShiftMax = 31;
 	std::array<uint8_t, kFiltersCount> shifts_;
 };
 

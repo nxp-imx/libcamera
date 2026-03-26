@@ -5,7 +5,7 @@
  * Copyright (C) 2019, Google Inc.
  *
  * neo_ipa.cpp - NXP NEO Image Processing Algorithms
- * Copyright 2024-2025 NXP
+ * Copyright 2024-2026 NXP
  */
 
 #include <algorithm>
@@ -81,22 +81,20 @@ protected:
 	std::string logPrefix() const override;
 
 private:
-	static bool isAlgoDisabled(const IPAContextType context,
-				   Algorithm *algo);
 	void updateSensorConfig(const IPACameraSensorInfo &sensorInfo,
 				const ControlInfoMap &sensorControls);
 	void updateControls(const IPACameraSensorInfo &sensorInfo,
 			    const ControlInfoMap &sensorControls,
 			    ControlInfoMap *ipaControls);
 	void updateFrameContextSensorMeta(const uint32_t frame, const IPAContextType context);
-	void setControls(unsigned int frame, IPAContextType context);
+	void setInitialControls();
+	void setControls(unsigned int frame);
 	std::string controlListToString(const ControlList *ctrls) const;
 	std::string logSensorParams(const unsigned int frame,
 				    const ControlList *ctrlsApplied,
 				    const ControlList *ctrlsToApply) const;
 
 	static const std::map<const IPAModeType, SensorStreamModes> kSensorStreamModeMap;
-	static const std::map<const IPAContextType, SensorContextTypes> kSensorContextMap;
 	std::map<unsigned int, FrameBuffer> buffers_;
 	std::map<unsigned int, MappedFrameBuffer> mappedBuffers_;
 
@@ -115,11 +113,6 @@ const std::map<const IPAModeType, SensorStreamModes> IPANxpNeo::kSensorStreamMod
 	{ IPAModeTypeHdrMerge, SensorStreamHdr },
 	{ IPAModeTypeRgbIr, SensorStreamRgbIr },
 	{ IPAModeTypeRgbIrDual, SensorStreamDualContext },
-};
-
-const std::map<const IPAContextType, SensorContextTypes> IPANxpNeo::kSensorContextMap = {
-	{ IPAContextTypeRgb, SensorContextRgb },
-	{ IPAContextTypeIr, SensorContextIr },
 };
 
 namespace {
@@ -245,9 +238,7 @@ int IPANxpNeo::init(const IPASettings &settings, const InitParams &params,
 
 int IPANxpNeo::start()
 {
-	const std::array<IPAContextType, 2> allContexts = { IPAContextTypeRgb, IPAContextTypeIr };
-	for (const auto &context : allContexts)
-		setControls(0, context);
+	setInitialControls();
 
 	return 0;
 }
@@ -268,6 +259,12 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 
 	context_.configuration.pipelineMode = ipaConfig.mode;
 
+	/* Initialize active RGB/Ir contexts. */
+	context_.configuration.activeContexts =
+		context_.configuration.pipelineMode == IPAModeTypeRgbIrDual ?
+		std::vector<IPAContextType> { IPAContextTypeRgb, IPAContextTypeIr } :
+		std::vector<IPAContextType> { IPAContextTypeRgb };
+
 	const IPACameraSensorInfo &info = ipaConfig.sensorInfo;
 	sensorControlList_ = ipaConfig.sensorControlList;
 
@@ -286,12 +283,7 @@ int IPANxpNeo::configure(const IPAConfigInfo &ipaConfig,
 
 	context_.configuration.colorSpace = ipaConfig.colorSpace;
 
-	for (auto const &a : algorithms()) {
-		Algorithm *algo = static_cast<Algorithm *>(a.get());
-
-		if (algo->disabled_)
-			continue;
-
+	for (auto const &algo : algorithms()) {
 		int ret = algo->configure(context_, info);
 		if (ret)
 			return ret;
@@ -337,12 +329,11 @@ void IPANxpNeo::queueRequest(const uint32_t frame, const ControlList &controls)
 {
 	IPAFrameContext &frameContext = context_.frameContexts.alloc(frame);
 
-	for (auto const &a : algorithms()) {
-		Algorithm *algo = static_cast<Algorithm *>(a.get());
-		if (algo->disabled_)
-			continue;
+	for (const auto &ctxt : context_.configuration.activeContexts)
+		frameContext.processed[ctxt] = false;
+
+	for (auto const &algo : algorithms())
 		algo->queueRequest(context_, frame, frameContext, controls);
-	}
 }
 
 void IPANxpNeo::computeParams(const uint32_t frame, const IPAContextType context,
@@ -421,7 +412,7 @@ void IPANxpNeo::computeParams(const uint32_t frame, const IPAContextType context
 
 	for (auto const &a : algorithms()) {
 		Algorithm *algo = static_cast<Algorithm *>(a.get());
-		if (isAlgoDisabled(context, algo))
+		if (context == IPAContextTypeIr && !(algo->irOps() & IrOpPrepare))
 			continue;
 		algo->prepare(context_, frame, frameContext, &params);
 	}
@@ -464,24 +455,16 @@ void IPANxpNeo::processStats(const uint32_t frame, const IPAContextType context,
 	ControlList metadata(controls::controls);
 	for (auto const &a : algorithms()) {
 		Algorithm *algo = static_cast<Algorithm *>(a.get());
-		if (isAlgoDisabled(context, algo))
+		if (context == IPAContextTypeIr && !(algo->irOps() & IrOpProcess))
 			continue;
 		algo->process(context_, frame, frameContext, &stats, metadata);
 	}
 
-	setControls(frame, context);
-	metadataReady.emit(frame, context, metadata);
-}
+	/* Set processed flag for this context. */
+	frameContext.processed.at(context) = true;
 
-bool IPANxpNeo::isAlgoDisabled(const IPAContextType context, Algorithm *algo)
-{
-	/*
-	 * Algorithm is disabled if:
-	 * - the flag disabled is true
-	 * - or Ir is not supported while in Ir context.
-	 */
-	return algo->disabled_ ||
-	       (!algo->supportsIr_ && context == IPAContextTypeIr);
+	setControls(frame);
+	metadataReady.emit(frame, context, metadata);
 }
 
 void IPANxpNeo::updateSensorConfig(const IPACameraSensorInfo &sensorInfo,
@@ -620,9 +603,10 @@ void IPANxpNeo::updateFrameContextSensorMeta(const uint32_t frame, const IPACont
 		exposure = context_.configuration.sensor.minExposureTime;
 	}
 
-	frameContext.sensor.agc[context].exposure = context_.camHelper->exposureLines(
-		exposure,
-		context_.configuration.sensor.lineDuration);
+	frameContext.sensor.agcs[context].exposure =
+		context_.camHelper->exposureLines(
+			exposure,
+			context_.configuration.sensor.lineDuration);
 
 	float aGain = 1.0f;
 	if (mdControls.contains(md::AnalogueGain.id())) {
@@ -648,7 +632,7 @@ void IPANxpNeo::updateFrameContextSensorMeta(const uint32_t frame, const IPACont
 		LOG(NxpNeoIPA, Warning) << "No digital gain metadata";
 	}
 
-	frameContext.sensor.agc[context].gain = aGain * dGain;
+	frameContext.sensor.agcs[context].gain = aGain * dGain;
 
 	std::array<float, 4> wbGainsArray = { 1.0f, 1.0f, 1.0f, 1.0f };
 	if (mdControls.contains(md::WhiteBalanceGain.id())) {
@@ -669,20 +653,30 @@ void IPANxpNeo::updateFrameContextSensorMeta(const uint32_t frame, const IPACont
 	frameContext.sensor.wbGains.b() = wbGainsArray[3];
 }
 
-void IPANxpNeo::setControls(unsigned int frame, IPAContextType context)
+void IPANxpNeo::setInitialControls()
+{
+	const uint32_t frame = 0;
+	ControlList ctrls(sensorControls_);
+
+	/* No sensor controls are sent as initial settings. */
+
+	setSensorControls.emit(frame, ctrls);
+}
+
+void IPANxpNeo::setControls(unsigned int frame)
 {
 	/*
 	 * \todo The frame number is most likely wrong here, we need to take
 	 * internal sensor delays and other timing parameters into account.
 	 */
-
 	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
-	auto agcFrameContext = frameContext.agc[context];
+
+	/* Send controls only if algo are processed for all active contexts. */
+	for (const auto &processedIt : frameContext.processed)
+		if (!processedIt.second)
+			return;
 
 	ControlList ctrls(sensorControls_);
-
-	Duration exposure = context_.camHelper->exposure(agcFrameContext.exposure,
-							 context_.configuration.sensor.lineDuration);
 
 	/*
 	 * Skip control setting for frame 0 for which the frame context
@@ -695,8 +689,21 @@ void IPANxpNeo::setControls(unsigned int frame, IPAContextType context)
 	 * frames to be hidden.
 	 */
 	if (frame) {
-		context_.camHelper->controlListSetAGC(&ctrls, kSensorContextMap.at(context),
-						      exposure, agcFrameContext.gain);
+		Duration lineLength = context_.configuration.sensor.lineDuration;
+		std::vector<Duration> exposures;
+		std::vector<double> gains;
+
+		for (const auto &agcIt : frameContext.agcs) {
+			auto agcFrameContext = agcIt.second;
+			Duration exposure =
+				context_.camHelper->exposure(agcFrameContext.exposure,
+							     lineLength);
+			exposures.push_back(exposure);
+			gains.push_back(agcFrameContext.gain);
+		}
+		context_.camHelper->controlListSetAGC(&ctrls,
+						      Span<Duration>(exposures),
+						      Span<double>(gains));
 
 		if (context_.configuration.awb.awbGainInSensor) {
 			std::array<double, 4> wbGains;
@@ -707,13 +714,6 @@ void IPANxpNeo::setControls(unsigned int frame, IPAContextType context)
 			wbGains[3] = frameContext.awb.gains.b();
 			context_.camHelper->controlListSetAWB(&ctrls, Span<const double, 4>(wbGains));
 		}
-	} else if (!context_.configuration.awb.awbGainInSensor) {
-		/*
-		 * Set unitary white balance gains in sensor
-		 * when white balance gains are applied in the ISP.
-		 */
-		std::array<double, 4> wbGains = { 1.0f, 1.0f, 1.0f, 1.0f };
-		context_.camHelper->controlListSetAWB(&ctrls, Span<const double, 4>(wbGains));
 	}
 
 	LOG(NxpNeoControlList, Debug)
@@ -721,16 +721,7 @@ void IPANxpNeo::setControls(unsigned int frame, IPAContextType context)
 				   &frameContext.sensor.mdControls,
 				   &ctrls);
 
-	/*
-	 * In RGBIr dual mode, the controls should be sent for one context only:
-	 * - the RGB context should be used as long as the single-capture
-	 *   controls are used from the CameraHelper in RGBIr dual mode.
-	 */
-	if (context_.configuration.pipelineMode != IPAModeTypeRgbIrDual ||
-	    (context_.configuration.pipelineMode == IPAModeTypeRgbIrDual &&
-	     context == IPAContextTypeRgb)) {
-		setSensorControls.emit(frame, ctrls);
-	}
+	setSensorControls.emit(frame, ctrls);
 }
 
 std::string IPANxpNeo::controlListToString(const ControlList *ctrls) const

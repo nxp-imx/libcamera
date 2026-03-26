@@ -745,7 +745,7 @@ namespace controls {
  * stored in conventional reading order in an array of 9 floating point
  * values.
  *
- * ColourCorrectionMatrix can only be applied in a Request when the AWB is 
+ * ColourCorrectionMatrix can only be applied in a Request when the AWB is
  * disabled.
  *
  * \sa AwbEnable
@@ -1502,8 +1502,12 @@ namespace controls {
 
 /**
  * \var LensDewarpEnable
- * \brief Enable or disable lens dewarping. This control is only available if lens
- * dewarp parameters are configured in the tuning file.
+ * \brief Enable or disable lens dewarping.
+ */
+
+/**
+ * \var LensShadingCorrectionEnable
+ * \brief Enable or disable the lens shading correction.
  */
 
 /**
@@ -2187,6 +2191,8 @@ extern const Control<float> WdrMaxBrightPixels(WDR_MAX_BRIGHT_PIXELS, "WdrMaxBri
 
 extern const Control<bool> LensDewarpEnable(LENS_DEWARP_ENABLE, "LensDewarpEnable", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
 
+extern const Control<bool> LensShadingCorrectionEnable(LENS_SHADING_CORRECTION_ENABLE, "LensShadingCorrectionEnable", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
 
 
 namespace draft {
@@ -2369,6 +2375,7 @@ extern const ControlIdMap controls {
 	{ WDR_STRENGTH, &WdrStrength },
 	{ WDR_MAX_BRIGHT_PIXELS, &WdrMaxBrightPixels },
 	{ LENS_DEWARP_ENABLE, &LensDewarpEnable },
+	{ LENS_SHADING_CORRECTION_ENABLE, &LensShadingCorrectionEnable },
 	{ draft::AE_PRECAPTURE_TRIGGER, &draft::AePrecaptureTrigger },
 	{ draft::NOISE_REDUCTION_MODE, &draft::NoiseReductionMode },
 	{ draft::COLOR_CORRECTION_ABERRATION_MODE, &draft::ColorCorrectionAberrationMode },

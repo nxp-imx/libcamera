@@ -1,21 +1,19 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
+ * Copyright 2024-2026 NXP
+ *
+ * Pipeline handler for Neo ISP
+ *
  * Based on Pipeline handler for Intel IPU3
  *     src/libcamera/pipeline/ipu3/ipu3.cpp
  * Copyright (C) 2019, Google Inc.
- *
- * and on Pipeline handler for ISI interface
- *     src/libcamera/pipeline/imx8-isi/ims8-isi.cpp
- * Copyright (C) 2022 - Jacopo Mondi <jacopo@jmondi.org>
- *
- * neo_pipeline.cpp - Pipeline handler for NXP NEO ISP
- * Copyright 2024-2025 NXP
  */
 
 #include <algorithm>
 #include <iomanip>
 #include <memory>
 #include <queue>
+#include <regex>
 #include <sstream>
 #include <vector>
 
@@ -262,7 +260,7 @@ public:
 				    Transform transform);
 
 	CameraSensor *sensor() const { return sensor_.get(); }
-	NeoDevice *neoDevice() const { return neo_.get(); }
+	NeoDevice *neoDevice(ContextType context = ContextTypeRgb) const;
 	std::map<StreamType, ISIPipe *> &isiPipes() { return pipes_; }
 	const std::string &cameraName() const { return sensor_->entity()->name(); }
 	bool multiCamera() const { return cameraInfo_->cameraProperties().multiCamera; }
@@ -331,8 +329,8 @@ private:
 	unsigned int contextCount() { return mode_ == ModeTypeRgbIrDual ? 2 : 1; }
 
 	std::unique_ptr<CameraSensor> sensor_;
-	std::unique_ptr<NeoDevice> neo_;
-	std::shared_ptr<MediaDevice> neoMedia_;
+	std::map<ContextType, std::unique_ptr<NeoDevice>> neoDevices_;
+	std::map<ContextType, std::shared_ptr<MediaDevice>> neoMedia_;
 	const CameraInfo *cameraInfo_;
 	std::optional<Orientation> defaultOrientation_;
 	std::map<Size, std::vector<unsigned int>> formatsSizeToCodes_;
@@ -768,9 +766,7 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 		/*
 		 * Map the ISP frame and infrared output buffer of the ISP. They
 		 * are provided by the application in the libcamera:Request as
-		 * streams buffers. The exception is the RGBIr context switch
-		 * where some dummy internal buffer have to be provided for the
-		 * ISP decoded output that are discarded.
+		 * stream buffers.
 		 */
 		FrameBuffer *frameBuffer = nullptr;
 		FrameBuffer *irBuffer = nullptr;
@@ -778,15 +774,10 @@ NxpNeoFrames::Info *NxpNeoFrames::createRaw(Request *request)
 		switch (mode) {
 		case ModeTypeRgbIrDual:
 			ASSERT(context == ContextTypeRgb || context == ContextTypeIr);
-			if (context == ContextTypeRgb) {
+			if (context == ContextTypeRgb)
 				frameBuffer = info->frameStreamBuffer_;
-				if (info->irStreamBuffer_)
-					irBuffer = allocBuffer(BufferTypeIr);
-			} else {
+			else
 				irBuffer = info->irStreamBuffer_;
-				if (info->frameStreamBuffer_)
-					frameBuffer = allocBuffer(BufferTypeFrame);
-			}
 			break;
 		case ModeTypeRgbIr:
 		case ModeTypeStandard:
@@ -1717,12 +1708,16 @@ int NxpNeoCameraData::exportFrameBuffers(Stream *stream,
 {
 	unsigned int count = stream->configuration().bufferCount;
 
-	if (stream == &streamFrame_)
-		return neo_->frame_->exportBuffers(count, buffers);
-	else if (stream == &streamIr_)
-		return neo_->ir_->exportBuffers(count, buffers);
-	else if (stream == &streamRaw_)
+	NeoDevice *neoRgb = neoDevice(ContextTypeRgb);
+	if (stream == &streamFrame_) {
+		return neoRgb->frame_->exportBuffers(count, buffers);
+	} else if (stream == &streamIr_) {
+		NeoDevice *neoIr = neoDevice(ContextTypeIr);
+		NeoDevice *neo = mode_ != ModeTypeRgbIrDual ? neoRgb : neoIr;
+		return neo->ir_->exportBuffers(count, buffers);
+	} else if (stream == &streamRaw_) {
 		return pipes_[StreamTypeImage0]->exportBuffers(count, buffers);
+	}
 
 	return -EINVAL;
 }
@@ -1746,7 +1741,10 @@ int NxpNeoCameraData::start([[maybe_unused]] const ControlList *controls)
 
 		delayedCtrls_->reset();
 
-		ret = neo_->start();
+		ret = 0;
+		for (auto &[context, neo] : neoDevices_)
+			ret |= neo->start();
+
 		if (ret)
 			goto error;
 	}
@@ -1778,7 +1776,8 @@ error:
 	}
 
 	if (isRawCamera()) {
-		neo_->stop();
+		for (auto &[context, neo] : neoDevices_)
+			neo->stop();
 		ipa_->stop();
 	}
 
@@ -1804,7 +1803,8 @@ void NxpNeoCameraData::stopDevice()
 
 	if (isRawCamera()) {
 		ipa_->stop();
-		ret |= neo_->stop();
+		for (auto &[context, neo] : neoDevices_)
+			neo->stop();
 	}
 
 	/*
@@ -1813,10 +1813,9 @@ void NxpNeoCameraData::stopDevice()
 	 * requests left that are pending on a IPA operation completion event.
 	 * Cancel them now to clean up the pipeline state.
 	 */
-	std::list<Request *> requests(queuedRequests_);
-	for (Request *request : requests) {
-		if (request->status() == Request::RequestCancelled)
-			continue;
+	while (!queuedRequests_.empty()) {
+		Request *request = queuedRequests_.front();
+		queuedRequests_.pop_front();
 		NxpNeoFrames::Info *frameInfo = frameInfos_.find(request);
 		ASSERT(frameInfo);
 		cancelCompleteRequest(frameInfo);
@@ -1855,9 +1854,10 @@ int NxpNeoCameraData::queueRequestDevice(Request *request)
 	}
 
 	if (ret) {
+		/* Request will be cancelled as an error is returned. */
 		LOG(NxpNeoPipe, Error)
 			<< "Failed to queue buffers, unbalanced queues";
-		cancelCompleteRequest(info);
+		frameInfos_.destroy(info->id_);
 		return -EIO;
 	}
 
@@ -1889,6 +1889,15 @@ int NxpNeoCameraData::init(DeviceEnumerator *enumerator)
 	}
 
 	if (isRawCamera_) {
+		/*
+		 * Acquire one ISP instance per active context. The associated
+		 * NeoDevice object unique instance number is arbitrarily bound
+		 * to its device node name /dev/mediaX.
+		 * The sensor RGBIr support information comes from the camHelper
+		 * so is not known before IPA initialization. Thus, the test for
+		 * the second context ISP reservation is deferred until after
+		 * IPA initialization.
+		 */
 		DeviceMatch isp(NeoDevice::kDriverName());
 		isp.add(NeoDevice::kSDevNeoEntityName());
 		isp.add(NeoDevice::kVDevInput0EntityName());
@@ -1898,29 +1907,40 @@ int NxpNeoCameraData::init(DeviceEnumerator *enumerator)
 		isp.add(NeoDevice::kVDevEntityIrName());
 		isp.add(NeoDevice::kVDevEntityStatsName());
 
-		neoMedia_ = pipe()->acquireMediaDevice(enumerator, isp);
-		if (!neoMedia_)
-			return -EINVAL;
+		auto initNeoDevice =
+			[this, enumerator, &isp](ContextType context) {
+				std::shared_ptr<MediaDevice> &media = neoMedia_[context];
+				media = pipe()->acquireMediaDevice(enumerator, isp);
+				if (!media)
+					return -ENODEV;
+				std::regex re("(\\d+)$");
+				std::smatch match;
+				if (!std::regex_search(media->deviceNode(), match, re))
+					return -EINVAL;
+				unsigned instance = std::stoul(match.str(1));
+				std::unique_ptr<NeoDevice> &neo = neoDevices_[context];
+				neo = std::make_unique<NeoDevice>(instance);
+				return neo->init(media.get());
+			};
 
-		/*
-		 * The ISP instance number corresponds to the number of raw
-		 * cameras already detected.
-		 */
-		neo_ = std::make_unique<NeoDevice>(pipe()->numCamerasRaw());
-		ret = neo_->init(neoMedia_.get());
-		if (ret)
-			return ret;
+		if (initNeoDevice(ContextTypeRgb))
+			return -ENODEV;
 
 		ret = loadIPA();
 		if (ret)
 			return ret;
 
-		updateControls();
-
 		if (!cameraInfo_->hasStream(StreamTypeImage1))
 			mode_ = sensorIsRgbIr() ? ModeTypeRgbIr : ModeTypeStandard;
 		else
 			mode_ = sensorIsRgbIr() ? ModeTypeRgbIrDual : ModeTypeHdrMerge;
+
+		if (mode_ == ModeTypeRgbIrDual) {
+			if (initNeoDevice(ContextTypeIr))
+				return -ENODEV;
+		}
+
+		updateControls();
 
 		controlsTimer_ = controlsDelay().has_value() ? std::make_unique<Timer>() : nullptr;
 	}
@@ -1984,18 +2004,18 @@ int NxpNeoCameraData::init(DeviceEnumerator *enumerator)
 		pipes_[stream]->bufferReady().connect(this, it->second);
 	}
 
-	if (neo_) {
-		neo_->input0_->bufferReady.connect(
+	for (auto &[context, neo] : neoDevices_) {
+		neo->input0_->bufferReady.connect(
 			this, &NxpNeoCameraData::neoInput0BufferReady);
-		neo_->input1_->bufferReady.connect(
+		neo->input1_->bufferReady.connect(
 			this, &NxpNeoCameraData::neoInput1BufferReady);
-		neo_->frame_->bufferReady.connect(
+		neo->frame_->bufferReady.connect(
 			this, &NxpNeoCameraData::neoOutputBufferReady);
-		neo_->ir_->bufferReady.connect(
+		neo->ir_->bufferReady.connect(
 			this, &NxpNeoCameraData::neoOutputBufferReady);
-		neo_->params_->bufferReady.connect(
+		neo->params_->bufferReady.connect(
 			this, &NxpNeoCameraData::neoParamsBufferReady);
-		neo_->stats_->bufferReady.connect(
+		neo->stats_->bufferReady.connect(
 			this, &NxpNeoCameraData::neoStatsBufferReady);
 	}
 
@@ -2100,6 +2120,21 @@ int NxpNeoCameraData::configureFrontEndFormat(V4L2SubdeviceFormat &sensorFormat,
 }
 
 /**
+ * \brief Get the NeoDevice object bound to a camera context
+ * \param[in] context The targeted context
+ *
+ * \return The NeoDevice object for the context or nullptr if it does not exist
+ */
+NeoDevice *NxpNeoCameraData::neoDevice(ContextType context) const
+{
+	auto it = neoDevices_.find(context);
+	if (it != neoDevices_.end())
+		return neoDevices_.at(context).get();
+	else
+		return nullptr;
+}
+
+/**
  * \brief Update the camera controls
  *
  * Compute the camera controls by calculating controls which the pipeline
@@ -2152,12 +2187,13 @@ int NxpNeoCameraData::loadIPA()
 	if (ipaTuningFile.empty())
 		ipaTuningFile = ipa_->configurationFile("uncalibrated.yaml");
 
-	uint32_t hwRevision = neo_->media()->hwRevision();
+	NeoDevice *neo = neoDevice();
+	uint32_t hwRevision = neo->media()->hwRevision();
 	ipa::nxpneo::SensorConfig sensorConfig;
 	const MediaEntity *entity = sensor->entity();
 	std::vector<uint32_t> ids = utils::map_keys(sensor_->controls().idmap());
-	ipa::nxpneo::InitParams initParams = { hwRevision, neo_->hwCapabilities(),
-					       neo_->apiVersion(),
+	ipa::nxpneo::InitParams initParams = { hwRevision, neo->hwCapabilities(),
+					       neo->apiVersion(),
 					       entity->name(), sensorInfo,
 					       sensor->controls(),
 					       sensor_->getControls(ids),
@@ -2239,51 +2275,31 @@ int NxpNeoCameraData::allocateBuffersRaw()
 		};
 
 	/*
-	 * RGBIr dual context switch has some peculiarities related to frames
-	 * buffer allocation:
-	 *  - Some buffers are instantiated per context so their pool size has
-	 *    to be sized accordingly. That is the case for embedded data, ISP
-	 *    params and stats buffers.
-	 *  - Throw-away buffers for ISP frame and infrared outputs have to be
-	 *    allocated. They are used as temporary storage for the ISP
-	 *    decoded buffers not delivered to the application.
+	 * RGBIr dual context switch has a peculiarity related to frame buffers
+	 * allocation: ISP params and stats as well as buffers for the embedded
+	 * data streams are instantiated per context so their pools have to be
+	 * sized accordingly.
 	 * Raw-only operation has the specificity that no buffers are provided
-	 * by the application for the ISP outputs. Therefore the capture video
-	 * devices are disabled and no buffers have to be provided to them.
+	 * by the application for the ISP outputs. Therefore the ISP capture
+	 * video devices are disabled and no buffers have to be provided to
+	 * them.
 	 */
 	int ret = 0;
-	unsigned int _contextCount = contextCount();
-
-	const std::map<BufferType, std::pair<std::vector<std::unique_ptr<FrameBuffer>> *,
-					     V4L2VideoDevice *>>
-		ispOutputPools = {
-			{ BufferTypeFrame, { &frameBuffersPool_, neo_->frame_.get() } },
-			{ BufferTypeIr, { &irBuffersPool_, neo_->ir_.get() } },
-		};
-	if (mode_ == ModeTypeRgbIrDual && !rawStreamOnly_) {
-		for (const auto &[bufferType, pair] : ispOutputPools) {
-			std::vector<std::unique_ptr<FrameBuffer>> *pool = pair.first;
-			V4L2VideoDevice *device = pair.second;
-
-			int res = device->exportBuffers(bufferCount, pool);
-			ret |= res == static_cast<int>(bufferCount) ? 0 : -ENOMEM;
-
-			registerPoolBuffers(pool, bufferType);
-		}
-	}
 
 	/* Allocate and map stats and params buffers. */
-	const std::map<BufferType, std::vector<std::unique_ptr<FrameBuffer>> *>
+	for (auto &[context, neo] : neoDevices_) {
+		const std::map<BufferType, std::vector<std::unique_ptr<FrameBuffer>> *>
 		ispMetaPools = {
-			{ BufferTypeParams, &neo_->paramsBuffers_ },
-			{ BufferTypeStats, &neo_->statsBuffers_ },
+			{ BufferTypeParams, &neo->paramsBuffers_ },
+			{ BufferTypeStats, &neo->statsBuffers_ },
 		};
-	ret |= neo_->allocateBuffers(bufferCount * _contextCount);
-
-	for (const auto [bufferType, pool] : ispMetaPools)
-		registerPoolBuffers(pool, bufferType);
+		ret |= neo->allocateBuffers(bufferCount);
+		for (const auto [bufferType, pool] : ispMetaPools)
+			registerPoolBuffers(pool, bufferType);
+	}
 
 	/* ISI pipe buffers for images and edata streams */
+	unsigned int _contextCount = contextCount();
 	for (const auto [stream, pipe] : pipes_) {
 		unsigned int count = stream == StreamTypeEData
 					     ? bufferCount * _contextCount
@@ -2344,7 +2360,8 @@ int NxpNeoCameraData::freeBuffersRaw()
 	}
 	availableBuffersMap_.clear();
 
-	neo_->freeBuffers();
+	for (auto &[context, neo] : neoDevices_)
+		neo->freeBuffers();
 
 	for (auto [stream, pipe] : pipes_)
 		pipe->freeBuffers();
@@ -2527,7 +2544,7 @@ int NxpNeoCameraData::configureRaw(CameraConfiguration *c)
 	rawStreamOnly_ = ((config->size() == 1) &&
 			  ((*config)[0].stream() == &streamRaw_));
 
-
+	NeoDevice *neoRgb = neoDevice(ContextTypeRgb);
 	for (unsigned int i = 0; i < config->size(); ++i) {
 		StreamConfiguration &cfg = (*config)[i];
 		Stream *stream = cfg.stream();
@@ -2539,10 +2556,10 @@ int NxpNeoCameraData::configureRaw(CameraConfiguration *c)
 		V4L2VideoDevice *videoDevice;
 		if (stream == &streamFrame_) {
 			deviceFormat = &devFormatFrame;
-			videoDevice = neo_->frame_.get();
+			videoDevice = neoRgb->frame_.get();
 		} else {
 			deviceFormat = &devFormatIr;
-			videoDevice = neo_->ir_.get();
+			videoDevice = neoRgb->ir_.get();
 		}
 
 		V4L2PixelFormat pixelFormat =
@@ -2563,9 +2580,21 @@ int NxpNeoCameraData::configureRaw(CameraConfiguration *c)
 
 	NeoDevice::PipeConfig pipeConfig = {};
 	pipeConfig.topLines = embeddedTopLines_;
-	ret = neo_->configure(pipeConfig,
-			      &devFormatInput0, &devFormatInput1,
-			      &devFormatFrame, &devFormatIr);
+	if (mode_ != ModeTypeRgbIrDual) {
+		ret = neoRgb->configure(pipeConfig,
+					&devFormatInput0, &devFormatInput1,
+					&devFormatFrame, &devFormatIr);
+	} else {
+		V4L2DeviceFormat devFormatInvalid = {};
+		ret = neoRgb->configure(pipeConfig,
+					&devFormatInput0, &devFormatInput1,
+					&devFormatFrame, &devFormatInvalid);
+
+		NeoDevice *neoIr = neoDevice(ContextTypeIr);
+		ret |= neoIr->configure(pipeConfig,
+					&devFormatInput0, &devFormatInput1,
+					&devFormatInvalid, &devFormatIr);
+	}
 	if (ret)
 		return ret;
 
@@ -3023,8 +3052,8 @@ void NxpNeoCameraData::isiImage0BufferReady(FrameBuffer *buffer)
 
 	/* Record the sensor's timestamp in the request metadata. */
 	Request *request = info->request_;
-	request->metadata().set(controls::SensorTimestamp,
-				buffer->metadata().timestamp);
+	request->_d()->metadata().set(controls::SensorTimestamp,
+				      buffer->metadata().timestamp);
 
 	if (request->findBuffer(&streamRaw_) == buffer)
 		pipe()->completeBuffer(request, buffer);
@@ -3066,9 +3095,6 @@ void NxpNeoCameraData::isiImage1BufferReady(FrameBuffer *buffer)
 		LOG(NxpNeoPipe, Warning) << "Out of order input frame receipt";
 
 	isiInputBufferReady(info, context);
-
-	if (mode_ == ModeTypeRgbIrDual)
-		applySensorControls(info);
 }
 
 /**
@@ -3245,27 +3271,28 @@ void NxpNeoCameraData::ipaParamsComputed(unsigned int id,
 	NxpNeoFrames::InfoContext &infoContext = it->second;
 
 	int ret = 0;
-	/* Queue buffers ISP output buffers */
+	/* Queue ISP output buffers */
+	NeoDevice *neo = neoDevice(_context);
 	FrameBuffer *frameBuffer =
 		infoContext.buffer(BufferTypeFrame);
 	if (frameBuffer)
-		ret |= neo_->frame_->queueBuffer(frameBuffer);
+		ret |= neo->frame_->queueBuffer(frameBuffer);
 	FrameBuffer *irBuffer =
 		infoContext.buffer(BufferTypeIr);
 	if (irBuffer)
-		ret |= neo_->ir_->queueBuffer(irBuffer);
+		ret |= neo->ir_->queueBuffer(irBuffer);
 
 	/* Queue ISP params and stats buffers */
 	FrameBuffer *paramsBuffer =
 		infoContext.buffer(BufferTypeParams);
 	if (paramsBuffer) {
 		paramsBuffer->_d()->metadata().planes()[0].bytesused = bytesused;
-		ret |= neo_->params_->queueBuffer(paramsBuffer);
+		ret |= neo->params_->queueBuffer(paramsBuffer);
 	}
 	FrameBuffer *statsBuffer =
 		infoContext.buffer(BufferTypeStats);
 	if (statsBuffer)
-		ret |= neo_->stats_->queueBuffer(statsBuffer);
+		ret |= neo->stats_->queueBuffer(statsBuffer);
 
 	/* Queue ISP input buffers */
 	FrameBuffer *image0Buffer =
@@ -3273,12 +3300,12 @@ void NxpNeoCameraData::ipaParamsComputed(unsigned int id,
 	FrameBuffer *image1Buffer =
 		infoContext.buffer(BufferTypeImage1);
 	if (image0Buffer)
-		ret |= neo_->input0_->queueBuffer(image0Buffer);
+		ret |= neo->input0_->queueBuffer(image0Buffer);
 	if (image1Buffer) {
 		if (mode_ == ModeTypeHdrMerge)
-			ret |= neo_->input1_->queueBuffer(image1Buffer);
+			ret |= neo->input1_->queueBuffer(image1Buffer);
 		else if (mode_ == ModeTypeRgbIrDual)
-			ret |= neo_->input0_->queueBuffer(image1Buffer);
+			ret |= neo->input0_->queueBuffer(image1Buffer);
 		else
 			LOG(NxpNeoPipe, Error) << "Unexpected image1 in mode " << mode_;
 	}
@@ -3296,7 +3323,7 @@ void NxpNeoCameraData::ipaMetadataReady(unsigned int id,
 		return;
 
 	Request *request = info->request_;
-	request->metadata().merge(metadata);
+	request->_d()->metadata().merge(metadata);
 
 	auto it = info->contexts_.find(static_cast<ContextType>(context));
 	if (it == info->contexts_.end()) {

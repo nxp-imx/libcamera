@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
+ * Copyright 2024-2026 NXP
+ *
+ * Neo ISP device
+ *
  * Based on Intel IPU3 ImgU
  *     src/libcamera/pipeline/ipu3/imgu.h
  * Copyright (C) 2019, Google Inc.
- *
- * Copyright 2024-2025 NXP
- * neo_device.h - NXP NEO
  */
 
 #pragma once

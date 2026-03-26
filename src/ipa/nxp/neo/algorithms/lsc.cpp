@@ -29,7 +29,7 @@ namespace libcamera {
 
 namespace ipa {
 
-constexpr int kColourTemperatureChangeThreshhold = 10;
+constexpr int kColourTemperatureQuantization = 10;
 /* The vignetting LUT combines factors for red, green and blue channels */
 constexpr int kChannelLutSize = NEO_VIGNETTING_TABLE_SIZE / 3;
 
@@ -188,10 +188,18 @@ private:
 	}
 };
 
+namespace {
+
+unsigned int quantize(unsigned int value, unsigned int step)
+{
+	return std::lround(value / static_cast<double>(step)) * step;
+}
+
+} // namespace
+
 LensShadingCorrection::LensShadingCorrection()
 	: status_(NOT_CONFIGURED), lastAppliedCt_(0), lastAppliedQuantizedCt_(0)
 {
-	sets_.setQuantization(kColourTemperatureChangeThreshhold);
 }
 
 /**
@@ -329,18 +337,16 @@ void LensShadingCorrection::prepare(IPAContext &context,
 		return;
 
 	uint32_t ct = context.activeState.awb.temperatureK;
-	if (std::abs(static_cast<int>(ct) - static_cast<int>(lastAppliedCt_)) <
-	    kColourTemperatureChangeThreshhold)
+	unsigned int quantizedCt = quantize(ct, kColourTemperatureQuantization);
+
+	/*
+	 * Add a threshold so that oscillations around a quantization step don't
+	 * lead to constant changes.
+	 */
+	if (utils::abs_diff(ct, lastAppliedCt_) < kColourTemperatureQuantization / 2)
 		return;
 
-	unsigned int quantizedCt;
-	const Components &set = sets_.getInterpolated(ct, &quantizedCt);
-	LOG(NxpNeoAlgoLsc, Debug)
-		<< "frame=" << frame << " ct=" << ct
-		<< " lastAppliedQuantizedCt_=" << lastAppliedQuantizedCt_
-		<< " quantizedCt=" << quantizedCt;
-
-	if (lastAppliedQuantizedCt_ == quantizedCt)
+	if (quantizedCt == lastAppliedQuantizedCt_)
 		return;
 
 	if (status_ != ENABLED) {
@@ -363,6 +369,7 @@ void LensShadingCorrection::prepare(IPAContext &context,
 	vigTableConfig.setUpdate(true);
 
 	/* Copy table */
+	const Components &set = sets_.getInterpolated(quantizedCt);
 	std::copy(set.r.begin(), set.r.end(), &vigTableConfig->vignetting_table[0]);
 	std::copy(set.g.begin(), set.g.end(), &vigTableConfig->vignetting_table[kChannelLutSize]);
 	std::copy(set.b.begin(), set.b.end(), &vigTableConfig->vignetting_table[2 * kChannelLutSize]);
