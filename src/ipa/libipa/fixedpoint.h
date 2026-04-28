@@ -31,7 +31,7 @@ constexpr R floatingToFixedPoint(T number)
 	 * cast negative values. See
 	 * https://embeddeduse.com/2013/08/25/casting-a-negative-float-to-an-unsigned-int/
 	 */
-	R mask = static_cast<R>((1UL << (F + I)) - 1);
+	R mask = (1 << (F + I)) - 1;
 	R frac = static_cast<R>(static_cast<int>(std::round(number * (1 << F)))) & mask;
 
 	return frac;

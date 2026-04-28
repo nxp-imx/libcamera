@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * pipe_conf.h - NXP NEO PIPE_CONF configuration
- * Copyright 2025 NXP
+ * Copyright 2025-2026 NXP
+ *
+ * NXP NEO PIPE_CONF configuration
  */
 
 #pragma once

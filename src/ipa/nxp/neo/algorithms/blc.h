@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * blc.h - NXP NEO Black Level Correction
- * Copyright 2025 NXP
+ * Copyright 2025-2026 NXP
+ *
+ * NXP NEO Black Level Correction
  */
 
 #pragma once
@@ -44,7 +45,7 @@ private:
 	bool enabled_;
 	std::vector<uint8_t> obwbs_;
 
-	/* BLC offset values from calibration (16-bit pixel format) */
+	/* BLC offset values from calibration (16-bit bit depth) */
 	ChannelArray<uint16_t> calibrationOffsets_;
 
 	/* Offset reference bit-depth */

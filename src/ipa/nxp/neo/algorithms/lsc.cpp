@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
+ * Copyright 2025-2026 NXP
+ *
+ * NXP NEO Lens Shading Correction control
+ *
  * Based on Lens Shading Correction control algorithm
  *     src/ipa/rkisp1/algorithms/lsc.cpp
  * Copyright (C) 2021-2022, Ideas On Board
- *
- * lsc.cpp NXP NEO Lens Shading Correction control
- * Copyright 2025 NXP
  */
 
 #include "lsc.h"
@@ -39,9 +40,8 @@ void interpolateVector(const std::vector<T> &a, const std::vector<T> &b,
 {
 	assert(a.size() == b.size());
 	dest.resize(a.size());
-	for (size_t i = 0; i < a.size(); i++) {
+	for (size_t i = 0; i < a.size(); i++)
 		dest[i] = a[i] * (1.0 - lambda) + b[i] * lambda;
-	}
 }
 
 template<>
@@ -66,10 +66,9 @@ namespace ipa::nxpneo::algorithms {
  * Due to the optical characteristics of the lens, the light intensity received
  * by the sensor is not uniform.
  *
- * The Lens Shading Correction algorithm applies multipliers to all pixels
- * to compensate for the lens shading effect. The coefficients are
- * specified with a set of 3 LUTs [r, g, b] for each color channel in the YAML
- * tuning file.
+ * The Lens Shading Correction algorithm applies multipliers to all pixels to
+ * compensate for the lens shading effect. The coefficients are specified with
+ * a set of 3 LUTs [r, g, b] for each color channel in the YAML tuning file.
  * Each coefficient is in 16 bits (u3.7) and each color channel LUT contains
  * 1024 coefficients (3072/3).
  *
@@ -79,36 +78,39 @@ namespace ipa::nxpneo::algorithms {
  * - "sets": Set of LUT entries composed of "r"/"g"/"b" channels associated
  *   with a specific "ct" color temperature.
  *
- * The ISP is partitionning the image in blocks.
- * Each LUT entry is mapped to each block of the image.
- * Before applying the LUT entry to the pixels of the block, the LUT coefficient
- * is converted into a factor following a 3-tap horizontal and vertical interpolation.
+ * The ISP is partitioning the image in blocks. Each LUT entry is mapped to
+ * each block of the image. Before applying the LUT entry to the pixels of
+ * the block, the LUT coefficient is converted into a factor following a 3-tap
+ * horizontal and vertical interpolation.
  * The horizontal interpolation applies for each row as below:
- * hFactor = 0.5 * (1 – alpha) * left_LUT + 0.5 * current_LUT + 0.5 * (alpha) * right_LUT
- *   where left_LUT: entry of the LUT of the left neighbor block,
- *         right_LUT: entry of the LUT of the right neighbor block,
- *         current_LUT: entry of the LUT of the block where the pixel being interpolated is located.
- *         alpha = (n * step / 32768),
- *           with n: the position of the pixel within the current block,
- *                step = 32768 / block_size (scaling factor defined in u1.15),
- *                block_size = image_size / block_count
- * The same vertical interpolation applies to the results of the block row interpolations.
- * At the edge of the image, the value of the missing neighbor is taken as equal to the
- * boundary valid value.
+ *	hFactor = 0.5 * (1 – alpha) * left_LUT +
+ *		  0.5 * current_LUT +
+ *		  0.5 * (alpha) * right_LUT
+ *	where left_LUT: entry of the LUT of the left neighbor block,
+ *	      right_LUT: entry of the LUT of the right neighbor block,
+ *	      current_LUT: entry of the LUT of the block where the pixel being
+ *			   interpolated is located.
+ *	      alpha = (n * step / 32768),
+ *		with n: the position of the pixel within the current block,
+ *		     step = 32768 / block_size (scaling factor in u1.15),
+ *		     block_size = image_size / block_count
+ * The same vertical interpolation applies to the results of the block row
+ * interpolations. At the edge of the image, the value of the missing neighbor
+ * is taken as equal to the boundary valid value.
  * If the resolution is not a multiple of the block count, the block size is
- * rounded up to the nearest integer to ensure covering all the pixels of the image.
- * In this case, the last block in a row (or column) will only get interpolated up to
- * the last pixel position.
+ * rounded up to the nearest integer to ensure covering all the pixels of the
+ * image. In this case, the last block in a row (or column) will only get
+ * interpolated up to the last pixel position.
  *
  * The maximum number of blocks supported is 1024.
- * If the image is partionned with less than 1024 blocks, the latest remaining
+ * If the image is partitioned with less than 1024 blocks, the latest remaining
  * LUT entries are not used.
  *
  * Each LUT is defined for a color temperature.
  * The LUT is interpolated according to the measured color temperature.
  * Hence the LSC algorithm depends on the AWB algorithm which is measuring
- * the color temperature. For this reason, the LSC algorithm should run after the
- * AWB algorithm.
+ * the color temperature. For this reason, the LSC algorithm should run after
+ * the AWB algorithm.
  */
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoLsc)
@@ -159,8 +161,10 @@ public:
 	const std::optional<LensShadingCorrection::BlockCount> parseBlockCnt(
 		const YamlObject &yamlProfile) const
 	{
-		std::vector<uint16_t> blockCnt = yamlProfile["block-count"].getList<uint16_t>()
-					.value_or(std::vector<uint16_t>{});
+		std::vector<uint16_t> blockCnt =
+			yamlProfile["block-count"]
+				.getList<uint16_t>()
+				.value_or(std::vector<uint16_t>{});
 		if (blockCnt.size() != 2) {
 			LOG(NxpNeoAlgoLsc, Error)
 				<< "Invalid block count size which should be composed of "
@@ -179,7 +183,7 @@ private:
 		if (lut.size() != kChannelLutSize) {
 			LOG(NxpNeoAlgoLsc, Error)
 				<< "Invalid '" << prop << "' values: expected "
-				<< NEO_VIGNETTING_TABLE_SIZE / 3
+				<< kChannelLutSize
 				<< " elements, got " << lut.size();
 			return {};
 		}
@@ -195,10 +199,10 @@ unsigned int quantize(unsigned int value, unsigned int step)
 	return std::lround(value / static_cast<double>(step)) * step;
 }
 
-} // namespace
+} /* namespace */
 
 LensShadingCorrection::LensShadingCorrection()
-	: status_(NOT_CONFIGURED), lastAppliedCt_(0), lastAppliedQuantizedCt_(0)
+	: readyToConfigure_(false), lastAppliedCt_(0), lastAppliedQuantizedCt_(0)
 {
 }
 
@@ -245,6 +249,9 @@ int LensShadingCorrection::init([[maybe_unused]] IPAContext &context,
 		return -EINVAL;
 	}
 
+	context.ctrlMap[&controls::LensShadingCorrectionEnable] =
+		ControlInfo(false, true, true);
+
 	return 0;
 }
 
@@ -254,15 +261,15 @@ int LensShadingCorrection::init([[maybe_unused]] IPAContext &context,
 int LensShadingCorrection::configure([[maybe_unused]] IPAContext &context,
 				     [[maybe_unused]] const IPACameraSensorInfo &configInfo)
 {
-	/* clear lastAppliedCt_ and lastAppliedQuantizedCt_ */
+	/* Clear lastAppliedCt_ and lastAppliedQuantizedCt_ */
 	lastAppliedCt_ = 0;
 	lastAppliedQuantizedCt_ = 0;
-	status_ = NOT_CONFIGURED;
+	readyToConfigure_ = false;
 
 	/* Get the block count according to the sensor resolution */
 	std::optional<BlockCount> bc = blockCount(configInfo.outputSize);
 	if (!bc.has_value()) {
-		/* Lsc is disabled for this resolution */
+		/* LSC is disabled for this resolution */
 		LOG(NxpNeoAlgoLsc, Warning) << "LSC is disabled: block count value for "
 					    << configInfo.outputSize
 					    << " not found in tuning file.";
@@ -270,13 +277,15 @@ int LensShadingCorrection::configure([[maybe_unused]] IPAContext &context,
 	}
 	blockCountX_ = bc.value().first;
 	blockCountY_ = bc.value().second;
-	blockWidth_ = ceil(configInfo.outputSize.width /
-			   static_cast<float>(blockCountX_));
-	blockHeight_ = ceil(configInfo.outputSize.height /
-			    static_cast<float>(blockCountY_));
+	blockWidth_ = std::ceil(configInfo.outputSize.width /
+				static_cast<float>(blockCountX_));
+	blockHeight_ = std::ceil(configInfo.outputSize.height /
+				 static_cast<float>(blockCountY_));
 	/* Scaling step factor (u1.15) */
-	blockStepX_ = floor(kScalingFractionalSize / static_cast<float>(blockWidth_));
-	blockStepY_ = floor(kScalingFractionalSize / static_cast<float>(blockHeight_));
+	blockStepX_ = std::floor(kScalingFractionalSize /
+				 static_cast<float>(blockWidth_));
+	blockStepY_ = std::floor(kScalingFractionalSize /
+				 static_cast<float>(blockHeight_));
 
 	LOG(NxpNeoAlgoLsc, Debug) << "blockCount=[" << blockCountX_
 				  << ", " << blockCountY_
@@ -288,14 +297,15 @@ int LensShadingCorrection::configure([[maybe_unused]] IPAContext &context,
 	/* Get the LUT sets according to the sensor resolution */
 	sets_ = sets(configInfo.outputSize);
 	if (sets_.data().empty()) {
-		/* Lsc is disabled for this resolution */
+		/* LSC is disabled for this resolution */
 		LOG(NxpNeoAlgoLsc, Warning) << "LSC is disabled: Sets for "
 					    << configInfo.outputSize
 					    << " not found in tuning file";
 		return 0;
 	}
 
-	status_ = CONFIGURED;
+	readyToConfigure_ = true;
+	context.activeState.lsc.enabled = true;
 
 	return 0;
 }
@@ -325,6 +335,34 @@ LensShadingCorrection::sets(Size resolution) const
 }
 
 /**
+ * \copydoc libcamera::ipa::Algorithm::queueRequest
+ */
+void LensShadingCorrection::queueRequest(IPAContext &context,
+					 const uint32_t frame,
+					 IPAFrameContext &frameContext,
+					 const ControlList &controls)
+{
+	if (!readyToConfigure_)
+		return;
+
+	if (!frame)
+		frameContext.lsc.update = true;
+
+	auto &lsc = context.activeState.lsc;
+	const auto &lscEnable = controls.get(controls::LensShadingCorrectionEnable);
+	if (lscEnable && *lscEnable != lsc.enabled) {
+		lsc.enabled = *lscEnable;
+
+		LOG(NxpNeoAlgoLsc, Debug)
+			<< (lsc.enabled ? "Enabling" : "Disabling") << " LSC";
+
+		frameContext.lsc.update = true;
+	}
+
+	frameContext.lsc.enabled = lsc.enabled;
+}
+
+/**
  * \copydoc libcamera::ipa::Algorithm::prepare
  */
 void LensShadingCorrection::prepare(IPAContext &context,
@@ -332,41 +370,42 @@ void LensShadingCorrection::prepare(IPAContext &context,
 				    [[maybe_unused]] IPAFrameContext &frameContext,
 				    NxpNeoParams *params)
 {
-	if (status_ == NOT_CONFIGURED)
-		/* No Lsc is configured for current context */
+	if (!readyToConfigure_)
+		/* No LSC is configured for current context */
 		return;
 
 	uint32_t ct = context.activeState.awb.temperatureK;
 	unsigned int quantizedCt = quantize(ct, kColourTemperatureQuantization);
 
-	/*
-	 * Add a threshold so that oscillations around a quantization step don't
-	 * lead to constant changes.
-	 */
-	if (utils::abs_diff(ct, lastAppliedCt_) < kColourTemperatureQuantization / 2)
-		return;
+	/* Check if we can skip the update. */
+	if (!frameContext.lsc.update) {
+		if (!frameContext.lsc.enabled)
+			return;
+		/*
+		* Add a threshold so that oscillations around a quantization step don't
+		* lead to constant changes.
+		*/
+		if (utils::abs_diff(ct, lastAppliedCt_) < kColourTemperatureQuantization / 2)
+			return;
 
-	if (quantizedCt == lastAppliedQuantizedCt_)
-		return;
-
-	if (status_ != ENABLED) {
+		if (quantizedCt == lastAppliedQuantizedCt_)
+			return;
+	} else {
 		auto vigCtrlConfig = params->block<BlockParamsType::VigCtrl>();
-		vigCtrlConfig.setUpdate(true);
-
-		vigCtrlConfig->ctrl_enable = 1;
+		vigCtrlConfig.setEnabled(frameContext.lsc.enabled);
 		vigCtrlConfig->blk_conf_cols = blockCountX_;
 		vigCtrlConfig->blk_conf_rows = blockCountY_;
 		vigCtrlConfig->blk_size_xsize = blockWidth_;
 		vigCtrlConfig->blk_size_ysize = blockHeight_;
 		vigCtrlConfig->blk_stepx_step = blockStepX_;
 		vigCtrlConfig->blk_stepy_step = blockStepY_;
-
-		LOG(NxpNeoAlgoLsc, Debug) << "Lsc is enabled";
-		status_ = ENABLED;
 	}
 
+	if (!frameContext.lsc.enabled)
+		return;
+
 	auto vigTableConfig = params->block<BlockParamsType::VigTable>();
-	vigTableConfig.setUpdate(true);
+	vigTableConfig.setEnabled(true);
 
 	/* Copy table */
 	const Components &set = sets_.getInterpolated(quantizedCt);
@@ -380,6 +419,18 @@ void LensShadingCorrection::prepare(IPAContext &context,
 	LOG(NxpNeoAlgoLsc, Debug)
 		<< "ct is " << ct << ", quantized to "
 		<< quantizedCt;
+}
+
+/**
+ * \copydoc libcamera::ipa::Algorithm::process
+ */
+void LensShadingCorrection::process([[maybe_unused]] IPAContext &context,
+				    [[maybe_unused]] const uint32_t frame,
+				    IPAFrameContext &frameContext,
+				    [[maybe_unused]] const NxpNeoStats *stats,
+				    ControlList &metadata)
+{
+	metadata.set(controls::LensShadingCorrectionEnable, frameContext.lsc.enabled);
 }
 
 REGISTER_IPA_ALGORITHM(LensShadingCorrection, "LensShadingCorrection")

@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * algorithm.cpp - NXP NEO control algorithm interface
  * Copyright 2026 NXP
+ *
+ * NXP NEO control algorithm interface
  */
 
 #include <libipa/algorithm.h>

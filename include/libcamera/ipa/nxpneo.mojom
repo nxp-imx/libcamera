@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * Based on rkisp1.mojom
- * Copyright 2024-2025 NXP
+ * Copyright 2024-2026 NXP
  */
 
 /*
@@ -16,29 +16,29 @@ import "include/libcamera/ipa/core.mojom";
  * The IPAColorSpace struct and associated enums are mirrored with the
  * libcamera ColorSpace class definition.
  */
-enum IPAPrimaries {
-	IPAPrimariesRaw,
-	IPAPrimariesSmpte170m,
-	IPAPrimariesRec709,
-	IPAPrimariesRec2020,
+[scopedEnum] enum IPAPrimaries {
+	Raw,
+	Smpte170m,
+	Rec709,
+	Rec2020,
 };
 
-enum IPATransferFunction {
-	IPATransferFunctionLinear,
-	IPATransferFunctionSrgb,
-	IPATransferFunctionRec709,
+[scopedEnum] enum IPATransferFunction {
+	Linear,
+	Srgb,
+	Rec709,
 };
 
-enum IPAYcbcrEncoding {
-	IPAYcbcrEncodingNone,
-	IPAYcbcrEncodingRec601,
-	IPAYcbcrEncodingRec709,
-	IPAYcbcrEncodingRec2020,
+[scopedEnum] enum IPAYcbcrEncoding {
+	None,
+	Rec601,
+	Rec709,
+	Rec2020,
 };
 
-enum IPARange {
-	IPARangeFull,
-	IPARangeLimited,
+[scopedEnum] enum IPARange {
+	Full,
+	Limited,
 };
 
 struct IPAColorSpace {
@@ -51,7 +51,7 @@ struct IPAColorSpace {
 struct InitParams {
 	uint32 hwRevision;
 	uint32 hwCapabilities;
-	uint32 apiVersion;
+	uint64 supportedParamsBlocks;
 	string sensorEntity;
 	libcamera.IPACameraSensorInfo sensorInfo;
 	libcamera.ControlInfoMap sensorControls;
@@ -64,7 +64,7 @@ struct IPAConfigInfo {
 	libcamera.ControlInfoMap sensorControls;
 	libcamera.ControlInfoMap lensControls;
 	libcamera.ControlList sensorControlList;
-	IPAModeType mode;
+	IPAPipelineMode mode;
 	IPAColorSpace colorSpace;
 	/* \todo remove when available from IPACameraSensorInfo */
 	uint32 bitsPerPixelAuxiliary;
@@ -78,13 +78,12 @@ struct DelayedControlsParams {
 struct SensorConfig {
 	map<int32, DelayedControlsParams> delayedControlsParams;
 	uint32 embeddedTopLines;
-	bool rgbIr;
 };
 
-/* Stream type of the camera */
-enum IPAStreamType {
-	IPAStreamTypeFrame,
-	IPAStreamTypeIr,
+/* ISP output stream */
+[scopedEnum] enum IPAStreamType {
+	Frame,
+	Ir,
 };
 
 /*
@@ -93,26 +92,26 @@ enum IPAStreamType {
  */
 
 /* Buffer types used as key in buffersId maps */
-enum IPABufferType {
-	IPABufferTypeImage0,
-	IPABufferTypeImage1,
-	IPABufferTypeEData,
-	IPABufferTypeParams,
-	IPABufferTypeStats,
-	IPABufferTypeFrame,
-	IPABufferTypeIr,
+[scopedEnum] enum IPABufferType {
+	Image0,
+	Image1,
+	EData,
+	Params,
+	Stats,
+	Frame,
+	Ir,
 };
 
-enum IPAContextType {
-	IPAContextTypeRgb,
-	IPAContextTypeIr,
+[scopedEnum] enum IPACameraContext {
+	Rgb,
+	Ir,
 };
 
-enum IPAModeType {
-	IPAModeTypeStandard,
-	IPAModeTypeHdrMerge,
-	IPAModeTypeRgbIr,
-	IPAModeTypeRgbIrDual,
+[scopedEnum] enum IPAPipelineMode {
+	Standard,
+	HdrMerge,
+	RgbIr,
+	RgbIrDual,
 };
 
 interface IPANxpNeoInterface {
@@ -124,21 +123,23 @@ interface IPANxpNeoInterface {
 	stop();
 
 	configure(IPAConfigInfo configInfo,
-		  map<uint32, libcamera.IPAStream> streamConfig)
+		  map<IPAStreamType, libcamera.IPAStream> streamConfig)
 		=> (int32 ret, libcamera.ControlInfoMap ipaControls);
 
 	mapBuffers(array<libcamera.IPABuffer> buffers);
 	unmapBuffers(array<uint32> ids);
 
 	[async] queueRequest(uint32 frame, libcamera.ControlList reqControls);
-	[async] computeParams(uint32 frame, IPAContextType context, map<uint32, uint32> bufferIds);
-	[async] processStats(uint32 frame, IPAContextType context, map<uint32, uint32> bufferIds,
+	[async] computeParams(uint32 frame, IPACameraContext context,
+			      map<IPABufferType, uint32> bufferIds);
+	[async] processStats(uint32 frame, IPACameraContext context,
+			     map<IPABufferType, uint32> bufferIds,
 			     libcamera.ControlList sensorControls);
 };
 
 interface IPANxpNeoEventInterface {
-	paramsComputed(uint32 frame, IPAContextType context, uint32 bytesused);
+	paramsComputed(uint32 frame, IPACameraContext context, uint32 bytesused);
 	setSensorControls(uint32 frame, libcamera.ControlList sensorControls);
 	setLensControls(libcamera.ControlList controls);
-	metadataReady(uint32 frame, IPAContextType context, libcamera.ControlList metadata);
+	metadataReady(uint32 frame, IPACameraContext context, libcamera.ControlList metadata);
 };

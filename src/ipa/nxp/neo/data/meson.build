@@ -9,6 +9,7 @@ conf_files = files([
     'os08a20.yaml',
     'ox05b1s.yaml',
     'uncalibrated.yaml',
+    'vivid.yaml',
 ])
 
 install_data(conf_files,

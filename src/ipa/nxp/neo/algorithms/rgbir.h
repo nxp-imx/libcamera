@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * rgbir.h - NXP NEO RGBIR to RGB,IR block configuration
  * Copyright 2024-2026 NXP
+ *
+ * NXP NEO RGBIR to RGB,IR block configuration
  */
 
 #pragma once

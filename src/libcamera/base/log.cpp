@@ -29,12 +29,6 @@
 #include <libcamera/base/thread.h>
 #include <libcamera/base/utils.h>
 
-#ifdef ANDROID
-#include <android/log.h>
-#include <cutils/properties.h>
-#define LOG_TAG "LIBCAMERA"
-#define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
-#endif
 /**
  * \file base/log.h
  * \brief Logging infrastructure
@@ -292,12 +286,8 @@ void LogOutput::writeSyslog(LogSeverity severity, const std::string &str)
 
 void LogOutput::writeStream(const std::string &str)
 {
-#ifdef ANDROID
-	ALOGI("%s", str.c_str());
-#else
 	stream_->write(str.c_str(), str.size());
 	stream_->flush();
-#endif
 }
 
 /**
@@ -794,13 +784,6 @@ LogCategory *LogCategory::create(std::string_view name)
 LogCategory::LogCategory(std::string_view name)
 	: name_(name), severity_(LogSeverity::LogInfo)
 {
-#ifdef ANDROID
-	char value[PROPERTY_VALUE_MAX];
-	property_get("vendor.rw.camera.test", value, "");
-
-	if (strcmp(value, "debug") == 0)
-		severity_ = LogSeverity::LogDebug;
-#endif
 }
 
 /**

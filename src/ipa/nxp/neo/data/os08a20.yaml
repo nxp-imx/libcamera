@@ -86,25 +86,27 @@ algorithms:
       fixed-gamma: 180
   - GammaOutCorrection:
   - HdrMerge:
-      # HDR tuned parameters based on following input values:
-      # - input data format of the HDR merge bloc: 12 bits
+      # Note: The HDR merge ratio should be aligned with the ratio used from
+      #       CameraHelper::controlListSetAGC(), currently set to 16.
+      ratio-long2short: 16
+      # Auto mode enabled (default mode) using default blending window {65, 95}
+      # Manual HDR tuned parameters based on following input values:
+      # - input data format of the HDR merge block: 12 bits
       # - HDR ratio: 16
       # - black level at the input of the HDR merge: 0
       # - low blending threshold: 65%
       # - high blending threshold: 95%
-      obpp: 3
-      motion-fix-en: 1
-      blend-3x3: 1
-      gain-bpp: [ 3, 3 ]
-      gain-offset: [ 0, 0 ]
-      gain-scale: [ 4097, 4097]
-      gain-shift: [ 8, 4 ]
-      luma-th0: 42598
-      luma-scale: 3413
-      luma-scale-shift: 18
-      luma-scale-th-shift: 0
-      downscale: [ 0, 0 ]
-      upscale: [ 0, 0 ]
-      postscale: 0
+#      obpp: 3
+#      gain-bpp: [ 2, 3 ]
+#      gain-offset: [ 0, 0 ]
+#      gain-scale: [ 4097, 4097]
+#      gain-shift: [ 8, 4 ]
+#      luma-th0: 42598
+#      luma-scale: 3413
+#      luma-scale-shift: 18
+#      luma-scale-th-shift: 0
+#      downscale: [ 0, 0 ]
+#      upscale: [ 0, 0 ]
+#      postscale: 0
   - Agc:
 ...

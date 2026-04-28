@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
+ * Copyright 2024-2026 NXP
+ *
+ * NXP NEO AWB control algorithm
+ *
  * Based on IPU3 AWB control algorithm
  *     src/ipa/ipu3/algorithms/awb.cpp
  * Copyright (C) 2021, Ideas On Board
- *
- * awb.cpp - AWB control algorithm
- * Copyright 2024-2025 NXP
  */
 
 #include "awb.h"
@@ -71,7 +72,7 @@ namespace ipa::nxpneo::algorithms {
  *      to RGB Path        to IR path
  *
  * The user has the option to define in the calibration file if AWB gains should
- * be applied from OBWB0/1 or OBWB2 blocks. If not explictly defined, the
+ * be applied from OBWB0/1 or OBWB2 blocks. If not explicitly defined, the
  * algorithm will default to using OBWB2, unless the pipeline is operating in
  * HDR merge mode where OBWB0/1 has to be used. The user configuration, if
  * present, takes precedence over the default configuration.
@@ -95,8 +96,8 @@ namespace ipa::nxpneo::algorithms {
  *              valid values: { "obwb0/1", "obwb2"}
  *              default value: "obwb2" (non HDR-merge) or "obwb0/1" (HDR-merge)
  * awb-gains: location where the AWB gains should apply (in ISP or in sensor)
- *            valid values: { isp, sensor }
- *            default value: isp
+ *            valid values: { "isp", "sensor" }
+ *            default value: "isp"
  */
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoAwb)
@@ -104,8 +105,8 @@ LOG_DEFINE_CATEGORY(NxpNeoAlgoAwb)
 const std::string Awb::kDefaultObwb("obwb2");
 
 const std::map<const std::string, std::vector<uint8_t>> Awb::kObwbMap = {
-	{ "obwb0/1", { 0, 1 } },
-	{ "obwb2", { 2 } },
+	{ "obwb0/1", { NEO_OBWB_LINE_PATH0, NEO_OBWB_LINE_PATH1 } },
+	{ "obwb2", { NEO_OBWB_MERGE_PATH } },
 };
 
 Awb::Awb()
@@ -118,6 +119,9 @@ Awb::Awb()
  */
 int Awb::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData)
 {
+	context.ctrlMap[&controls::AwbEnable] = ControlInfo(false, true);
+	context.ctrlMap[&controls::ColourGains] = ControlInfo(0.1f, 32.0f);
+
 	/* Get the OBWB block name from tuning file. */
 	obwbUserConfig_ = tuningData["obwb-blocks"].get<std::string>();
 
@@ -163,9 +167,9 @@ int Awb::configure(IPAContext &context,
 	 * configured in the calibration file, default to OBWB2 unless we are
 	 * in HDR merge mode.
 	 */
-	IPAModeType &mode = context.configuration.pipelineMode;
+	IPAPipelineMode &mode = context.configuration.pipelineMode;
 	if (!obwbUserConfig_) {
-		if (mode != IPAModeTypeHdrMerge)
+		if (mode != IPAPipelineMode::HdrMerge)
 			obwbs_ = kObwbMap.at("obwb2");
 		else
 			obwbs_ = kObwbMap.at("obwb0/1");
@@ -173,9 +177,9 @@ int Awb::configure(IPAContext &context,
 
 	/*
 	 * Cache the OBWB obpp configuration that will be used at runtime.
-	 * Assumption is that 20-bit (input0) and 16-bit (input1) pixel format
+	 * Assumption is that 20-bit (input0) and 16-bit (input1) bit depth
 	 * is used in the ISP pipeline after HDR Decomp block, unless HDR merge
-	 * block is enabled so that sensor pixel format is used until merge.
+	 * block is enabled so that sensor bit depth is used until merge.
 	 */
 	auto obpp = [](unsigned int ibpp) -> unsigned int {
 		if (ibpp <= 12)
@@ -192,29 +196,31 @@ int Awb::configure(IPAContext &context,
 		context.configuration.sensor.bpps;
 
 	/*
-	 * Assumption is that the internal pixel format at the input of OBWB
-	 * blocks is:
+	 * Determine the internal bit depth at the input of each OBWB block.
+	 *
+	 * The bit depth varies depending on the OBWB block instance and the
+	 * pipeline operating mode:
 	 * - OBWB0/1
-	 *     - 20/16-bit (input0/input1) for operation without HDR merge
-	 *     - The native sensor format (input0/input1) when HDR merge enabled
-	 *       or 12-bit if the pixel format is 10-bit
+	 *     - Without HDR merge: Fixed at 20-bit (input0) / 16-bit (input1)
+	 *     - With HDR merge enabled: Uses native sensor bit depth
+	 *       - Exception: 10-bit sensor data is expanded to 12-bit
 	 * - OBWB2
 	 *     - 20-bit unconditionally
 	 */
-	ObwbArray<uint16_t> obwbPixelFormat;
-	if (mode != IPAModeTypeHdrMerge) {
-		obwbPixelFormat[0] = 20;
-		obwbPixelFormat[1] = 16;
-		awbConfig.obwbObpp[0] = obpp(obwbPixelFormat[0]);
-		awbConfig.obwbObpp[1] = obpp(obwbPixelFormat[1]);
+	ObwbArray<uint16_t> obwbBitDepth;
+	if (mode != IPAPipelineMode::HdrMerge) {
+		obwbBitDepth[0] = 20;
+		obwbBitDepth[1] = 16;
+		awbConfig.obwbObpp[0] = obpp(obwbBitDepth[0]);
+		awbConfig.obwbObpp[1] = obpp(obwbBitDepth[1]);
 	} else {
-		obwbPixelFormat[0] = bpps[0] == 10 ? 12 : bpps[0];
-		obwbPixelFormat[1] = bpps[1] == 10 ? 12 : bpps[1];
+		obwbBitDepth[0] = bpps[0] == 10 ? 12 : bpps[0];
+		obwbBitDepth[1] = bpps[1] == 10 ? 12 : bpps[1];
 		awbConfig.obwbObpp[0] = obpp(bpps[0]);
 		awbConfig.obwbObpp[1] = obpp(bpps[1]);
 	}
-	obwbPixelFormat[2] = 20;
-	awbConfig.obwbObpp[2] = obpp(obwbPixelFormat[2]);
+	obwbBitDepth[2] = 20;
+	awbConfig.obwbObpp[2] = obpp(obwbBitDepth[2]);
 
 	/*
 	 * The awb gain factors are used to compensate the black level offsets
@@ -222,12 +228,12 @@ int Awb::configure(IPAContext &context,
 	 * It is calculated per OBWB unit and per color channel and based on
 	 * following associated parameters:
 	 * - maximum pixel value fed to the OBWB block input
-	 * - black level offset scaled to the input pixel format (which is
+	 * - black level offset scaled to the input bit depth (which is
 	 *   already computed from the blc algorithm)
 	 */
 	std::stringstream oss;
 	for (unsigned int obwb = 0; obwb < kObwbInstancesCount; obwb++) {
-		double inputPixelMax = (1 << obwbPixelFormat[obwb]) - 1;
+		double inputPixelMax = (1 << obwbBitDepth[obwb]) - 1;
 		const ChannelArray<uint16_t> &blcOffsets =
 			context.configuration.blc.obwbOffsets[obwb];
 		ChannelArray<float> &factors = awbConfig.blcFactors[obwb];
@@ -344,26 +350,31 @@ void Awb::updateObwbGains(IPAContext &context, const uint32_t frame,
 			  IPAFrameContext &frameContext, NxpNeoParams *params)
 {
 	auto &awbConfig = context.configuration.awb;
-	auto obwb0Config = params->block<BlockParamsType::Obwb0>();
-	auto obwb1Config = params->block<BlockParamsType::Obwb1>();
-	auto obwb2Config = params->block<BlockParamsType::Obwb2>();
-
-	const std::array<neoisp_obwb_cfg_s *, 3> obwbBlocks = {
-		reinterpret_cast<neoisp_obwb_cfg_s *>(obwb0Config.data().data()),
-		reinterpret_cast<neoisp_obwb_cfg_s *>(obwb1Config.data().data()),
-		reinterpret_cast<neoisp_obwb_cfg_s *>(obwb2Config.data().data()),
-	};
 
 	for (const uint8_t &obwb : obwbs_) {
+		struct neoisp_obwb_cfg_s *config;
+
 		if (obwb == 0) {
-			obwb0Config.setUpdate(true);
+			auto obwb0Config = params->block<BlockParamsType::Obwb0>();
+
+			obwb0Config.setEnabled(true);
 			obwb0Config->ctrl_obpp = awbConfig.obwbObpp[0];
+
+			config = reinterpret_cast<neoisp_obwb_cfg_s *>(obwb0Config.params());
 		} else if (obwb == 1) {
-			obwb1Config.setUpdate(true);
+			auto obwb1Config = params->block<BlockParamsType::Obwb1>();
+
+			obwb1Config.setEnabled(true);
 			obwb1Config->ctrl_obpp = awbConfig.obwbObpp[1];
+
+			config = reinterpret_cast<neoisp_obwb_cfg_s *>(obwb1Config.params());
 		} else if (obwb == 2) {
-			obwb2Config.setUpdate(true);
+			auto obwb2Config = params->block<BlockParamsType::Obwb2>();
+
+			obwb2Config.setEnabled(true);
 			obwb2Config->ctrl_obpp = awbConfig.obwbObpp[2];
+
+			config = reinterpret_cast<neoisp_obwb_cfg_s *>(obwb2Config.params());
 		} else {
 			LOG(NxpNeoAlgoAwb, Warning) << "Invalid OBWB" << +obwb << " block";
 			continue;
@@ -387,7 +398,6 @@ void Awb::updateObwbGains(IPAContext &context, const uint32_t frame,
 		gains[2] = frameContext.awb.gains.g() * awbConfig.blcFactors[obwb][2];
 		gains[3] = frameContext.awb.gains.b() * awbConfig.blcFactors[obwb][3];
 
-		neoisp_obwb_cfg_s *config = obwbBlocks[obwb];
 		config->r_ctrl_gain = gainDouble2Param(gains[0]);
 		config->gr_ctrl_gain = gainDouble2Param(gains[1]);
 		config->gb_ctrl_gain = gainDouble2Param(gains[2]);
@@ -420,10 +430,8 @@ void Awb::updateObwbGains(IPAContext &context, const uint32_t frame,
 void Awb::configureCtempStats(IPAContext &context, NxpNeoParams *params)
 {
 	auto ctempConfig = params->block<BlockParamsType::CTemp>();
-	ctempConfig.setUpdate(true);
+	ctempConfig.setEnabled(true);
 
-	/* Enable CTEMP measurements */
-	ctempConfig->ctrl_enable = 1;
 	/* Enable color space correction on the input pixel components
 	   before measurements */
 	ctempConfig->ctrl_cscon = 1;
@@ -437,7 +445,7 @@ void Awb::configureCtempStats(IPAContext &context, NxpNeoParams *params)
 	 * exceeds the maximum sum value coded with 28 bits mantissa and
 	 * 4 bits exponent.
 	 * The maximum sum is reached with ((1U << 28) - 1)) << 15.
-	 * For 20bits maximum pixel format, the margin is large enough to not
+	 * For 20bits maximum bit depth, the margin is large enough to not
 	 * reach this maximum sum value.
 	 */
 	ctempConfig->stat_blk_size0_xsize = ctempConfig->roi.width / NEO_CTEMP_BLOCK_NB_X;
@@ -463,7 +471,7 @@ void Awb::generateBlocks(IPAContext &context, IPAFrameContext &frameContext,
 		 * the programmed block size.
 		 */
 		double counted = ctempMemStats->ctemp_pix_cnt[i];
-		unsigned long sumR, sumG, sumB = 0;
+		unsigned long sumR = 0, sumG = 0, sumB = 0;
 
 		/*
 		 * Each statistics sum has 28 bits mantissa (bit[31:4]) and
@@ -591,7 +599,7 @@ void Awb::process(IPAContext &context,
 
 	LOG(NxpNeoAlgoAwb, Debug)
 		<< std::showpoint
-		<< "AWB Gains [" << activeState.awb.gains.automatic
+		<< "AWB Gains " << activeState.awb.gains.automatic
 		<< ", temp " << frameContext.awb.temperatureK << "K";
 }
 

@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
+ * Copyright 2024-2026 NXP
+ *
+ * NXP NEO IPA Context
+ *
  * Based on RkISP1 IPA Context
  *     src/ipa/rkisp1/ipa_context.cpp
  * Copyright (C) 2021-2022, Ideas On Board
- *
- * ipa_context.cpp - NEO NXP IPA Context
- * Copyright 2024-2025 NXP
  */
 
 #include "ipa_context.h"
@@ -29,8 +30,8 @@ namespace libcamera::ipa::nxpneo {
  * \var IPAHwSettings::hwCapabilities
  * \brief Neoisp HW and driver capabilities flags
  *
- * \var IPAHwSettings::apiVersion
- * \brief Neoisp uAPI meta version
+ * \var IPAHwSettings::supportedParamsBlocks
+ * \brief Bit mask to store ISP blocks supported by Neoisp HW
  */
 
 /**

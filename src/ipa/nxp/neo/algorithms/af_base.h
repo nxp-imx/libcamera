@@ -1,10 +1,11 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 /*
+ * Copyright 2025-2026 NXP
+ *
+ * Autofocus algorithm interface
+ *
  * Copyright (C) 2022, Raspberry Pi Ltd
  *
- * Auto focus algorithm interface
- *
- * Copyright 2025 NXP
  * Adapted from the file src/ipa/rpi/controller/rpi/af_algorithm.h
  * to be used as an interface for standard libcamera IPA autofocus algorithm
  */
@@ -43,7 +44,7 @@ using RgbyRegions = RPiController::RegionStats<RgbySums>;
 using FocusRegions = RPiController::RegionStats<uint64_t>;
 
 /*
- * PdafDat and PdafData definitions are imported from header
+ * PdafData definitions are imported from header
  * src/ipa/rpi/controller/pdaf_data.h
  */
 struct PdafData {

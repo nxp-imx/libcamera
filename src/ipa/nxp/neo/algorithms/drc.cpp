@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * drc.cpp - NXP NEO DRC configuration
- * Copyright 2024-2025 NXP
+ * Copyright 2024-2026 NXP
+ *
+ * NXP NEO DRC configuration
  */
 
 #include "drc.h"
@@ -96,10 +97,10 @@ namespace ipa::nxpneo::algorithms {
  * \var DrcControlContext::minValue
  * \brief Minimum pixel value evaluated from the histogram
  *
- * \var DrcControlContext::maxHistogramBin
+ * \var DrcControlContext::maxBin
  * \brief Histogram bin index corresponding to the maximum pixel value
  *
- * \var DrcControlContext::minHistogramBin
+ * \var DrcControlContext::minBin
  * \brief Histogram bin index corresponding to the minimum pixel value
  *
  * \var DrcControlContext::maxHistory
@@ -117,7 +118,7 @@ namespace ipa::nxpneo::algorithms {
  * \brief Maximum value found in the history
  *
  * \var DrcControlContext::historyMaxBin
- * \brief Histogram bin index corresponding the maximum value found in the history
+ * \brief Histogram bin index corresponding to the maximum value found in the history
  *
  * \var DrcControlContext::globalDrcAlpha
  * \brief Alpha blending value for stretching: 256 = stretch, 0 = histogram equalization [1.8]
@@ -258,7 +259,7 @@ void Drc::fixedModeLut()
 
 	LOG(NxpNeoAlgoDrc, Debug) << "Fixed-mode global DRC Gamma: " << gblDrcContext_.gamma;
 
-	for (uint index = 1; index < gblLut_.size(); index++) {
+	for (unsigned int index = 1; index < gblLut_.size(); index++) {
 		float in, outRatio, ratio;
 
 		in = binToLinear(index) / inputUnsignedMaximum;
@@ -292,7 +293,7 @@ void Drc::getMin(const std::vector<uint32_t> &inputHistogram)
 	gblDrcContext_.minBin = 0U;
 	gblDrcContext_.minValue = 0U;
 
-	for (uint index = 0; index < inputHistogram.size(); index++) {
+	for (unsigned int index = 0; index < inputHistogram.size(); index++) {
 		sum += inputHistogram[index];
 
 		if (sum > kMinPixelCount)
@@ -320,7 +321,7 @@ void Drc::getMax(const std::vector<uint32_t> &inputHistogram)
 	gblDrcContext_.maxBin = inputHistogram.size() - 1;
 	gblDrcContext_.maxValue = DRC_INPUT_UMAX;
 
-	for (uint index = inputHistogram.size() - 1; index > 0; index--) {
+	for (unsigned int index = inputHistogram.size() - 1; index > 0; index--) {
 		sum += inputHistogram[index];
 
 		if (sum > kMaxPixelCount)
@@ -356,7 +357,7 @@ void Drc::getHistoryMax()
 	/* Find 2nd maximum */
 	gblDrcContext_.historyMax = 0;
 	for (unsigned int index = 0; index < gblDrcContext_.kDrcMaxHistory; index++) {
-		if (((uint32_t)index) != maxIndex) {
+		if (static_cast<uint32_t>(index) != maxIndex) {
 			if (gblDrcContext_.historyMax < gblDrcContext_.maxHistory[index]) {
 				gblDrcContext_.historyMax = gblDrcContext_.maxHistory[index];
 				gblDrcContext_.historyMaxBin = gblDrcContext_.maxBinHistory[index];
@@ -414,7 +415,7 @@ void Drc::getMinMax(const std::vector<uint32_t> &inputHistogram, const uint32_t 
  */
 void Drc::dynamicModeSum(const std::vector<uint32_t> &inputHistogram, DrcLut *lutVars) const
 {
-	for (uint index = 0; index < inputHistogram.size(); index++) {
+	for (unsigned int index = 0; index < inputHistogram.size(); index++) {
 		uint32_t merged = inputHistogram[index];
 
 		/* Hard bin value limiter */
@@ -433,7 +434,8 @@ void Drc::dynamicModeSum(const std::vector<uint32_t> &inputHistogram, DrcLut *lu
  */
 void Drc::effectiveGamma(DrcLut *lutVars) const
 {
-	lutVars->nextRange = (float)(gblDrcContext_.historyMax - gblDrcContext_.minValue);
+	lutVars->nextRange = static_cast<float>(gblDrcContext_.historyMax -
+						gblDrcContext_.minValue);
 	float gamma = gblDrcContext_.gamma * 1.0 / kQ8One;
 	float dynGamma = 1.0;
 	if (lutVars->nextRange == 1)
@@ -471,7 +473,7 @@ uint16_t Drc::lutFirstRun(DrcLut *lutVars)
 
 	for (int index = 1; index < NEO_DRC_GLOBAL_TONEMAP_SIZE; index++) {
 		float inVal, outRatio, inStretch, outStretch; /* Stretching of Gamma based */
-		inVal = (float)binToLinear(index);
+		inVal = static_cast<float>(binToLinear(index));
 		inStretch = inVal - nextOffset;
 
 		/* Low end clipping... high end clipping is done after scaling */
@@ -516,8 +518,8 @@ uint16_t Drc::lutFirstRun(DrcLut *lutVars)
 		}
 
 		/* Check for maximum ratio to get the required extra factor */
-		if (((uint32_t)index >= gblDrcContext_.minBin) && /* Limit the bin range at Minimum */
-		    ((uint32_t)index <= gblDrcContext_.historyMaxBin) &&
+		if ((static_cast<uint32_t>(index) >= gblDrcContext_.minBin) && /* Limit the bin range at Minimum */
+		    (static_cast<uint32_t>(index) <= gblDrcContext_.historyMaxBin) &&
 		    (lutVars->maxRatio < lutVars->ratio[index]))
 			lutVars->maxRatio = lutVars->ratio[index];
 	}
@@ -553,7 +555,7 @@ void Drc::lutSecondRun(DrcLut *lutVars)
 		if (ratio > UINT16_MAX * 1.0)
 			ratio = UINT16_MAX * 1.0;
 
-		gblLut_[index] = static_cast<int>(ratio);
+		gblLut_[index] = static_cast<uint16_t>(ratio);
 	}
 }
 
@@ -631,10 +633,11 @@ int Drc::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData
  */
 int Drc::configure(IPAContext &context, const IPACameraSensorInfo &configInfo)
 {
-	IPAModeType &pipelineMode = context.configuration.pipelineMode;
+	IPAPipelineMode &pipelineMode = context.configuration.pipelineMode;
 
 	context.configuration.drc.gblMode = gblInitMode_;
-	if ((restrictMode_ == "hdr-merge") && (pipelineMode != IPAModeTypeHdrMerge)) {
+	if (restrictMode_ == "hdr-merge" &&
+	    pipelineMode != IPAPipelineMode::HdrMerge) {
 		/*
 		 * Disable the dynamic DRC (set to Copy mode) if the restrict mode
 		 * is set to "hdr-merge"
@@ -689,13 +692,13 @@ void Drc::prepare([[maybe_unused]] IPAContext &context,
 	if (update) {
 		auto drcGlobalTonemapConfig = params->block<BlockParamsType::DrcGlobalTonemap>();
 		/* Set global lut */
-		drcGlobalTonemapConfig.setUpdate(true);
+		drcGlobalTonemapConfig.setEnabled(true);
 
 		std::copy(gblLut_.begin(), gblLut_.end(), drcGlobalTonemapConfig->drc_global_tonemap);
 	}
 
 	auto drcConfig = params->block<BlockParamsType::DrComp>();
-	drcConfig.setUpdate(true);
+	drcConfig.setEnabled(true);
 
 	/* Set global gain */
 	drcConfig->lcl_stretch_stretch = kLocalStretchvalue;

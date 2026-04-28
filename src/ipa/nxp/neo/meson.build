@@ -41,7 +41,7 @@ neo_ipa_includes = [
 
 mod = shared_module(ipa_name, neo_ipa_sources,
                     name_prefix : '',
-                    include_directories : [neo_ipa_includes],
+                    include_directories : [neo_ipa_includes, libipa_includes],
                     dependencies : [neo_ipa_deps],
                     install : true,
                     install_dir : ipa_install_dir)

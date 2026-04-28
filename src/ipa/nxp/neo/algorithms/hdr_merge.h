@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * hdr_merge.h - NXP NEO HDR Merge configuration
- * Copyright 2025 NXP
+ * Copyright 2025-2026 NXP
+ *
+ * NXP NEO HDR Merge configuration
  */
 
 #pragma once
@@ -21,7 +22,7 @@ namespace ipa::nxpneo::algorithms {
 class HdrMerge : public Algorithm
 {
 public:
-	HdrMerge() = default;
+	HdrMerge();
 	~HdrMerge() = default;
 
 	int init(IPAContext &context, const YamlObject &tuningData) override;
@@ -32,34 +33,36 @@ public:
 		     NxpNeoParams *params) override;
 
 private:
+	int parseCommonParams(const YamlObject &tuningData);
+	int parseManualParams(const YamlObject &tuningData);
+	int parseAutoParams(const YamlObject &tuningData);
+	void computeParams(IPAContext &context);
+	bool isPowerOf2(int n) const
+	{
+		return n > 0 && (n & (n - 1)) == 0;
+	}
+
 	static constexpr size_t kNumImages = 2;
+	static constexpr size_t kNumThresholds = 2;
+	static constexpr bool kAutoEnabled = true;
 
 	/* Default block registers configuration values */
 	static constexpr uint8_t kDefaultObppValue = 3;
-	static constexpr uint8_t kDefaultMotionFixEn = 0;
-	static constexpr uint8_t kDefaultBlend3x3 = 0;
-	static constexpr uint8_t kDefaultGainBpp0 = 3;
-	static constexpr uint8_t kDefaultGainBpp1 = 3;
+	static constexpr uint8_t kDefaultMotionFixEn = 1;
+	static constexpr uint8_t kDefaultBlend3x3 = 1;
 
-	static constexpr uint16_t kDefaultGainOffset0 = 0;
-	static constexpr uint16_t kDefaultGainOffset1 = 0;
-	static constexpr uint16_t kDefaultGainScale0 = 0x0008;
-	static constexpr uint16_t kDefaultGainScale1 = 0x1000;
-	static constexpr uint8_t kDefaultGainShift0 = 4;
-	static constexpr uint8_t kDefaultGainShift1 = 12;
+	static constexpr uint8_t kDefaultLumaScaleThShift = 0;
 
-	static constexpr uint16_t kDefaultLumaTh0 = 0x0004;
-	static constexpr uint16_t kDefaultLumaScale = 0x0100;
-	static constexpr uint8_t kDefaultLumaScaleShift = 8;
-	static constexpr uint8_t kDefaultLumaScaleThShift = 8;
-
-	static constexpr uint8_t kDefaultDownscale0 = 8;
+	static constexpr uint8_t kDefaultDownscale0 = 0;
 	static constexpr uint8_t kDefaultDownscale1 = 0;
 	static constexpr uint8_t kDefaultUpscale0 = 0;
-	static constexpr uint8_t kDefaultUpscale1 = 8;
+	static constexpr uint8_t kDefaultUpscale1 = 0;
 	static constexpr uint8_t kDefaultPostscale = 0;
 
-	static constexpr uint16_t kRatioL2S = 16;
+	/* Default parameters used for the computation of the configuration. */
+	static constexpr uint16_t kBlendingWindowLow = 65;
+	static constexpr uint16_t kBlendingWindowHigh = 95;
+	static constexpr uint16_t kBlendingFactorMax = 256;
 
 	uint8_t obpp_;
 	uint8_t motionfixEn_;
@@ -82,7 +85,11 @@ private:
 	/* Ratio between the long and the short captures. */
 	uint16_t ratioL2S_;
 
-	bool enabled_ = false;
+	/* Blending window of image0 (needed for the auto computation). */
+	std::vector<uint16_t> blendingWindow_;
+
+	bool enabled_;
+	bool autoEnabled_;
 };
 
 } /* namespace ipa::nxpneo::algorithms */

@@ -152,11 +152,8 @@ int Process::start(const std::string &path,
 
 	clone_args cargs = {};
 	int pidfd;
-#ifdef ANDROID
-	cargs.flags = CLONE_PIDFD;
-#else
+
 	cargs.flags = CLONE_PIDFD | CLONE_NEWUSER | CLONE_NEWNET;
-#endif
 	cargs.pidfd = reinterpret_cast<uintptr_t>(&pidfd);
 	cargs.exit_signal = SIGCHLD;
 

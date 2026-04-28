@@ -46,7 +46,6 @@ private:
 				    double scaleX, double scaleY);
 
 	std::unique_ptr<AfBase> algo_;
-	AfStatus status_;
 
 	static constexpr unsigned kFilterTapsCount = 9;
 	static constexpr unsigned kFiltersCount = 2;

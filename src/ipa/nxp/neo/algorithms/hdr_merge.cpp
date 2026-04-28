@@ -1,12 +1,14 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * hdr_merge.cpp - NXP NEO HDR Merge configuration
- * Copyright 2025 NXP
+ * Copyright 2025-2026 NXP
+ *
+ * NXP NEO HDR Merge configuration
  */
 
 #include "hdr_merge.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include <libcamera/base/log.h>
 #include <libcamera/base/utils.h>
@@ -60,15 +62,11 @@ namespace ipa::nxpneo::algorithms {
  *          ▼                   ▼
  *      to RGB Path        to IR path
  *
- * At first, image0 and image1 pixels (x,y) are scaled to the the same level by
+ * At first, image0 and image1 pixels (x,y) are scaled to the same level by
  * the gain, offset and shift parameters:
- * gimageN[x,y] = ((imageN[x,y] - gain-offset[N]) * gain-scale[])
+ * gimageN[x,y] = ((imageN[x,y] - gain-offset[N]) * gain-scale[N])
  * 							>> gain-shift[N]
  *     with N = <0|1> for image0 and image1
- * Relevant parameters in the calibration file are:
- * - gain-offset[]: offset substracted from the image, 16-bits values (2 entries)
- * - gain-scale[]: scaling factor, 16-bits values (2 entries)
- * - gain-shift[]: shift value, 5 bits values (2 entries)
  *
  * Per (x,y) pixel processing is then applied to those scaled images gimage0 and
  * gimage1:
@@ -96,36 +94,97 @@ namespace ipa::nxpneo::algorithms {
  * - opvr = (opv + 128) >> 8
  * - opvs = opvr >> postcale
  *
- * The relevant parameters from the calibration file are:
- * - luma-scale-th-shift: right shift value applied to the computed luma value
- *       before comparison with the luma threshold, 5 bits value
+ * This algorithm can operate in two modes:
+ * - Auto mode: the HDR-merge parameters are computed automatically.
+ * - Manual mode: the parameters are taken directly from the calibration file.
+ *
+ * In auto mode, the computation requires the following inputs:
+ * - the HDR ratio between the two images (from the calibration file),
+ * - the blending window size (from the calibration file),
+ * - the bit depth of both images (available from IPA).
+ * The computation assumes that:
+ * - the output pixel bit depth of the HDR-merge block is 20-bits,
+ * - at the input of the HDR-merge block:
+ *   - the pixel bit depth is the native camera pixel bit depth, as produced by
+ *     the HDR-decomp algorithm.
+ *   - the black-level subtraction does not reduce the effective input dynamic
+ *     range for the HDR-merge block, because the AWB gains applied after the
+ *     black-level correction rescales the signal. This ensures that the
+ *     saturation detection operates correctly despite the earlier black-level
+ *     offset removal.
+ * The calculation of the scaling parameters (scale and shift) assumes that
+ * the HDR ratio is an integer power of two. Arbitrary gain values can be used
+ * but requires usage of the manual configuration mode.
+ * If both low and high thresholds are equal, no blending applies and
+ * image0 is output of the HDR merge block.
+ * Auto mode is enabled by default, but it can be overridden in the
+ * calibration file.
+ *
+ * The following parameters are read from the calibration file:
+ *
+ * - auto: flag indicating if auto mode is enabled (HDR merge parameters
+ *       computed by the algorithm), otherwise the manual values are used
+ *       instead.
+ *       optional, default value: true (auto mode enabled)
+ *
+ * Parameters used for both manual and auto modes:
+ * - ratio-long2short: ratio between the long capture and the short capture.
+ *       This parameter is used in auto mode for the parameters computation,
+ *       it is also used in both manual and auto modes for the AGC algorithm
+ *       to compute the histogram scaling factor.
+ *       mandatory
+ * - motion-fix-en: motion correction, 1 to enable, 0 to disable
+ *       optional, default value: 1
+ * - blend-3x3: blending feature, 1 for 3x3 pixel array, 0 for single pixel
+ *       optional, default value: 1
+ *
+ * Mandatory parameters used for the manual mode only (block register values):
+ * - obpp: pixel bit depth at the output of the merge block, that defines the
+ *       saturation level to apply.
+ *       Possible values are: 0 (12 bpp), 1 (14 bpp), 2 (16 bpp) or 3 (20 bpp)
+ * - gain-bpp[]: size of the pixel components after applying the gain/levelling,
+ *       defining the saturation level to apply.
+ *       Possible values are: 0 (12 bpp), 1 (14 bpp), 2 (16 bpp) or 3 (20 bpp)
+ *       (2 entries)
+ * - gain-offset[]: offset subtracted from the image, 16-bits values (2 entries)
+ * - gain-scale[]: scaling factor, 16-bits values (2 entries)
+ * - gain-shift[]: shift value used for a fractional gain factor,
+ *       5 bits values (2 entries)
  * - luma-th0: luma threshold used for comparing the computed luma value to
  *       derive a per-pixel blending factor, 16 bits value
  * - luma-scale: scaling factor applied to the computed luma after being offset
  *       by the luma threshold, 16 bits value
  * - luma-scale-shift: shift value applied to the computed luma after being
  *       offset by the luma threshold, 5 bits value
+ * - luma-scale-th-shift: right shift value applied to the computed luma value
+ *       before comparison with the luma threshold, 5 bits value
  * - downscale[]: downscale shift applied to gimageN pixel value before
  *       blending, 5 bits values (2 entries)
  * - upscale[]: upscale shift applied to gimageN pixel value before blending,
  *       5 bits values (2 entries)
  * - postscale: downscale shift applied to pixel value obtained from blending,
  *       5 bits value
- * - ratio-long2short: ratio between the long capture and the short capture,
- *       default value: 16
  *
- * Other configurable values are:
- * - obpp: pixel fomat at the output of the merge block, that defines the
- *       saturation level to apply. Possible values are:
- *       0 (12 bpp), 1 (14 bpp), 2 (16 bpp) or 3 (20 bpp)
- * - motion-fix-en: motion correction, 1 to enable, 0 to disable
- * - gainbpp[]: size of the pixel components after applying the gain/leveling,
- *       defining the saturation level to apply. Possible values are:
- *       0 (12 bpp), 1 (14 bpp), 2 (16 bpp) or 3 (20 bpp)
- *       (2 entries)
+ * Parameters used for the auto mode only:
+ * - blending-window: low and high thresholds, relative to the maximum luma
+ *       value of the long image, defining the range in which pixel blending
+ *       between the long and short images is performed. The thresholds are
+ *       expressed as a percentage of the total amplitude of image0,
+ *       with values in the [0..100] range.
+ *       (2 entries: low threshold, high threshold),
+ *       optional, default values: 65, 95
  */
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoHdrMerge)
+
+HdrMerge::HdrMerge()
+	: obpp_(kDefaultObppValue),
+	  downscale_{ kDefaultDownscale0, kDefaultDownscale1 },
+	  upscale_{ kDefaultUpscale0, kDefaultUpscale1 },
+	  postscale_(kDefaultPostscale),
+	  enabled_(false), autoEnabled_(kAutoEnabled)
+{
+}
 
 /**
  * \copydoc libcamera::ipa::Algorithm::init
@@ -133,57 +192,195 @@ LOG_DEFINE_CATEGORY(NxpNeoAlgoHdrMerge)
 int HdrMerge::init([[maybe_unused]] IPAContext &context,
 		   const YamlObject &tuningData)
 {
-	obpp_ = tuningData["obpp"].get<uint8_t>().value_or(kDefaultObppValue);
-	motionfixEn_ = tuningData["motion-fix-en"].get<uint8_t>().value_or(kDefaultMotionFixEn);
-	blend3x3_ = tuningData["blend-3x3"].get<uint8_t>().value_or(kDefaultBlend3x3);
-	std::vector<uint8_t> gainBppDefault = { kDefaultGainBpp0, kDefaultGainBpp1 };
-	gainBpp_ = tuningData["gain-bpp"].getList<uint8_t>().value_or(gainBppDefault);
-	if (gainBpp_.size() != kNumImages) {
-		LOG(NxpNeoAlgoHdrMerge, Error) << "Invalid number of gain-bpp entries";
+	autoEnabled_ = tuningData["auto"].get<bool>().value_or(kAutoEnabled);
+
+	LOG(NxpNeoAlgoHdrMerge, Debug) << "HDR merge auto mode "
+				       << autoEnabled_;
+
+	/* Parse tuning parameters common to both auto and manual modes. */
+	int ret = parseCommonParams(tuningData);
+	if (ret)
+		return ret;
+
+	return autoEnabled_ ?
+		parseAutoParams(tuningData) :
+		parseManualParams(tuningData);
+}
+
+/**
+ * \brief Parse the tuning data used for both auto and manual configurations
+ * \param[in] tuningData The YamlObject representing the tuning data
+ *
+ * \return 0 on success or a negative error code
+ */
+int HdrMerge::parseCommonParams(const YamlObject &tuningData)
+{
+	/* Ratio is a mandatory parameter. */
+	std::optional<uint16_t> ratio =
+		tuningData["ratio-long2short"].get<uint16_t>();
+	if (!ratio.has_value() || !isPowerOf2(ratio.value())) {
+		/*
+		 * If the HDR ratio is not provided in calibration file
+		 * or if it is not a power‑of‑two integer, return an error.
+		 */
+		LOG(NxpNeoAlgoHdrMerge, Error)
+			<< "Missing HDR ratio or HDR ratio not a power of 2!";
 		return -EINVAL;
+	} else {
+		ratioL2S_ = ratio.value();
 	}
 
-	std::vector<uint16_t> gainOffsetDefault = { kDefaultGainOffset0, kDefaultGainOffset1 };
-	gainOffset_ = tuningData["gain-offset"].getList<uint16_t>().value_or(gainOffsetDefault);
-	if (gainOffset_.size() != kNumImages) {
-		LOG(NxpNeoAlgoHdrMerge, Error) << "Invalid number of gain-offset entries";
-		return -EINVAL;
-	}
-	std::vector<uint16_t> gainScaleDefault = { kDefaultGainScale0, kDefaultGainScale1 };
-	gainScale_ = tuningData["gain-scale"].getList<uint16_t>().value_or(gainScaleDefault);
-	if (gainScale_.size() != kNumImages) {
-		LOG(NxpNeoAlgoHdrMerge, Error) << "Invalid number of gain-scale entries";
-		return -EINVAL;
-	}
-	std::vector<uint8_t> gainShiftDefault = { kDefaultGainShift0, kDefaultGainShift1 };
-	gainShift_ = tuningData["gain-shift"].getList<uint8_t>().value_or(gainShiftDefault);
-	if (gainShift_.size() != kNumImages) {
-		LOG(NxpNeoAlgoHdrMerge, Error) << "Invalid number of gain-shift entries";
-		return -EINVAL;
-	}
+	const YamlObject &motionObj = tuningData["motion-fix-en"];
+	motionfixEn_ = motionObj.get<uint8_t>().value_or(kDefaultMotionFixEn);
 
-	lumaTh0_ = tuningData["luma-th0"].get<uint16_t>().value_or(kDefaultLumaTh0);
-	lumaScale_ = tuningData["luma-scale"].get<uint16_t>().value_or(kDefaultLumaScale);
-	lumaScaleShift_ =
-		tuningData["luma-scale-shift"].get<uint8_t>().value_or(kDefaultLumaScaleShift);
-	lumaScaleThShift_ =
-		tuningData["luma-scale-th-shift"].get<uint8_t>().value_or(kDefaultLumaScaleThShift);
+	const YamlObject &blend3x3Obj = tuningData["blend-3x3"];
+	blend3x3_ = blend3x3Obj.get<uint8_t>().value_or(kDefaultBlend3x3);
 
-	std::vector<uint8_t> downscaleDefault = { kDefaultDownscale0, kDefaultDownscale1 };
-	downscale_ = tuningData["downscale"].getList<uint8_t>().value_or(downscaleDefault);
-	if (downscale_.size() != kNumImages) {
-		LOG(NxpNeoAlgoHdrMerge, Error) << "Invalid number of downscale entries";
+	return 0;
+}
+
+/**
+ * \brief Parse the tuning data used for the manual configuration
+ *
+ * All manual paramaters are mandatory. If one manual parameter is missing
+ * an error is returned.
+ *
+ * \param[in] tuningData The YamlObject representing the tuning data
+ *
+ * \return 0 on success or a negative error code
+ */
+int HdrMerge::parseManualParams(const YamlObject &tuningData)
+{
+	/* All manual parameters are mandatory. */
+
+	std::optional<uint8_t> obpp = tuningData["obpp"].get<uint8_t>();
+	if (!obpp.has_value()) {
+		LOG(NxpNeoAlgoHdrMerge, Error)
+			<< "Missing obpp parameter!";
 		return -EINVAL;
 	}
-	std::vector<uint8_t> upscaleDefault = { kDefaultUpscale0, kDefaultUpscale1 };
-	upscale_ = tuningData["upscale"].getList<uint8_t>().value_or(upscaleDefault);
-	if (upscale_.size() != kNumImages) {
-		LOG(NxpNeoAlgoHdrMerge, Error) << "Invalid number of upscale entries";
+	obpp_ = obpp.value();
+
+	std::optional<std::vector<uint8_t>> gainBpp =
+		tuningData["gain-bpp"].getList<uint8_t>();
+	if (!gainBpp || gainBpp->size() != kNumImages) {
+		LOG(NxpNeoAlgoHdrMerge, Error)
+			<< "Invalid number of gain-bpp entries";
 		return -EINVAL;
 	}
-	postscale_ = tuningData["postscale"].get<uint8_t>().value_or(kDefaultPostscale);
+	gainBpp_ = std::move(gainBpp.value());
 
-	ratioL2S_ = tuningData["ratio-long2short"].get<uint16_t>().value_or(kRatioL2S);
+	std::optional<std::vector<uint16_t>> gainOffset =
+		tuningData["gain-offset"].getList<uint16_t>();
+	if (!gainOffset || gainOffset->size() != kNumImages) {
+		LOG(NxpNeoAlgoHdrMerge, Error)
+			<< "Invalid number of gain-offset entries";
+		return -EINVAL;
+	}
+	gainOffset_ = std::move(gainOffset.value());
+
+	std::optional<std::vector<uint16_t>> gainScale =
+		tuningData["gain-scale"].getList<uint16_t>();
+	if (!gainScale || gainScale->size() != kNumImages) {
+		LOG(NxpNeoAlgoHdrMerge, Error)
+			<< "Invalid number of gain-scale entries";
+		return -EINVAL;
+	}
+	gainScale_ = std::move(gainScale.value());
+
+	std::optional<std::vector<uint8_t>> gainShift =
+		tuningData["gain-shift"].getList<uint8_t>();
+	if (!gainShift || gainShift->size() != kNumImages) {
+		LOG(NxpNeoAlgoHdrMerge, Error)
+			<< "Invalid number of gain-shift entries";
+		return -EINVAL;
+	}
+	gainShift_ = std::move(gainShift.value());
+
+	std::optional<uint16_t> lumaTh0 =
+		tuningData["luma-th0"].get<uint16_t>();
+	if (!lumaTh0.has_value()) {
+		LOG(NxpNeoAlgoHdrMerge, Error)
+			<< "Missing lumaTh0 parameter!";
+		return -EINVAL;
+	}
+	lumaTh0_ = lumaTh0.value();
+
+	std::optional<uint16_t> lumaScale =
+		tuningData["luma-scale"].get<uint16_t>();
+	if (!lumaScale.has_value()) {
+		LOG(NxpNeoAlgoHdrMerge, Error)
+			<< "Missing lumaScale parameter!";
+		return -EINVAL;
+	}
+	lumaScale_ = lumaScale.value();
+
+	std::optional<uint8_t> lumaScaleShift =
+		tuningData["luma-scale-shift"].get<uint8_t>();
+	if (!lumaScaleShift.has_value()) {
+		LOG(NxpNeoAlgoHdrMerge, Error)
+			<< "Missing lumaScaleShift parameter!";
+		return -EINVAL;
+	}
+	lumaScaleShift_ = lumaScaleShift.value();
+
+	std::optional<uint8_t> lumaScaleThShift =
+		tuningData["luma-scale-th-shift"].get<uint8_t>();
+	if (!lumaScaleThShift.has_value()) {
+		LOG(NxpNeoAlgoHdrMerge, Error)
+			<< "Missing lumaScaleThShift parameter!";
+		return -EINVAL;
+	}
+	lumaScaleThShift_ = lumaScaleThShift.value();
+
+	std::optional<std::vector<uint8_t>> downscale =
+		tuningData["downscale"].getList<uint8_t>();
+	if (!downscale || downscale->size() != kNumImages) {
+		LOG(NxpNeoAlgoHdrMerge, Error)
+			<< "Invalid number of downscale entries";
+		return -EINVAL;
+	}
+	downscale_ = std::move(downscale.value());
+
+	std::optional<std::vector<uint8_t>> upscale =
+		tuningData["upscale"].getList<uint8_t>();
+	if (!upscale || upscale->size() != kNumImages) {
+		LOG(NxpNeoAlgoHdrMerge, Error)
+			<< "Invalid number of upscale entries";
+		return -EINVAL;
+	}
+	upscale_ = std::move(upscale.value());
+
+	std::optional<uint8_t> postscale =
+		tuningData["postscale"].get<uint8_t>();
+	if (!postscale.has_value()) {
+		LOG(NxpNeoAlgoHdrMerge, Error)
+			<< "Missing postscale parameter!";
+		return -EINVAL;
+	}
+	postscale_ = postscale.value();
+
+	return 0;
+}
+
+/**
+ * \brief Parse the tuning data used for the auto configuration
+ * \param[in] tuningData The YamlObject representing the tuning data
+ *
+ * \return 0 on success or a negative error code
+ */
+int HdrMerge::parseAutoParams(const YamlObject &tuningData)
+{
+	static const std::vector<uint16_t> blendingWindowDefault =
+		{ kBlendingWindowLow, kBlendingWindowHigh };
+	const YamlObject &blendingWindowObj = tuningData["blending-window"];
+	blendingWindow_ =
+		blendingWindowObj.getList<uint16_t>().value_or(blendingWindowDefault);
+	if (blendingWindow_.size() != kNumThresholds) {
+		LOG(NxpNeoAlgoHdrMerge, Error)
+			<< "Invalid number of blending-window entries";
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -194,12 +391,135 @@ int HdrMerge::init([[maybe_unused]] IPAContext &context,
 int HdrMerge::configure(IPAContext &context,
 			[[maybe_unused]] const IPACameraSensorInfo &configInfo)
 {
-	IPAModeType &mode = context.configuration.pipelineMode;
-	enabled_ = mode == IPAModeTypeHdrMerge;
+	IPAPipelineMode &mode = context.configuration.pipelineMode;
+	enabled_ = mode == IPAPipelineMode::HdrMerge;
 
 	context.configuration.hdr.ratioLong2Short = ratioL2S_;
 
+	if (autoEnabled_)
+		computeParams(context);
+
 	return 0;
+}
+
+/**
+ * \brief Compute the HDR merge parameters
+ *
+ * This function computes following parameters:
+ * - the scaling domain parameters used to scale the input images values
+ * - the threshold parameters used to decide if blending applies
+ * - the blending parameters used to compute blended pixel values
+ *
+ * \param[in] context The IPA context
+ */
+void HdrMerge::computeParams(IPAContext &context)
+{
+	/*
+	 * The scaling domain parameters are used to convert the images to
+	 * the 20-bit HDR bit depth, accounting for the long to short ratio as
+	 * well as respective SDR images bit depths.
+	 * - Input0 should be scaled to the HDR ratio of 20-bit.
+	 * - Input1 should be scaled to 20-bit.
+	 * Scaling conversion is performed by ISP as follow
+	 * gimageN[x,y] = ((imageN[x,y] - gain-offset[N]) * gain-scale[N])
+	 * 							>> gain-shift[N]
+	 *     with N = <0|1> for image0 and image1
+	 */
+	static const std::array<unsigned int, kNumImages> scaleBitDepths =
+		{ 20 - static_cast<unsigned int>(std::log2(ratioL2S_)), 20 };
+	std::array<uint32_t, kNumImages> &bpps =
+		context.configuration.sensor.bpps;
+
+	auto gainBpp = [](unsigned int bpp) -> unsigned int {
+		if (bpp <= 12)
+			return NEO_HDR_MERGE_BPP_12BPP;
+		else if (bpp <= 14)
+			return NEO_HDR_MERGE_BPP_14BPP;
+		else if (bpp <= 16)
+			return NEO_HDR_MERGE_BPP_16BPP;
+		else
+			return NEO_HDR_MERGE_BPP_20BPP;
+	};
+
+	for (unsigned int input = 0; input < kNumImages; input++) {
+		/*
+		 * Configure the saturation level to apply to each image before
+		 * blending, according to their respective bit depth after
+		 * rescaling.
+		 */
+		gainBpp_.push_back(gainBpp(scaleBitDepths[input]));
+
+		int scaleShift = scaleBitDepths[input] - bpps[input];
+		if (scaleShift >= 0) {
+			/*
+			 * The scaled factor is >= 1 and is an integer.
+			 * Therefore, the gain shift is set to 0.
+			 */
+			gainScale_.push_back(1 << scaleShift);
+			gainShift_.push_back(0);
+		} else {
+			/* The scaled factor is < 1 and is fractional. */
+			gainScale_.push_back(1);
+			gainShift_.push_back(std::abs(scaleShift));
+		}
+
+		/* Offset from the scaling operation is unused. */
+		gainOffset_.push_back(0);
+	}
+
+	/*
+	 * The ISP operation compares the pixel value against threshold values
+	 * to determine whether:
+	 * - the pixel value is taken from image0,
+	 * - the pixel value is taken from image1, or
+	 * - a blend of both images is used.
+	 * This comparison is performed using values scaled in the image0 domain
+	 * and shifted by the Luma Threshold shift, which is considered to be 0.
+	 */
+
+	/* Scaled factor in the image0 domain. */
+	double scaledFactorImg0 = static_cast<double>(gainScale_[0]) /
+				  (1 << gainShift_[0]);
+	std::array<uint16_t, kNumThresholds> lumaThScaled;
+
+	lumaScaleThShift_ = kDefaultLumaScaleThShift;
+	for (unsigned int i = 0; i < kNumThresholds; i++) {
+		double lumaThValue =
+			static_cast<double>(blendingWindow_[i] << bpps[0]) /
+			100.0;
+		lumaThScaled[i] =
+			static_cast<uint32_t>(std::round(
+				lumaThValue * scaledFactorImg0)) >>
+			lumaScaleThShift_;
+	}
+	lumaTh0_ = lumaThScaled[0];
+
+	/*
+	 * Blending factor mluma is calculated as below with register value
+	 *       mluma = ((luma - luma-th0) * luma-scale) >> luma-scale-shift
+	 * When luma reaches lumaTh1, the blending factor is 256 (mluma=256)
+	 *     256 = ((luma-th1 - luma-th0) * luma-scale) >> luma-scale-shift
+	 *  => luma_scale = 256 * (1 << luma-scale-shift)/(luma-th1 - luma-th0)
+	 *        with luma-scale-shift a 5-bits value
+	 *             luma_scale a 16-bits value
+	 * If both low and high thresholds are equal, no blending applies and
+	 * image0 is output of the HDR merge block.
+	 */
+	unsigned long lumaScale = 0;
+	uint16_t lumaThDiff = lumaThScaled[1] - lumaThScaled[0];
+	if (!lumaThDiff) {
+		lumaScale_ = 0;
+		lumaScaleShift_ = 0;
+		return;
+	}
+	for (lumaScaleShift_ = 0; lumaScaleShift_ < 32; lumaScaleShift_++) {
+		lumaScale = ((1 << lumaScaleShift_) / lumaThDiff) *
+			    kBlendingFactorMax;
+		if (lumaScale > std::numeric_limits<std::uint16_t>::max())
+			break;
+		lumaScale_ = static_cast<uint16_t>(lumaScale);
+	}
+	lumaScaleShift_--;
 }
 
 /**
@@ -214,9 +534,8 @@ void HdrMerge::prepare([[maybe_unused]] IPAContext &context, const uint32_t fram
 
 	/* HDR Merge block configuration */
 	auto config = params->block<BlockParamsType::HdrMerge>();
-	config.setUpdate(true);
+	config.setEnabled(true);
 
-	config->ctrl_enable = 1;
 	config->ctrl_obpp = obpp_;
 	config->ctrl_motion_fix_en = motionfixEn_;
 	config->ctrl_blend_3x3 = blend3x3_;
@@ -225,16 +544,18 @@ void HdrMerge::prepare([[maybe_unused]] IPAContext &context, const uint32_t fram
 
 	LOG(NxpNeoAlgoHdrMerge, Debug)
 		<< "obpp " << static_cast<int>(config->ctrl_obpp)
-		<< " motion_fix_en " << static_cast<int>(config->ctrl_motion_fix_en)
+		<< " motion_fix_en "
+		<< static_cast<int>(config->ctrl_motion_fix_en)
 		<< " blend_3x3 " << static_cast<int>(config->ctrl_blend_3x3)
 		<< " gain bpp (0/1) " << static_cast<int>(config->ctrl_gain0bpp)
-		<< "/" << static_cast<int>(config->ctrl_gain0bpp);
+		<< "/" << static_cast<int>(config->ctrl_gain1bpp);
 
 	config->gain_offset_offset0 = gainOffset_[0];
 	config->gain_offset_offset1 = gainOffset_[1];
 
 	LOG(NxpNeoAlgoHdrMerge, Debug)
-		<< "gain offset (0/1) " << utils::hex(config->gain_offset_offset0)
+		<< "gain offset (0/1) "
+		<< utils::hex(config->gain_offset_offset0)
 		<< "/" << utils::hex(config->gain_offset_offset1);
 
 	config->gain_scale_scale0 = gainScale_[0];
@@ -248,7 +569,8 @@ void HdrMerge::prepare([[maybe_unused]] IPAContext &context, const uint32_t fram
 	config->gain_shift_shift1 = gainShift_[1];
 
 	LOG(NxpNeoAlgoHdrMerge, Debug)
-		<< "gain shift (0/1) " << static_cast<int>(config->gain_shift_shift0)
+		<< "gain shift (0/1) "
+		<< static_cast<int>(config->gain_shift_shift0)
 		<< "/" << static_cast<int>(config->gain_shift_shift1);
 
 	config->luma_th_th0 = lumaTh0_;
@@ -260,7 +582,8 @@ void HdrMerge::prepare([[maybe_unused]] IPAContext &context, const uint32_t fram
 		<< "luma th0 " << utils::hex(config->luma_th_th0)
 		<< " luma scale " << utils::hex(config->luma_scale_scale)
 		<< " luma shift " << static_cast<int>(config->luma_scale_shift)
-		<< " luma th shift " << static_cast<int>(config->luma_scale_thshift);
+		<< " luma th shift "
+		<< static_cast<int>(config->luma_scale_thshift);
 
 	config->downscale_imgscale0 = downscale_[0];
 	config->downscale_imgscale1 = downscale_[1];
@@ -268,9 +591,11 @@ void HdrMerge::prepare([[maybe_unused]] IPAContext &context, const uint32_t fram
 	config->upscale_imgscale1 = upscale_[1];
 	config->post_scale_scale = postscale_;
 	LOG(NxpNeoAlgoHdrMerge, Debug)
-		<< "downscale (0/1) " << static_cast<int>(config->downscale_imgscale0)
+		<< "downscale (0/1) "
+		<< static_cast<int>(config->downscale_imgscale0)
 		<< "/" << static_cast<int>(config->downscale_imgscale1)
-		<< " upscale (0/1) " << static_cast<int>(config->upscale_imgscale0)
+		<< " upscale (0/1) "
+		<< static_cast<int>(config->upscale_imgscale0)
 		<< "/" << static_cast<int>(config->upscale_imgscale1)
 		<< " postscale " << static_cast<int>(config->post_scale_scale);
 }

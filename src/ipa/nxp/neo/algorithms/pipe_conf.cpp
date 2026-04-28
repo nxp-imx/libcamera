@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * pipe_conf.cpp - NXP NEO PIPE_CONF configuration
  * Copyright 2025-2026 NXP
+ *
+ * NXP NEO PIPE_CONF configuration
  */
 
 #include "pipe_conf.h"
@@ -63,7 +64,7 @@ namespace ipa::nxpneo::algorithms {
  *          ▼                   ▼
  *      to RGB Path        to IR path
  *
- * INALIGN0/1 configures, for the 10, 12, 14 and 20-bit pixel formats, if the
+ * INALIGN0/1 configures, for the 10, 12, 14 and 20-bit bit depths, if the
  * significant bits should be fetched MSB or LSB-aligned from the 16-bit aligned
  * words in the DDR buffer. On i.MX95 SoC, the DDR buffers produced by the ISI
  * device have the significant data bits MSB-aligned because of hardware
@@ -76,37 +77,31 @@ namespace ipa::nxpneo::algorithms {
  * shifted, with:
  *   - 20-bit MSB alignment for input0
  *   - 16-bit MSB alignment for input1
- * However there is a hardware peculiarity in the ISP hardware revision V2
- * (i.MX95 rev B0, i.MX952) with 12-bit sensor pixel format: rescaling for
- * input0 and input1 is done to 16-bit regardless of the PIPECONF.LPALIGN
- * setting.
+ * However there is a hardware peculiarity in the ISP (i.MX95 rev B0, i.MX952)
+ * with 12-bit bit depth: rescaling for input0 and input1 is done to
+ * 16-bit regardless of the PIPECONF.LPALIGN setting.
  *
- * Tables below recaps the ISP internal pipeline pixel data alignment depending
- * on the input camera bit per pixel (ibpp), LPALIGN0/1 configuration and the
- * hardware revision.
+ * Tables below recap the ISP internal pipeline pixel data alignment depending
+ * on the input camera bit per pixel (ibpp) and the LPALIGN0/1 configuration.
  *
  * input0 (LPALIGN0)
- * +------+---------------+---------------+
- * |      | LPALIGN0 = 0  | LPALIGN0 = 1  |
- * | ibpp +-------+-------+-------+-------+
- * |      | HW V1 | HW V2 | HW V1 | HW V2 |
- * +------+-------+-------+---------------+
- * |  10  |  10   |  10   |  20   |  20   |
- * |  12  |  12   |  16   |  20   |  16   |
- * |  14  |  14   |  14   |  20   |  20   |
- * |  16  |  16   |  16   |  20   |  20   |
- * +------+-------+-------+-------+-------+
+ * +------+------------+------------+
+ * | ibpp | LPALIGN0=0 | LPALIGN0=1 |
+ * +------+------------+------------+
+ * |  10  |     10     |     20     |
+ * |  12  |     16     |     16     |
+ * |  14  |     14     |     20     |
+ * |  16  |     16     |     20     |
+ * +------+------------+------------+
  *
  * input1 (LPALIGN1)
- * +------+---------------+---------------+
- * |      | LPALIGN1 = 0  | LPALIGN1 = 1  |
- * | ibpp +-------+-------+-------+-------+
- * |      | HW V1 | HW V2 | HW V1 | HW V2 |
- * +------+-------+-------+---------------+
- * |  10  |  10   |  10   |  16   |  16   |
- * |  12  |  12   |  16   |  16   |  16   |
- * |  14  |  14   |  14   |  16   |  16   |
- * +------+-------+-------+-------+-------+
+ * +------+------------+------------+
+ * | ibpp | LPALIGN1=0 | LPALIGN1=1 |
+ * +------+------------+------------+
+ * |  10  |    10      |     16     |
+ * |  12  |    16      |     16     |
+ * |  14  |    14      |     16     |
+ * +------+------------+------------+
  *
  * Relevant entries in the configuration file is a mapping of the following
  * keys:
@@ -120,7 +115,7 @@ namespace ipa::nxpneo::algorithms {
  * falls back into automatic configuration mode using the following logic:
  * - For non HDR-merge mode of operation, configure LPALIGN0/1=1
  * - For HDR-merge mode of operation, configure LPALIGN0/1=0 to keep the native
- *   camera pixel format, as required for the HDR merge block.
+ *   camera bit depth, as required for the HDR merge block.
  *
  * When INALIGN0/1 is explicitly configured in the calibration file with above
  * entries, those are applied with priority. If not configured, the algorithm
@@ -131,7 +126,7 @@ namespace ipa::nxpneo::algorithms {
  *   limitation, configure INALIGN0/1=1 instead
  *
  * Note: for non-linear pixel format decompression using HDR Decompression unit,
- * a pixel format lower or equal to 16-bit is required to be able to define the
+ * a bit depth lower or equal to 16-bit is required to be able to define the
  * relevant knee-points. In that case LPALIGN automatic configuration logic does
  * not apply, so LPALIGN0/1 values should be set to 0 in the calibration file.
  */
@@ -156,7 +151,8 @@ int PipeConf::init([[maybe_unused]] IPAContext &context,
 	const YamlObject &lpAlign1Obj = tuningData["lpalign1"];
 	lpAlign1_ = lpAlign1Obj.get<uint8_t>();
 
-	uint8_t inAlignAuto = (context.hw.hwCapabilities & NEO_CAP_ALIGNMENT_MSB) ? 1 : 0;
+	uint8_t inAlignAuto =
+		context.hw.hwCapabilities & NEO_CAP_ALIGNMENT_MSB ? 1 : 0;
 	const YamlObject &inAlign0Obj = tuningData["inalign0"];
 	inAlign0_ = inAlign0Obj.get<uint8_t>().value_or(inAlignAuto);
 	const YamlObject &inAlign1Obj = tuningData["inalign1"];
@@ -177,10 +173,10 @@ void PipeConf::prepare(IPAContext &context, const uint32_t frame,
 
 	/* PIPE_CONF unit configuration */
 	auto config = params->block<BlockParamsType::PipeConf>();
-	config.setUpdate(true);
+	config.setEnabled(true);
 
-	IPAModeType &mode = context.configuration.pipelineMode;
-	uint8_t lpAlignAuto = mode != IPAModeTypeHdrMerge ? 1 : 0;
+	IPAPipelineMode &mode = context.configuration.pipelineMode;
+	uint8_t lpAlignAuto = mode != IPAPipelineMode::HdrMerge ? 1 : 0;
 	uint8_t lpAlign0 = lpAlign0_.value_or(lpAlignAuto);
 	uint8_t lpAlign1 = lpAlign1_.value_or(lpAlignAuto);
 
