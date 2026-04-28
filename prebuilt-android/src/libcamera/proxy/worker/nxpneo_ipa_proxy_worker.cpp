@@ -182,8 +182,8 @@ ipa_->stop();
                         	_ipcMessage.data().cbegin() + configInfoStart + configInfoBufSize,
                         	&controlSerializer_);
 
-                	std::map<uint32_t, libcamera::IPAStream> streamConfig =
-                        IPADataSerializer<std::map<uint32_t, libcamera::IPAStream>>::deserialize(
+                	std::map<ipa::nxpneo::IPAStreamType, libcamera::IPAStream> streamConfig =
+                        IPADataSerializer<std::map<ipa::nxpneo::IPAStreamType, libcamera::IPAStream>>::deserialize(
                         	_ipcMessage.data().cbegin() + streamConfigStart,
                         	_ipcMessage.data().cend());
 
@@ -306,13 +306,13 @@ ipa_->queueRequest(frame, reqControls);
                         	_ipcMessage.data().cbegin() + frameStart,
                         	_ipcMessage.data().cbegin() + frameStart + frameBufSize);
 
-                	IPAContextType context =
-                        IPADataSerializer<ipa::nxpneo::IPAContextType>::deserialize(
+                	IPACameraContext context =
+                        IPADataSerializer<ipa::nxpneo::IPACameraContext>::deserialize(
                         	_ipcMessage.data().cbegin() + contextStart,
                         	_ipcMessage.data().cbegin() + contextStart + contextBufSize);
 
-                	std::map<uint32_t, uint32_t> bufferIds =
-                        IPADataSerializer<std::map<uint32_t, uint32_t>>::deserialize(
+                	std::map<ipa::nxpneo::IPABufferType, uint32_t> bufferIds =
+                        IPADataSerializer<std::map<ipa::nxpneo::IPABufferType, uint32_t>>::deserialize(
                         	_ipcMessage.data().cbegin() + bufferIdsStart,
                         	_ipcMessage.data().cend());
 
@@ -339,13 +339,13 @@ ipa_->computeParams(frame, context, bufferIds);
                         	_ipcMessage.data().cbegin() + frameStart,
                         	_ipcMessage.data().cbegin() + frameStart + frameBufSize);
 
-                	IPAContextType context =
-                        IPADataSerializer<ipa::nxpneo::IPAContextType>::deserialize(
+                	IPACameraContext context =
+                        IPADataSerializer<ipa::nxpneo::IPACameraContext>::deserialize(
                         	_ipcMessage.data().cbegin() + contextStart,
                         	_ipcMessage.data().cbegin() + contextStart + contextBufSize);
 
-                	std::map<uint32_t, uint32_t> bufferIds =
-                        IPADataSerializer<std::map<uint32_t, uint32_t>>::deserialize(
+                	std::map<ipa::nxpneo::IPABufferType, uint32_t> bufferIds =
+                        IPADataSerializer<std::map<ipa::nxpneo::IPABufferType, uint32_t>>::deserialize(
                         	_ipcMessage.data().cbegin() + bufferIdsStart,
                         	_ipcMessage.data().cbegin() + bufferIdsStart + bufferIdsBufSize);
 
@@ -406,7 +406,7 @@ private:
 
         void paramsComputed(
         	const uint32_t frame,
-        	const IPAContextType context,
+        	const IPACameraContext context,
         	const uint32_t bytesused)
 	{
 		IPCMessage::Header header = {
@@ -421,7 +421,7 @@ private:
 		IPADataSerializer<uint32_t>::serialize(frame);
 	std::vector<uint8_t> contextBuf;
 	std::tie(contextBuf, std::ignore) =
-		IPADataSerializer<ipa::nxpneo::IPAContextType>::serialize(context);
+		IPADataSerializer<ipa::nxpneo::IPACameraContext>::serialize(context);
 	std::vector<uint8_t> bytesusedBuf;
 	std::tie(bytesusedBuf, std::ignore) =
 		IPADataSerializer<uint32_t>::serialize(bytesused);
@@ -495,7 +495,7 @@ private:
 
         void metadataReady(
         	const uint32_t frame,
-        	const IPAContextType context,
+        	const IPACameraContext context,
         	const ControlList &metadata)
 	{
 		IPCMessage::Header header = {
@@ -510,7 +510,7 @@ private:
 		IPADataSerializer<uint32_t>::serialize(frame);
 	std::vector<uint8_t> contextBuf;
 	std::tie(contextBuf, std::ignore) =
-		IPADataSerializer<ipa::nxpneo::IPAContextType>::serialize(context);
+		IPADataSerializer<ipa::nxpneo::IPACameraContext>::serialize(context);
 	std::vector<uint8_t> metadataBuf;
 	std::tie(metadataBuf, std::ignore) =
 		IPADataSerializer<libcamera::ControlList>::serialize(metadata, &controlSerializer_);

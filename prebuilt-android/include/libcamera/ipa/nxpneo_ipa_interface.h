@@ -55,56 +55,56 @@ enum class _NxpNeoEventCmd {
 };
 
 
-enum IPAPrimaries {
-	IPAPrimariesRaw = 0,
-	IPAPrimariesSmpte170m = 1,
-	IPAPrimariesRec709 = 2,
-	IPAPrimariesRec2020 = 3,
+enum class IPAPrimaries {
+	Raw = 0,
+	Smpte170m = 1,
+	Rec709 = 2,
+	Rec2020 = 3,
 };
 
-enum IPATransferFunction {
-	IPATransferFunctionLinear = 0,
-	IPATransferFunctionSrgb = 1,
-	IPATransferFunctionRec709 = 2,
+enum class IPATransferFunction {
+	Linear = 0,
+	Srgb = 1,
+	Rec709 = 2,
 };
 
-enum IPAYcbcrEncoding {
-	IPAYcbcrEncodingNone = 0,
-	IPAYcbcrEncodingRec601 = 1,
-	IPAYcbcrEncodingRec709 = 2,
-	IPAYcbcrEncodingRec2020 = 3,
+enum class IPAYcbcrEncoding {
+	None = 0,
+	Rec601 = 1,
+	Rec709 = 2,
+	Rec2020 = 3,
 };
 
-enum IPARange {
-	IPARangeFull = 0,
-	IPARangeLimited = 1,
+enum class IPARange {
+	Full = 0,
+	Limited = 1,
 };
 
-enum IPAStreamType {
-	IPAStreamTypeFrame = 0,
-	IPAStreamTypeIr = 1,
+enum class IPAStreamType {
+	Frame = 0,
+	Ir = 1,
 };
 
-enum IPABufferType {
-	IPABufferTypeImage0 = 0,
-	IPABufferTypeImage1 = 1,
-	IPABufferTypeEData = 2,
-	IPABufferTypeParams = 3,
-	IPABufferTypeStats = 4,
-	IPABufferTypeFrame = 5,
-	IPABufferTypeIr = 6,
+enum class IPABufferType {
+	Image0 = 0,
+	Image1 = 1,
+	EData = 2,
+	Params = 3,
+	Stats = 4,
+	Frame = 5,
+	Ir = 6,
 };
 
-enum IPAContextType {
-	IPAContextTypeRgb = 0,
-	IPAContextTypeIr = 1,
+enum class IPACameraContext {
+	Rgb = 0,
+	Ir = 1,
 };
 
-enum IPAModeType {
-	IPAModeTypeStandard = 0,
-	IPAModeTypeHdrMerge = 1,
-	IPAModeTypeRgbIr = 2,
-	IPAModeTypeRgbIrDual = 3,
+enum class IPAPipelineMode {
+	Standard = 0,
+	HdrMerge = 1,
+	RgbIr = 2,
+	RgbIrDual = 3,
 };
 
 struct IPAColorSpace
@@ -148,7 +148,7 @@ public:
 	template<
 		typename T1 = uint32_t,
 		typename T2 = uint32_t,
-		typename T3 = uint32_t,
+		typename T3 = uint64_t,
 		typename T4 = std::string,
 		typename T5 = IPACameraSensorInfo,
 		typename T6 = ControlInfoMap,
@@ -156,17 +156,17 @@ public:
 		typename T8 = bool,
 		std::enable_if_t<std::is_convertible_v<T1&&, uint32_t>> * = nullptr,
 		std::enable_if_t<std::is_convertible_v<T2&&, uint32_t>> * = nullptr,
-		std::enable_if_t<std::is_convertible_v<T3&&, uint32_t>> * = nullptr,
+		std::enable_if_t<std::is_convertible_v<T3&&, uint64_t>> * = nullptr,
 		std::enable_if_t<std::is_convertible_v<T4&&, std::string>> * = nullptr,
 		std::enable_if_t<std::is_convertible_v<T5&&, IPACameraSensorInfo>> * = nullptr,
 		std::enable_if_t<std::is_convertible_v<T6&&, ControlInfoMap>> * = nullptr,
 		std::enable_if_t<std::is_convertible_v<T7&&, ControlList>> * = nullptr,
 		std::enable_if_t<std::is_convertible_v<T8&&, bool>> * = nullptr
 	>
-	InitParams(T1 &&_hwRevision, T2 &&_hwCapabilities, T3 &&_apiVersion, T4 &&_sensorEntity, T5 &&_sensorInfo, T6 &&_sensorControls, T7 &&_sensorControlList, T8 &&_lensPresent)
+	InitParams(T1 &&_hwRevision, T2 &&_hwCapabilities, T3 &&_supportedParamsBlocks, T4 &&_sensorEntity, T5 &&_sensorInfo, T6 &&_sensorControls, T7 &&_sensorControlList, T8 &&_lensPresent)
 		: hwRevision(std::forward<T1>(_hwRevision))
 		, hwCapabilities(std::forward<T2>(_hwCapabilities))
-		, apiVersion(std::forward<T3>(_apiVersion))
+		, supportedParamsBlocks(std::forward<T3>(_supportedParamsBlocks))
 		, sensorEntity(std::forward<T4>(_sensorEntity))
 		, sensorInfo(std::forward<T5>(_sensorInfo))
 		, sensorControls(std::forward<T6>(_sensorControls))
@@ -179,7 +179,7 @@ public:
 
 	uint32_t hwRevision{ 0 };
 	uint32_t hwCapabilities{ 0 };
-	uint32_t apiVersion{ 0 };
+	uint64_t supportedParamsBlocks{ 0 };
 	std::string sensorEntity;
 	IPACameraSensorInfo sensorInfo;
 	ControlInfoMap sensorControls;
@@ -198,14 +198,14 @@ public:
 		typename T2 = ControlInfoMap,
 		typename T3 = ControlInfoMap,
 		typename T4 = ControlList,
-		typename T5 = IPAModeType,
+		typename T5 = IPAPipelineMode,
 		typename T6 = IPAColorSpace,
 		typename T7 = uint32_t,
 		std::enable_if_t<std::is_convertible_v<T1&&, IPACameraSensorInfo>> * = nullptr,
 		std::enable_if_t<std::is_convertible_v<T2&&, ControlInfoMap>> * = nullptr,
 		std::enable_if_t<std::is_convertible_v<T3&&, ControlInfoMap>> * = nullptr,
 		std::enable_if_t<std::is_convertible_v<T4&&, ControlList>> * = nullptr,
-		std::enable_if_t<std::is_convertible_v<T5&&, IPAModeType>> * = nullptr,
+		std::enable_if_t<std::is_convertible_v<T5&&, IPAPipelineMode>> * = nullptr,
 		std::enable_if_t<std::is_convertible_v<T6&&, IPAColorSpace>> * = nullptr,
 		std::enable_if_t<std::is_convertible_v<T7&&, uint32_t>> * = nullptr
 	>
@@ -226,7 +226,7 @@ public:
 	ControlInfoMap sensorControls;
 	ControlInfoMap lensControls;
 	ControlList sensorControlList;
-	IPAModeType mode{ static_cast<IPAModeType>(0) };
+	IPAPipelineMode mode{ static_cast<IPAPipelineMode>(0) };
 	IPAColorSpace colorSpace;
 	uint32_t bitsPerPixelAuxiliary{ 0 };
 };
@@ -264,15 +264,12 @@ public:
 	template<
 		typename T1 = std::map<int32_t, ipa::nxpneo::DelayedControlsParams>,
 		typename T2 = uint32_t,
-		typename T3 = bool,
 		std::enable_if_t<std::is_convertible_v<T1&&, std::map<int32_t, ipa::nxpneo::DelayedControlsParams>>> * = nullptr,
-		std::enable_if_t<std::is_convertible_v<T2&&, uint32_t>> * = nullptr,
-		std::enable_if_t<std::is_convertible_v<T3&&, bool>> * = nullptr
+		std::enable_if_t<std::is_convertible_v<T2&&, uint32_t>> * = nullptr
 	>
-	SensorConfig(T1 &&_delayedControlsParams, T2 &&_embeddedTopLines, T3 &&_rgbIr)
+	SensorConfig(T1 &&_delayedControlsParams, T2 &&_embeddedTopLines)
 		: delayedControlsParams(std::forward<T1>(_delayedControlsParams))
 		, embeddedTopLines(std::forward<T2>(_embeddedTopLines))
-		, rgbIr(std::forward<T3>(_rgbIr))
 	{
 	}
 #endif
@@ -280,7 +277,6 @@ public:
 
 	std::map<int32_t, ipa::nxpneo::DelayedControlsParams> delayedControlsParams;
 	uint32_t embeddedTopLines{ 0 };
-	bool rgbIr{ 0 };
 };
 
 class IPANxpNeoInterface : public IPAInterface
@@ -299,7 +295,7 @@ public:
 
 	virtual int32_t configure(
 		const IPAConfigInfo &configInfo,
-		const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
+		const std::map<ipa::nxpneo::IPAStreamType, libcamera::IPAStream> &streamConfig,
 		ControlInfoMap *ipaControls) = 0;
 
 	virtual void mapBuffers(
@@ -314,22 +310,22 @@ public:
 
 	virtual void computeParams(
 		const uint32_t frame,
-		const IPAContextType context,
-		const std::map<uint32_t, uint32_t> &bufferIds) = 0;
+		const IPACameraContext context,
+		const std::map<ipa::nxpneo::IPABufferType, uint32_t> &bufferIds) = 0;
 
 	virtual void processStats(
 		const uint32_t frame,
-		const IPAContextType context,
-		const std::map<uint32_t, uint32_t> &bufferIds,
+		const IPACameraContext context,
+		const std::map<ipa::nxpneo::IPABufferType, uint32_t> &bufferIds,
 		const ControlList &sensorControls) = 0;
 
-	Signal<uint32_t, const IPAContextType, uint32_t> paramsComputed;
+	Signal<uint32_t, const IPACameraContext, uint32_t> paramsComputed;
 
 	Signal<uint32_t, const ControlList &> setSensorControls;
 
 	Signal<const ControlList &> setLensControls;
 
-	Signal<uint32_t, const IPAContextType, const ControlList &> metadataReady;
+	Signal<uint32_t, const IPACameraContext, const ControlList &> metadataReady;
 };
 
 } /* namespace nxpneo */

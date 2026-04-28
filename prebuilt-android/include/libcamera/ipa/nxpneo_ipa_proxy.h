@@ -60,7 +60,7 @@ public:
 
         int32_t configure(
         	const IPAConfigInfo &configInfo,
-        	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
+        	const std::map<ipa::nxpneo::IPAStreamType, libcamera::IPAStream> &streamConfig,
         	ControlInfoMap *ipaControls) override;
 
         void mapBuffers(
@@ -75,13 +75,13 @@ public:
 
         void computeParams(
         	const uint32_t frame,
-        	const IPAContextType context,
-        	const std::map<uint32_t, uint32_t> &bufferIds) override;
+        	const IPACameraContext context,
+        	const std::map<ipa::nxpneo::IPABufferType, uint32_t> &bufferIds) override;
 
         void processStats(
         	const uint32_t frame,
-        	const IPAContextType context,
-        	const std::map<uint32_t, uint32_t> &bufferIds,
+        	const IPACameraContext context,
+        	const std::map<ipa::nxpneo::IPABufferType, uint32_t> &bufferIds,
         	const ControlList &sensorControls) override;
 
 
@@ -89,7 +89,7 @@ private:
 
         void paramsComputedHandler(
         	const uint32_t frame,
-        	const IPAContextType context,
+        	const IPACameraContext context,
         	const uint32_t bytesused);
 
         void setSensorControlsHandler(
@@ -101,7 +101,7 @@ private:
 
         void metadataReadyHandler(
         	const uint32_t frame,
-        	const IPAContextType context,
+        	const IPACameraContext context,
         	const ControlList &metadata);
 
 
@@ -136,15 +136,15 @@ private:
 		}
 		void computeParams(
                 	const uint32_t frame,
-                	const IPAContextType context,
-                	const std::map<uint32_t, uint32_t> &bufferIds)
+                	const IPACameraContext context,
+                	const std::map<ipa::nxpneo::IPABufferType, uint32_t> &bufferIds)
 		{
 			ipa_->computeParams(frame, context, bufferIds);
 		}
 		void processStats(
                 	const uint32_t frame,
-                	const IPAContextType context,
-                	const std::map<uint32_t, uint32_t> &bufferIds,
+                	const IPACameraContext context,
+                	const std::map<ipa::nxpneo::IPABufferType, uint32_t> &bufferIds,
                 	const ControlList &sensorControls)
 		{
 			ipa_->processStats(frame, context, bufferIds, sensorControls);
@@ -178,7 +178,7 @@ public:
 
         int32_t configure(
         	const IPAConfigInfo &configInfo,
-        	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
+        	const std::map<ipa::nxpneo::IPAStreamType, libcamera::IPAStream> &streamConfig,
         	ControlInfoMap *ipaControls) override;
 
         void mapBuffers(
@@ -193,13 +193,13 @@ public:
 
         void computeParams(
         	const uint32_t frame,
-        	const IPAContextType context,
-        	const std::map<uint32_t, uint32_t> &bufferIds) override;
+        	const IPACameraContext context,
+        	const std::map<ipa::nxpneo::IPABufferType, uint32_t> &bufferIds) override;
 
         void processStats(
         	const uint32_t frame,
-        	const IPAContextType context,
-        	const std::map<uint32_t, uint32_t> &bufferIds,
+        	const IPACameraContext context,
+        	const std::map<ipa::nxpneo::IPABufferType, uint32_t> &bufferIds,
         	const ControlList &sensorControls) override;
 
 
