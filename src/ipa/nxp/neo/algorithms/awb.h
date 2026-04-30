@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
+ * Copyright 2024-2026 NXP
+ *
+ * NXP NEO AWB control algorithm
+ *
  * Based on RkISP1 AGC/AEC mean-based control algorithm
  *     src/ipa/rkisp1/algorithms/awb.h
  * Copyright (C) 2021-2022, Ideas On Board
- *
- * awb.h - AWB control algorithm
- * Copyright 2024-2025 NXP
  */
 
 #pragma once

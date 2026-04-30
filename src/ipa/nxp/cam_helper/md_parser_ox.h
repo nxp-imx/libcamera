@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * md_parser_ox.h
+ * Copyright 2024-2026 NXP
+ *
  * MetaData parser class for Omnivision embedded data format found on some
  * sensors of the OX series, not compatible with SMIA parser from RPi.
- * Copyright 2024 NXP
  */
 #include <vector>
 #include "md_parser.h"

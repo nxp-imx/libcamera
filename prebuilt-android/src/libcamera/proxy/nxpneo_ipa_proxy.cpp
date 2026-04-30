@@ -111,7 +111,7 @@ void IPAProxyNxpNeoThreaded::stop()
 
 int32_t IPAProxyNxpNeoThreaded::configure(
 	const IPAConfigInfo &configInfo,
-	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
+	const std::map<ipa::nxpneo::IPAStreamType, libcamera::IPAStream> &streamConfig,
 	ControlInfoMap *ipaControls)
 {
 	return ipa_->configure(configInfo, streamConfig, ipaControls);
@@ -142,8 +142,8 @@ void IPAProxyNxpNeoThreaded::queueRequest(
 
 void IPAProxyNxpNeoThreaded::computeParams(
 	const uint32_t frame,
-	const IPAContextType context,
-	const std::map<uint32_t, uint32_t> &bufferIds)
+	const IPACameraContext context,
+	const std::map<ipa::nxpneo::IPABufferType, uint32_t> &bufferIds)
 {
 	ASSERT(state_ == ProxyRunning);
 	proxy_.invokeMethod(&ThreadProxy::computeParams, ConnectionTypeQueued, frame, context, bufferIds);
@@ -151,8 +151,8 @@ void IPAProxyNxpNeoThreaded::computeParams(
 
 void IPAProxyNxpNeoThreaded::processStats(
 	const uint32_t frame,
-	const IPAContextType context,
-	const std::map<uint32_t, uint32_t> &bufferIds,
+	const IPACameraContext context,
+	const std::map<ipa::nxpneo::IPABufferType, uint32_t> &bufferIds,
 	const ControlList &sensorControls)
 {
 	ASSERT(state_ == ProxyRunning);
@@ -163,7 +163,7 @@ void IPAProxyNxpNeoThreaded::processStats(
 
 void IPAProxyNxpNeoThreaded::paramsComputedHandler(
 	const uint32_t frame,
-	const IPAContextType context,
+	const IPACameraContext context,
 	const uint32_t bytesused)
 {
 	ASSERT(state_ != ProxyStopped);
@@ -187,7 +187,7 @@ void IPAProxyNxpNeoThreaded::setLensControlsHandler(
 
 void IPAProxyNxpNeoThreaded::metadataReadyHandler(
 	const uint32_t frame,
-	const IPAContextType context,
+	const IPACameraContext context,
 	const ControlList &metadata)
 {
 	ASSERT(state_ != ProxyStopped);
@@ -340,7 +340,7 @@ void IPAProxyNxpNeoIsolated::stop()
 
 int32_t IPAProxyNxpNeoIsolated::configure(
 	const IPAConfigInfo &configInfo,
-	const std::map<uint32_t, libcamera::IPAStream> &streamConfig,
+	const std::map<ipa::nxpneo::IPAStreamType, libcamera::IPAStream> &streamConfig,
 	ControlInfoMap *ipaControls)
 {
 	controlSerializer_.reset();
@@ -354,7 +354,7 @@ int32_t IPAProxyNxpNeoIsolated::configure(
 		IPADataSerializer<ipa::nxpneo::IPAConfigInfo>::serialize(configInfo, &controlSerializer_);
 	std::vector<uint8_t> streamConfigBuf;
 	std::tie(streamConfigBuf, std::ignore) =
-		IPADataSerializer<std::map<uint32_t, libcamera::IPAStream>>::serialize(streamConfig);
+		IPADataSerializer<std::map<ipa::nxpneo::IPAStreamType, libcamera::IPAStream>>::serialize(streamConfig);
 	appendPOD<uint32_t>(_ipcInputBuf.data(), configInfoBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), streamConfigBuf.size());
 	_ipcInputBuf.data().insert(_ipcInputBuf.data().end(), configInfoBuf.begin(), configInfoBuf.end());
@@ -462,8 +462,8 @@ void IPAProxyNxpNeoIsolated::queueRequest(
 
 void IPAProxyNxpNeoIsolated::computeParams(
 	const uint32_t frame,
-	const IPAContextType context,
-	const std::map<uint32_t, uint32_t> &bufferIds)
+	const IPACameraContext context,
+	const std::map<ipa::nxpneo::IPABufferType, uint32_t> &bufferIds)
 {
 	IPCMessage::Header _header = { static_cast<uint32_t>(_NxpNeoCmd::ComputeParams), seq_++ };
 	IPCMessage _ipcInputBuf(_header);
@@ -474,10 +474,10 @@ void IPAProxyNxpNeoIsolated::computeParams(
 		IPADataSerializer<uint32_t>::serialize(frame);
 	std::vector<uint8_t> contextBuf;
 	std::tie(contextBuf, std::ignore) =
-		IPADataSerializer<ipa::nxpneo::IPAContextType>::serialize(context);
+		IPADataSerializer<ipa::nxpneo::IPACameraContext>::serialize(context);
 	std::vector<uint8_t> bufferIdsBuf;
 	std::tie(bufferIdsBuf, std::ignore) =
-		IPADataSerializer<std::map<uint32_t, uint32_t>>::serialize(bufferIds);
+		IPADataSerializer<std::map<ipa::nxpneo::IPABufferType, uint32_t>>::serialize(bufferIds);
 	appendPOD<uint32_t>(_ipcInputBuf.data(), frameBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), contextBuf.size());
 	appendPOD<uint32_t>(_ipcInputBuf.data(), bufferIdsBuf.size());
@@ -496,8 +496,8 @@ void IPAProxyNxpNeoIsolated::computeParams(
 
 void IPAProxyNxpNeoIsolated::processStats(
 	const uint32_t frame,
-	const IPAContextType context,
-	const std::map<uint32_t, uint32_t> &bufferIds,
+	const IPACameraContext context,
+	const std::map<ipa::nxpneo::IPABufferType, uint32_t> &bufferIds,
 	const ControlList &sensorControls)
 {
 	IPCMessage::Header _header = { static_cast<uint32_t>(_NxpNeoCmd::ProcessStats), seq_++ };
@@ -509,10 +509,10 @@ void IPAProxyNxpNeoIsolated::processStats(
 		IPADataSerializer<uint32_t>::serialize(frame);
 	std::vector<uint8_t> contextBuf;
 	std::tie(contextBuf, std::ignore) =
-		IPADataSerializer<ipa::nxpneo::IPAContextType>::serialize(context);
+		IPADataSerializer<ipa::nxpneo::IPACameraContext>::serialize(context);
 	std::vector<uint8_t> bufferIdsBuf;
 	std::tie(bufferIdsBuf, std::ignore) =
-		IPADataSerializer<std::map<uint32_t, uint32_t>>::serialize(bufferIds);
+		IPADataSerializer<std::map<ipa::nxpneo::IPABufferType, uint32_t>>::serialize(bufferIds);
 	std::vector<uint8_t> sensorControlsBuf;
 	std::tie(sensorControlsBuf, std::ignore) =
 		IPADataSerializer<libcamera::ControlList>::serialize(sensorControls, &controlSerializer_);
@@ -583,8 +583,8 @@ void IPAProxyNxpNeoIsolated::paramsComputedHandler(
         	data + frameStart,
         	data + frameStart + frameBufSize);
 
-	IPAContextType context =
-        IPADataSerializer<ipa::nxpneo::IPAContextType>::deserialize(
+	IPACameraContext context =
+        IPADataSerializer<ipa::nxpneo::IPACameraContext>::deserialize(
         	data + contextStart,
         	data + contextStart + contextBufSize);
 
@@ -662,8 +662,8 @@ void IPAProxyNxpNeoIsolated::metadataReadyHandler(
         	data + frameStart,
         	data + frameStart + frameBufSize);
 
-	IPAContextType context =
-        IPADataSerializer<ipa::nxpneo::IPAContextType>::deserialize(
+	IPACameraContext context =
+        IPADataSerializer<ipa::nxpneo::IPACameraContext>::deserialize(
         	data + contextStart,
         	data + contextStart + contextBufSize);
 

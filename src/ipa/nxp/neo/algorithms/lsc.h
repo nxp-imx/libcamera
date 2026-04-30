@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
+ * Copyright 2025-2026 NXP
+ *
+ * NXP NEO Lens Shading Correction control
+ *
  * Based on Lens Shading Correction control algorithm
  *     src/ipa/rkisp1/algorithms/lsc.h
  * Copyright (C) 2021-2022, Ideas On Board
- *
- * lsc.h NXP NEO Lens Shading Correction control
- * Copyright 2025 NXP
  */
 
 #pragma once
@@ -28,15 +29,16 @@ public:
 
 	int init(IPAContext &context, const YamlObject &tuningData) override;
 	int configure(IPAContext &context, const IPACameraSensorInfo &configInfo) override;
+	void queueRequest(IPAContext &context, const uint32_t frame,
+			  IPAFrameContext &frameContext,
+			  const ControlList &controls) override;
 	void prepare(IPAContext &context, const uint32_t frame,
 		     IPAFrameContext &frameContext,
 		     NxpNeoParams *params) override;
-
-	enum Status {
-		ENABLED = 0,
-		CONFIGURED = 1,
-		NOT_CONFIGURED = 2
-	};
+	void process(IPAContext &context, const uint32_t frame,
+		     IPAFrameContext &frameContext,
+		     const NxpNeoStats *stats,
+		     ControlList &metadata) override;
 
 	struct Components {
 		uint32_t ct;
@@ -49,15 +51,13 @@ public:
 	using SetMap = std::map<Size, ipa::Interpolator<Components>>;
 
 private:
-	void copyTable(neoisp_vignetting_table_mem_params_s &vt,
-		       const Components &set);
 	const std::optional<BlockCount> blockCount(Size resolution) const;
 	const ipa::Interpolator<Components> sets(Size resolution) const;
 
 	static constexpr uint32_t kScalingFractionalSize = (1 << 15);
 
-	Status status_;
 	ipa::Interpolator<Components> sets_;
+	bool readyToConfigure_;
 	unsigned int lastAppliedCt_;
 	unsigned int lastAppliedQuantizedCt_;
 
@@ -67,9 +67,9 @@ private:
 	uint16_t blockCountX_;
 	/* Vertical block count */
 	uint16_t blockCountY_;
-	/* Number of pixels per block */
+	/* Block width in pixels */
 	uint16_t blockWidth_;
-	/* Number of rows per block */
+	/* Block height in pixels  */
 	uint16_t blockHeight_;
 	/* Horizontal scaling factor for each pixel within the block (u1.15) */
 	uint16_t blockStepX_;

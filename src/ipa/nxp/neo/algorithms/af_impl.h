@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (C) 2022-2023, Raspberry Pi Ltd
+ * Copyright 2025-2026 NXP
  *
  * Autofocus control algorithm
  *
- * Copyright 2025-2026 NXP
+ * Copyright (C) 2022-2023, Raspberry Pi Ltd
  *
  * Adapted from the files:
  * - src/ipa/rpi/controller/rpi/af.h

@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * goc.h NXP NEO Gamma out control
- * Copyright 2025 NXP
+ * Copyright 2025-2026 NXP
+ *
+ * NXP NEO Gamma out control
  */
 
 #pragma once
@@ -46,8 +47,8 @@ public:
 
 	/*
 	 * Transfer function formula:
-	 * L' = LinearGain * L						(for R <= LinearThreshold)
-	 * L' = NonLinearGain * (L^(GammaInverse) - NonLinearOffset)	(for R > LinearThreshold)
+	 * L' = LinearGain * L						(for L <= LinearThreshold)
+	 * L' = NonLinearGain * (L^(GammaInverse) - NonLinearOffset)	(for L > LinearThreshold)
 	 */
 	struct XferFunc {
 		float linearGain;

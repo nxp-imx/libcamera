@@ -1,8 +1,13 @@
 
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * goc.cpp NXP NEO Gamma out control
- * Copyright 2025 NXP
+ * Copyright 2025-2026 NXP
+ *
+ * NXP NEO Gamma out control
+ *
+ * Based on RkISP1 Gamma Out Control algorithm
+ *     src/ipa/rkisp1/algorithms/goc.cpp
+ * Copyright (C) 2024, Ideas On Board
  */
 
 #include "goc.h"
@@ -35,21 +40,21 @@ namespace {
  */
 const std::map<const IPATransferFunction, GammaOutCorrection::XferFunc> kXferMap = {
 	/* Linear transfer function */
-	{ IPATransferFunctionLinear, { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f } },
+	{ IPATransferFunction::Linear, { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f } },
 	/*
 	 * sRGB transfer function:
 	 * L' = 12.92L, for 0 <= L <= 0.0031308
 	 * L' = 1.055L^(1/2.4) - 0.055, for L > 0.0031308
 	 *    = 1.055 * (L^(1/2.4) - (0.055 / 1.055)), for L > 0.0031308
 	 */
-	{ IPATransferFunctionSrgb, { 12.92f, 0.0031308f, 1.055f, 0.0521327f, 0.416667f } },
+	{ IPATransferFunction::Srgb, { 12.92f, 0.0031308f, 1.055f, 0.0521327f, 0.416667f } },
 	/*
 	 * Rec. 709 transfer function:
 	 * L' = 4.5L, for 0 <= L < 0.018
 	 * L' = 1.099L^0.45 - 0.099, for L >= 0.018
 	 *    = 1.099 * (L^0.45 - (0.099 / 1.099)), for L >= 0.018
 	 */
-	{ IPATransferFunctionRec709, { 4.5f, 0.018f, 1.099f, 0.0900819f, 0.45f } },
+	{ IPATransferFunction::Rec709, { 4.5f, 0.018f, 1.099f, 0.0900819f, 0.45f } },
 };
 
 /*
@@ -65,7 +70,7 @@ const std::map<const IPAYcbcrEncoding, GammaOutCorrection::YCbCrEnc> kEncMap = {
 	 *	 0.5, -0.4187, -0.0813]
 	 */
 	{
-		IPAYcbcrEncodingRec601,
+		IPAYcbcrEncoding::Rec601,
 		{ { Matrix<float, 3, 3>(
 			  { 0.299f, 0.5870f, 0.1140f,
 			    -0.1687f, -0.3313f, 0.5f,
@@ -79,7 +84,7 @@ const std::map<const IPAYcbcrEncoding, GammaOutCorrection::YCbCrEnc> kEncMap = {
 	 *	 0.5, -0.4542, -0.0458]
 	 */
 	{
-		IPAYcbcrEncodingRec709,
+		IPAYcbcrEncoding::Rec709,
 		{ { Matrix<float, 3, 3>(
 			  { 0.2126f, 0.7152f, 0.0722f,
 			    -0.1146f, -0.3854f, 0.5f,
@@ -88,7 +93,7 @@ const std::map<const IPAYcbcrEncoding, GammaOutCorrection::YCbCrEnc> kEncMap = {
 	},
 	/* No encoding - used for RGB output formats. */
 	{
-		IPAYcbcrEncodingNone,
+		IPAYcbcrEncoding::None,
 		{ { Matrix<float, 3, 3>(
 			  { 1.0f, 0.0f, 0.0f,
 			    0.0f, 1.0f, 0.0f,
@@ -156,6 +161,7 @@ int GammaOutCorrection::init([[maybe_unused]] IPAContext &context,
 {
 	/* Get the gamma value from tuning file. */
 	gamma_ = tuningData["gamma"].get<float>();
+	context.ctrlMap[&controls::Gamma] = ControlInfo(0.5f, 10.0f, 2.2f);
 
 	if (gamma_.has_value())
 		LOG(NxpNeoAlgoGoc, Debug) << "Configured gamma: " << gamma_.value();
@@ -235,7 +241,8 @@ void GammaOutCorrection::queueRequest(IPAContext &context, const uint32_t frame,
  */
 void GammaOutCorrection::setYuv2RgbParams(neoisp_gcm_cfg_s &gcm) const
 {
-	const Matrix<float, 3, 3> imat = kEncMap.at(IPAYcbcrEncodingRec601).matrix.inverse();
+	const Matrix<float, 3, 3> imat =
+		kEncMap.at(IPAYcbcrEncoding::Rec601).matrix.inverse();
 
 	/* Input matrix */
 	for (unsigned int i = 0; i < 3; i++) {
@@ -297,16 +304,17 @@ void GammaOutCorrection::setXferParams(neoisp_gcm_cfg_s &gcm) const
 void GammaOutCorrection::setEncodingParams(neoisp_gcm_cfg_s &gcm, const IPARange range) const
 {
 	/*
-	 * The default offsets are set for 8-bit full-range.
-	 * In limited range the offsets are defined by standard as: (16, 128, 128)
-	 * for 8-bit range.
-	 * However ISP offsets are defined for 12-bit range, hence the offsets
-	 * defined by standard are converted for 12-bit range.
+	 * The offsets are defined for 8-bit full-range
+	 * and converted for ISP 12-bit range.
+	 * Full range: (0, 128, 128) for Y, Cb, Cr
+	 * Limited range: (16, 128, 128) for Y, Cb, Cr
 	 */
-	uint32_t yOffset = (range == IPARangeLimited) ? 16 : ycbcrEnc_.offsets[0][0];
-	gcm.ooffsets[0] = encOffsetsToParams(yOffset);
-	gcm.ooffsets[1] = encOffsetsToParams(ycbcrEnc_.offsets[1][0]);
-	gcm.ooffsets[2] = encOffsetsToParams(ycbcrEnc_.offsets[2][0]);
+	uint32_t yOffset = (range == IPARange::Limited) ? 16 : ycbcrEnc_.offsets[0][0];
+	gcm.ooffsets[0] = encOffsetsToParams(static_cast<uint8_t>(yOffset));
+	gcm.ooffsets[1] = encOffsetsToParams(
+		static_cast<uint8_t>(ycbcrEnc_.offsets[1][0]));
+	gcm.ooffsets[2] = encOffsetsToParams(
+		static_cast<uint8_t>(ycbcrEnc_.offsets[2][0]));
 
 	/*
 	 * The default matrices are set for full-range.
@@ -314,7 +322,7 @@ void GammaOutCorrection::setEncodingParams(neoisp_gcm_cfg_s &gcm, const IPARange
 	 * The same quantization factors are applied to Y'CbCr for BT.601 and BT.709:
 	 * (219*Y, 224*Pb, 224*Pr).
 	 */
-	Matrix<float, 3, 1> qFactor = (range == IPARangeLimited)
+	Matrix<float, 3, 1> qFactor = (range == IPARange::Limited)
 				? Matrix<float, 3, 1>({ 219.0f / 256, 224.0f / 256, 224.0f / 256 })
 				: Matrix<float, 3, 1>({ 256.0f / 256, 256.0f / 256, 256.0f / 256 });
 	LOG(NxpNeoAlgoGoc, Debug) << "Quantized factor: " << qFactor;
@@ -351,7 +359,7 @@ void GammaOutCorrection::prepare(IPAContext &context,
 
 	/* Enable GCM block configuration. */
 	auto config = params->block<BlockParamsType::Gcm>();
-	config.setUpdate(true);
+	config.setEnabled(true);
 
 	/* Set GCM params. */
 	setYuv2RgbParams(*config);

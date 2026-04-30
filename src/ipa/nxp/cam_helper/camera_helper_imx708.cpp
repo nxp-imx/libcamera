@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * camera_helper_imx708.c
+ * Copyright 2025-2026 NXP
+ *
  * Helper class that performs sensor-specific parameter computations
  * for Sony imx708 sensor
- * Copyright 2025 NXP
  */
 
 #include "camera_helper.h"

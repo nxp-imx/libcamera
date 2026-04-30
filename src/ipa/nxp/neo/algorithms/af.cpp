@@ -94,7 +94,7 @@ int Af::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData)
 	static_assert(kFilterTapsCount == NEO_AF_FILTERS_CNT,
 		      "Unexpected numbers of AF filters taps");
 	auto parseFilter = [](const YamlObject &node,
-			      const std::string name,
+			      const std::string &name,
 			      const std::array<int8_t, kFilterTapsCount> &defaultFilter,
 			      std::array<int8_t, kFilterTapsCount> &out) {
 		std::copy(defaultFilter.begin(), defaultFilter.end(), out.begin());
@@ -111,7 +111,7 @@ int Af::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData)
 	parseFilter(tuningData, "filter1", kFilter1Default, filters_[1]);
 
 	auto parseShift = [](const YamlObject &node,
-			     const std::string name,
+			     const std::string &name,
 			     const uint8_t defaultShift,
 			     uint8_t &out) {
 		std::optional<uint8_t> shift = node[name].get<uint8_t>();
@@ -409,7 +409,7 @@ void Af::prepare([[maybe_unused]] IPAContext &context,
 		return;
 
 	auto config = params->block<BlockParamsType::Af>();
-	config.setUpdate(true);
+	config.setEnabled(true);
 
 	auto &afConfig = context.configuration.af;
 	for (const auto &[i, roi] : utils::enumerate(afConfig.rois))

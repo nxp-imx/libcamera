@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * rgbir.cpp - NXP NEO RGBIR to RGB,IR block configuration
  * Copyright 2025-2026 NXP
+ *
+ * NXP NEO RGBIR to RGB,IR block configuration
  */
 
 #include "rgbir.h"
@@ -137,7 +138,7 @@ void RgbIr::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
 
 	/* Head Color configuration */
 	auto headColorConfig = params->block<BlockParamsType::HeadColor>();
-	headColorConfig.setUpdate(true);
+	headColorConfig.setEnabled(true);
 
 	headColorConfig->ctrl_hoffset = headColor_[0];
 	headColorConfig->ctrl_voffset = headColor_[1];
@@ -148,9 +149,8 @@ void RgbIr::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
 
 	/* RGBIR configuration */
 	auto rgbirConfig = params->block<BlockParamsType::RgbIr>();
-	rgbirConfig.setUpdate(true);
+	rgbirConfig.setEnabled(true);
 
-	rgbirConfig->ctrl_enable = 1;
 	rgbirConfig->ccm0_ccm = ccm_[0];
 	rgbirConfig->ccm1_ccm = ccm_[1];
 	rgbirConfig->ccm2_ccm = ccm_[2];
@@ -170,7 +170,7 @@ void RgbIr::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
 
 	/* Look for 8 or 16 bits IR stream, and defaults to 8 bits. */
 	bool irStream16bits = false;
-	auto it = context.configuration.streams.find(IPAStreamTypeIr);
+	auto it = context.configuration.streams.find(IPAStreamType::Ir);
 	if (it != context.configuration.streams.end()) {
 		IPAStream &streamIr = it->second;
 		if (streamIr.pixelFormat == formats::R16.fourcc())
@@ -182,9 +182,8 @@ void RgbIr::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
 		irStream16bits ? irComp16bits_ : irComp8bits_;
 
 	auto irCompressConfig = params->block<BlockParamsType::IrComp>();
-	irCompressConfig.setUpdate(true);
+	irCompressConfig.setEnabled(true);
 
-	irCompressConfig->ctrl_enable = 1;
 	irCompressConfig->ctrl_obpp = irStream16bits ? 1 : 0;
 
 	irCompressConfig->knee_point1_kneepoint = comp.points[0];
@@ -231,7 +230,11 @@ void RgbIr::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
 }
 
 /**
- * \copydoc libcamera::ipa::Algorithm::parseIrCompression
+ * \brief Parse IR compression parameters from tuning data
+ * \param[in] tuningData The tuning data YAML object
+ * \param[in] key The key name for the compression configuration
+ * \param[out] irComp The IR compression structure to populate
+ * \return 0 on success, negative error code otherwise
  */
 int RgbIr::parseIrCompression(const YamlObject &tuningData, const char *key,
 			      IrCompression &irComp)
@@ -239,7 +242,7 @@ int RgbIr::parseIrCompression(const YamlObject &tuningData, const char *key,
 	const YamlObject &compObj = tuningData[key];
 	if (!compObj.isDictionary() || (!compObj.size())) {
 		LOG(NxpNeoAlgoRgbIr, Debug)
-			<< "compression " << key << "not configured";
+			<< "compression " << key << " not configured";
 		return -EINVAL;
 	}
 

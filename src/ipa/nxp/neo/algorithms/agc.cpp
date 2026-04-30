@@ -1,5 +1,9 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
+ * Copyright 2024-2026 NXP
+ *
+ * NXP NEO AGC/AEC mean-based control algorithm
+ *
  * Based on RkISP1 AGC/AEC mean-based control algorithm
  *     src/ipa/rkisp1/algorithms/agc.cpp
  * Copyright (C) 2021-2022, Ideas On Board
@@ -7,9 +11,6 @@
  * Based on IPU3 AGC/AEC mean-based control algorithm
  *     src/ipa/ipu3/algorithms/agc.cpp
  * Copyright (C) 2021, Ideas On Board
- *
- * agc.cpp - AGC/AEC mean-based control algorithm
- * Copyright 2024-2026 NXP
  */
 
 #include "agc.h"
@@ -18,6 +19,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <tuple>
 
 #include <libcamera/base/log.h>
 #include <libcamera/base/utils.h>
@@ -59,17 +61,31 @@ namespace ipa::nxpneo::algorithms {
  * due to following dependencies:
  * - AGC is using the AWB gains to adapt the calculated luminance.
  * - AGC is using the ratio between the long and short captures
- *   configured from the HDR algorithm to adapt the histogram scaling factor.
+ *   configured by the HDR algorithm to adapt the histogram scaling factor.
  */
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoAgc)
 
 const RGB<uint8_t> AgcStatsRgb::kHistIds{ { HistId0, HistId1, HistId2 } };
 
+std::ostream &operator<<(std::ostream &os, IPACameraContext c);
+
+std::ostream &operator<<(std::ostream &os, IPACameraContext c)
+{
+	switch (c) {
+	case IPACameraContext::Rgb:
+		return os << "Rgb";
+	case IPACameraContext::Ir:
+		return os << "Ir";
+	default:
+		return os << "Unknown";
+	}
+}
+
 Agc::Agc()
 {
-	agcs_[IPAContextTypeRgb] = std::make_unique<AgcStatsRgb>();
-	agcs_[IPAContextTypeIr] = std::make_unique<AgcStatsIr>();
+	agcs_[IPACameraContext::Rgb] = std::make_unique<AgcStatsRgb>();
+	agcs_[IPACameraContext::Ir] = std::make_unique<AgcStatsIr>();
 
 	setIrOps(IrOpAll);
 }
@@ -134,7 +150,8 @@ void Agc::queueRequest(IPAContext &context,
 	 * Initialize autoEnabled with any context, it is the same
 	 * for both of them.
 	 */
-	bool autoEnabled = context.activeState.agcs.at(IPAContextTypeRgb).autoEnabled;
+	bool autoEnabled =
+		context.activeState.agcs.at(IPACameraContext::Rgb).autoEnabled;
 
 	const auto &agcEnable = controls.get(controls::AeEnable);
 	if (agcEnable && *agcEnable != autoEnabled) {
@@ -147,24 +164,25 @@ void Agc::queueRequest(IPAContext &context,
 	const auto &exposure = controls.get(controls::ExposureTime);
 	const auto &gain = controls.get(controls::AnalogueGain);
 
-	for (auto &[contextType, agc] : context.activeState.agcs) {
+	for (auto &[cameraContext, agc] : context.activeState.agcs) {
 		agc.autoEnabled = autoEnabled;
 		if (exposure && !autoEnabled) {
-			agc.manual.exposure = *exposure * 1.0us
-				    / context.configuration.sensor.lineDuration;
+			agc.manual.exposure =
+				*exposure * 1.0us /
+				context.configuration.sensor.lineDuration;
 			LOG(NxpNeoAlgoAgc, Debug)
-				<< "Context" << contextType
+				<< "Context " << cameraContext
 				<< " Set exposure to " << agc.manual.exposure;
 		}
 		if (gain && !autoEnabled) {
 			agc.manual.gain = *gain;
 			LOG(NxpNeoAlgoAgc, Debug)
-				<< "Context" << contextType
+				<< "Context " << cameraContext
 				<< " Set gain to " << agc.manual.gain;
 		}
 
-		frameContext.agcs[contextType].autoEnabled = agc.autoEnabled;
-		auto &agcFrameContext = frameContext.agcs.at(contextType);
+		frameContext.agcs[cameraContext].autoEnabled = agc.autoEnabled;
+		auto &agcFrameContext = frameContext.agcs.at(cameraContext);
 
 		if (!agcFrameContext.autoEnabled) {
 			agcFrameContext.exposure = agc.manual.exposure;
@@ -179,9 +197,9 @@ void Agc::queueRequest(IPAContext &context,
 void Agc::prepare(IPAContext &context, const uint32_t frame,
 		  IPAFrameContext &frameContext, NxpNeoParams *params)
 {
-	IPAContextType contextId = frameContext.contextType;
-	auto agcActiveState = context.activeState.agcs.at(contextId).automatic;
-	auto &agcFrameContext = frameContext.agcs.at(contextId);
+	IPACameraContext cameraContext = frameContext.cameraContext;
+	auto agcActiveState = context.activeState.agcs.at(cameraContext).automatic;
+	auto &agcFrameContext = frameContext.agcs.at(cameraContext);
 
 	if (agcFrameContext.autoEnabled) {
 		agcFrameContext.exposure = agcActiveState.exposure;
@@ -191,21 +209,24 @@ void Agc::prepare(IPAContext &context, const uint32_t frame,
 	if (frame > 0)
 		return;
 
-	agcs_[contextId]->setupHistograms(context, params);
+	agcs_[cameraContext]->setupHistograms(context, params);
 }
 
 void Agc::fillMetadata(IPAContext &context, IPAFrameContext &frameContext,
 		       ControlList &metadata) const
 {
 	/* Metadata are only filled in RGB context. */
-	if (frameContext.contextType == IPAContextTypeIr)
+	if (frameContext.cameraContext == IPACameraContext::Ir)
 		return;
 
-	auto agcSensor = frameContext.sensor.agcs.at(frameContext.contextType);
+	auto agcSensor = frameContext.sensor.agcs.at(frameContext.cameraContext);
 	utils::Duration exposureTime = context.configuration.sensor.lineDuration *
 				       agcSensor.exposure;
 	metadata.set(controls::AnalogueGain, agcSensor.gain);
 	metadata.set(controls::ExposureTime, exposureTime.get<std::micro>());
+
+	auto &agcFrameContext = frameContext.agcs.at(frameContext.cameraContext);
+	metadata.set(controls::AeEnable, agcFrameContext.autoEnabled);
 
 	/* \todo Use VBlank value calculated from each frame exposure. */
 	uint32_t vTotal = context.configuration.sensor.size.height +
@@ -230,38 +251,38 @@ void Agc::process(IPAContext &context, [[maybe_unused]] const uint32_t frame,
 		  IPAFrameContext &frameContext, const NxpNeoStats *stats,
 		  ControlList &metadata)
 {
-	IPAContextType contextId = frameContext.contextType;
+	IPACameraContext cameraContext = frameContext.cameraContext;
 
 	if (!stats) {
 		fillMetadata(context, frameContext, metadata);
 		return;
 	}
 
-	agcs_[contextId]->parseStatistics(stats);
-	agcs_[contextId]->setAwbGains(context, frameContext);
+	agcs_[cameraContext]->parseStatistics(stats);
+	agcs_[cameraContext]->setAwbGains(context, frameContext);
 
 	/*
 	 * The Agc algorithm needs to know the effective exposure value that was
 	 * applied to the sensor when the statistics were collected.
 	 */
-	auto agcSensor = frameContext.sensor.agcs.at(contextId);
+	auto agcSensor = frameContext.sensor.agcs.at(cameraContext);
 	utils::Duration exposureTime = context.configuration.sensor.lineDuration *
 				       agcSensor.exposure;
 	double analogueGain = agcSensor.gain;
 	utils::Duration effectiveExposureValue = exposureTime * analogueGain;
 	utils::Duration newExposureTime;
 	double aGain, qGain, dGain;
-	auto &agcActiveState = context.activeState.agcs.at(contextId);
+	auto &agcActiveState = context.activeState.agcs.at(cameraContext);
 
 	std::tie(newExposureTime, aGain, qGain, dGain) =
-		agcs_[contextId]->AgcMeanLuminance::calculateNewEv(
+		agcs_[cameraContext]->AgcMeanLuminance::calculateNewEv(
 			agcActiveState.constraintMode,
 			agcActiveState.exposureMode,
-			agcs_[contextId]->histogram(),
+			agcs_[cameraContext]->histogram(),
 			effectiveExposureValue);
 
 	LOG(NxpNeoAlgoAgc, Debug)
-		<< "Computed AGC frame" << frame << " context" << contextId
+		<< "Computed AGC frame" << frame << " context " << cameraContext
 		<< " exposure time: " << newExposureTime << ", aGain: "
 		<< aGain << ", qGain: " << qGain
 		<< ", dGain: " << dGain;
@@ -278,7 +299,7 @@ void Agc::process(IPAContext &context, [[maybe_unused]] const uint32_t frame,
 	 * Indeed the frame context for each frame is updated whilst
 	 * preparing the next frame.
 	 */
-	auto &agcFrameContext = frameContext.agcs.at(contextId);
+	auto &agcFrameContext = frameContext.agcs.at(cameraContext);
 	if (!frame && agcFrameContext.autoEnabled) {
 		agcFrameContext.exposure = agcActiveState.automatic.exposure;
 		agcFrameContext.gain = agcActiveState.automatic.gain;
@@ -289,7 +310,7 @@ void Agc::process(IPAContext &context, [[maybe_unused]] const uint32_t frame,
 
 void AgcStats::configure(IPAContext &context)
 {
-	auto &agcActiveState = context.activeState.agcs.at(contextType_);
+	auto &agcActiveState = context.activeState.agcs.at(cameraContext_);
 
 	/* Configure the default exposure and gain. */
 	agcActiveState.automatic.gain = context.configuration.sensor.minAnalogueGain;
@@ -298,8 +319,12 @@ void AgcStats::configure(IPAContext &context)
 	agcActiveState.manual.gain = agcActiveState.automatic.gain;
 	agcActiveState.manual.exposure = agcActiveState.automatic.exposure;
 	agcActiveState.autoEnabled = true;
-	agcActiveState.constraintMode = constraintModes().begin()->first;
-	agcActiveState.exposureMode = exposureModeHelpers().begin()->first;
+	agcActiveState.constraintMode =
+		static_cast<controls::AeConstraintModeEnum>(
+			constraintModes().begin()->first);
+	agcActiveState.exposureMode =
+		static_cast<controls::AeExposureModeEnum>(
+			exposureModeHelpers().begin()->first);
 
 	/* \todo Run this again when FrameDurationLimits is passed in */
 	setLimits(context.configuration.sensor.minExposureTime,
@@ -326,6 +351,7 @@ int AgcStatsRgb::init(IPAContext &context, const YamlObject &tuningData)
 	if (ret)
 		return ret;
 
+	context.ctrlMap[&controls::AeEnable] = ControlInfo(false, true);
 	context.ctrlMap.merge(controls());
 
 	return parseTuningDataRgb(tuningData);
@@ -394,8 +420,8 @@ void AgcStatsRgb::configureHistScale(IPAContext &context)
 	 * Note that HIST_SCALE_DEFAULT is configured for the default 20-bits
 	 * scaling format.
 	 */
-	IPAModeType &mode = context.configuration.pipelineMode;
-	if (!userConfig_ && mode == IPAModeTypeHdrMerge) {
+	IPAPipelineMode &mode = context.configuration.pipelineMode;
+	if (!userConfig_ && mode == IPAPipelineMode::HdrMerge) {
 		uint16_t ratioL2S = context.configuration.hdr.ratioLong2Short;
 		uint32_t scaleHdr = HIST_SCALE_DEFAULT * ratioL2S;
 		histScale_ = { scaleHdr, scaleHdr, scaleHdr, scaleHdr };
@@ -411,7 +437,7 @@ void AgcStatsRgb::setupHistograms(IPAContext &context, NxpNeoParams *params) con
 {
 	/* STAT Histogram configuration for RGB channels */
 	auto statConfig = params->block<BlockParamsType::Stat>();
-	statConfig.setUpdate(true);
+	statConfig.setEnabled(true);
 
 	/* Foreground ROI disabled (> Image geometry means invalid ROI) */
 	statConfig->roi0.xpos = HIST_ROI_INVALID_IMAGE_GEOMETRY;
@@ -482,12 +508,15 @@ void AgcStatsRgb::parseStatistics(const NxpNeoStats *stats)
 {
 	auto histMemStats = stats->block<BlockStatsType::MHist>();
 
-	const uint32_t *binRed = &(histMemStats->hist_stat[GET_HIST_MEM_OFFSET(
-							kHistIds.r(), RoiId1)]);
-	const uint32_t *binGreen = &(histMemStats->hist_stat[GET_HIST_MEM_OFFSET(
-							kHistIds.g(), RoiId1)]);
-	const uint32_t *binBlue = &(histMemStats->hist_stat[GET_HIST_MEM_OFFSET(
-							kHistIds.b(), RoiId1)]);
+	const uint32_t *binRed =
+		&(histMemStats->hist_stat[GET_HIST_MEM_OFFSET(kHistIds.r(),
+							      RoiId1)]);
+	const uint32_t *binGreen =
+		&(histMemStats->hist_stat[GET_HIST_MEM_OFFSET(kHistIds.g(),
+							      RoiId1)]);
+	const uint32_t *binBlue =
+		&(histMemStats->hist_stat[GET_HIST_MEM_OFFSET(kHistIds.b(),
+							      RoiId1)]);
 	histogram_ = Histogram(Span<const uint32_t>(binGreen, NEO_HIST_BIN_SIZE));
 
 	rgbTriples_.clear();
@@ -561,7 +590,7 @@ double AgcStatsRgb::estimateLuminance(double gain) const
  *
  * This function calls the base class' tuningData parsers.
  * The controls discovered by the AgcMeanLuminance parsers are the same
- * for each context (RGb and Ir) and are merged from the RGB context,
+ * for each context (RGB and Ir) and are merged from the RGB context,
  * see AgcStatsIr::init().
  *
  * \return 0 on success or errors from the base class
@@ -572,7 +601,6 @@ int AgcStatsIr::init([[maybe_unused]] IPAContext &context,
 	return parseTuningData(tuningData);
 }
 
-
 /**
  * \brief Setup the RGBIR block of the ISP needed for the Ir channel histogram
  * \param[in] context The shared IPA context
@@ -582,7 +610,6 @@ void AgcStatsIr::setupHistograms(IPAContext &context, NxpNeoParams *params) cons
 {
 	/* RGBIR Histogram configuration for the Ir channel*/
 	auto rgbirConfig = params->block<BlockParamsType::RgbIr>();
-	rgbirConfig.setUpdate(true);
 
 	rgbirConfig->roi[0].xpos = HIST_ROI_INVALID_IMAGE_GEOMETRY;
 	rgbirConfig->roi[0].ypos = HIST_ROI_INVALID_IMAGE_GEOMETRY;
@@ -612,8 +639,9 @@ void AgcStatsIr::setupHistograms(IPAContext &context, NxpNeoParams *params) cons
 void AgcStatsIr::parseStatistics(const NxpNeoStats *stats)
 {
 	auto rgbIrMemStats = stats->block<BlockStatsType::MRgbIr>();
-	const uint32_t *binChIr = &(rgbIrMemStats->rgbir_hist[GET_HIST_MEM_OFFSET(
-							kHistId, RoiId1)]);
+	const uint32_t *binChIr =
+		&(rgbIrMemStats->rgbir_hist[GET_HIST_MEM_OFFSET(kHistId,
+								RoiId1)]);
 	histogram_ = Histogram(Span<const uint32_t>(binChIr, NEO_HIST_BIN_SIZE));
 }
 

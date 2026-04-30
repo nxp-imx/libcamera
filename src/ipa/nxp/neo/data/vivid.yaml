@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: CC0-1.0
+%YAML 1.1
+---
+version: 1
+algorithms:
+  - PipeConf:
+      # Raw buffers pixel data is LSB aligned (i.MX95 workaround disabled)
+      inalign0: 0
+      inalign1: 0
+  - Awb:
+  - BlackLevelCorrection:
+      R: 0
+      Gr: 0
+      Gb: 0
+      B: 0
+  - Agc:
+...

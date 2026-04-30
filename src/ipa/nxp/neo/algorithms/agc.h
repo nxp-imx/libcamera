@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
+ * Copyright 2024-2026 NXP
+ *
+ * NXP NEO AGC/AEC mean-based control algorithm
+ *
  * Based on RkISP1 AGC/AEC mean-based control algorithm
  *     src/ipa/rkisp1/algorithms/agc.h
  * Copyright (C) 2021-2022, Ideas On Board
- *
- * agc.h - NXP NEO AGC/AEC mean-based control algorithm
- * Copyright 2024-2025 NXP
  */
 
 #pragma once
@@ -55,13 +56,13 @@ protected:
 	};
 
 	Histogram histogram_;
-	IPAContextType contextType_;
+	IPACameraContext cameraContext_;
 };
 
 class AgcStatsRgb : public AgcStats
 {
 public:
-	AgcStatsRgb() { contextType_ = IPAContextTypeRgb; }
+	AgcStatsRgb() { cameraContext_ = IPACameraContext::Rgb; }
 
 	int init(IPAContext &context, const YamlObject &tuningData) override;
 	void configure(IPAContext &context) override;
@@ -84,7 +85,7 @@ private:
 class AgcStatsIr : public AgcStats
 {
 public:
-	AgcStatsIr() { contextType_ = IPAContextTypeIr; }
+	AgcStatsIr() { cameraContext_ = IPACameraContext::Ir; }
 
 	int init(IPAContext &context, const YamlObject &tuningData) override;
 	void setupHistograms(IPAContext &context, NxpNeoParams *params) const override;
@@ -121,8 +122,7 @@ public:
 private:
 	void fillMetadata(IPAContext &context, IPAFrameContext &frameContext,
 			  ControlList &metadata) const;
-
-	std::map<unsigned, std::unique_ptr<AgcStats>> agcs_;
+	std::map<IPACameraContext, std::unique_ptr<AgcStats>> agcs_;
 };
 
 } /* namespace ipa::nxpneo::algorithms */

@@ -1,9 +1,10 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * Copyright (C) 2024, Ideas On Board
- * Copyright 2025 NXP
+ * Copyright 2025-2026 NXP
  *
- * NXP NEOISP Statistics
+ * NXP NEO ISP Statistics
+ *
+ * Copyright (C) 2024, Ideas On Board
  */
 
 #pragma once
@@ -40,23 +41,23 @@ template<BlockStatsType S>
 struct block_stats_type {
 };
 
-#define NXPNEO_DEFINE_BLOCK_STATS_TYPE(blockType, blockStruct)      \
+#define NXPNEO_BLOCK_STATS_TYPE(blockType, blockStruct)             \
 	template<>                                                  \
 	struct block_stats_type<BlockStatsType::blockType> {        \
 		using type = struct neoisp_##blockStruct##_stats_s; \
 	};
 
-NXPNEO_DEFINE_BLOCK_STATS_TYPE(RCTemp, ctemp_reg)
-NXPNEO_DEFINE_BLOCK_STATS_TYPE(RDrc, drc_reg)
-NXPNEO_DEFINE_BLOCK_STATS_TYPE(RAf, af_reg)
-NXPNEO_DEFINE_BLOCK_STATS_TYPE(RBnr, bnr_reg)
-NXPNEO_DEFINE_BLOCK_STATS_TYPE(RNr, nr_reg)
-NXPNEO_DEFINE_BLOCK_STATS_TYPE(REe, ee_reg)
-NXPNEO_DEFINE_BLOCK_STATS_TYPE(RDf, df_reg)
-NXPNEO_DEFINE_BLOCK_STATS_TYPE(MCTemp, ctemp_mem)
-NXPNEO_DEFINE_BLOCK_STATS_TYPE(MRgbIr, rgbir_mem)
-NXPNEO_DEFINE_BLOCK_STATS_TYPE(MHist, hist_mem)
-NXPNEO_DEFINE_BLOCK_STATS_TYPE(MDrc, drc_mem)
+NXPNEO_BLOCK_STATS_TYPE(RCTemp, ctemp_reg)
+NXPNEO_BLOCK_STATS_TYPE(RDrc, drc_reg)
+NXPNEO_BLOCK_STATS_TYPE(RAf, af_reg)
+NXPNEO_BLOCK_STATS_TYPE(RBnr, bnr_reg)
+NXPNEO_BLOCK_STATS_TYPE(RNr, nr_reg)
+NXPNEO_BLOCK_STATS_TYPE(REe, ee_reg)
+NXPNEO_BLOCK_STATS_TYPE(RDf, df_reg)
+NXPNEO_BLOCK_STATS_TYPE(MCTemp, ctemp_mem)
+NXPNEO_BLOCK_STATS_TYPE(MRgbIr, rgbir_mem)
+NXPNEO_BLOCK_STATS_TYPE(MHist, hist_mem)
+NXPNEO_BLOCK_STATS_TYPE(MDrc, drc_mem)
 
 } /* namespace details */
 
@@ -65,7 +66,8 @@ class NxpNeoStats;
 class NxpNeoStatsBlockBase
 {
 public:
-	NxpNeoStatsBlockBase(NxpNeoStats *stats, BlockStatsType type,
+	NxpNeoStatsBlockBase(NxpNeoStats *stats,
+			     BlockStatsType type,
 			     const Span<uint8_t> &data);
 
 	Span<uint8_t> data() const { return data_; }
@@ -119,7 +121,7 @@ public:
 class NxpNeoStats
 {
 public:
-	NxpNeoStats(uint32_t apiVersion, Span<uint8_t> data);
+	NxpNeoStats(Span<uint8_t> data);
 
 	template<BlockStatsType S>
 	NxpNeoStatsBlock<S> block() const
@@ -133,12 +135,6 @@ private:
 	friend class NxpNeoStatsBlockBase;
 
 	Span<uint8_t> block(BlockStatsType type) const;
-	bool isExtensible() const
-	{
-		return apiVersion_ != NEOISP_LEGACY_META_BUFFER;
-	}
-
-	uint32_t apiVersion_;
 
 	Span<uint8_t> data_;
 	size_t used_;

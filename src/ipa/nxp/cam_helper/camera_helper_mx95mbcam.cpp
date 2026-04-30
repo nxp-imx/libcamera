@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
- * camera_helper_mx95mbcam.c
+ * Copyright 2024-2026 NXP
+ *
  * Helper class that performs sensor-specific parameter computations
  * for MX95MBCAM module (OX03C10 camera and a Maxim MAX96717 GMSL2 serializer)
- * Copyright 2024-2026 NXP
  */
 
 #include <cmath>
@@ -177,7 +177,7 @@ public:
 	double gain(uint32_t gainCode) const override;
 
 #if USE_CUSTOM_CONTROLS
-	void setControls(const ControlList *sensorCtrls) override;
+	void sensorControlList(const ControlList *sensorCtrls) override;
 	void controlListSetAGC(
 		ControlList *ctrls,
 		Span<const Duration> exposures, Span<const double> gains) override;
@@ -371,7 +371,7 @@ uint32_t CameraHelperMx95mbcam::gainCode(double gain) const
 double CameraHelperMx95mbcam::gain(uint32_t gainCode) const
 {
 	/* V4L2_CID_ANALOGUE_GAIN code is Q16.16 */
-	return (gainCode * 1.0 /  (1 << 16));
+	return (gainCode * 1.0 / (1 << 16));
 }
 
 /**
@@ -478,7 +478,7 @@ uint32_t CameraHelperMx95mbcam::distributeDigitalGain(
 }
 
 #if USE_CUSTOM_CONTROLS
-void CameraHelperMx95mbcam::setControls(const ControlList *sensorCtrls)
+void CameraHelperMx95mbcam::sensorControlList(const ControlList *sensorCtrls)
 {
 	const ControlValue &val = sensorCtrls->get(V4L2_CID_OX03C10_OTP_CORRECTION);
 	if (val.type() == ControlTypeNone) {
@@ -520,6 +520,9 @@ void CameraHelperMx95mbcam::controlListSetAGC(
 	ControlList *ctrls,
 	Span<const Duration> exposures, Span<const double> gains)
 {
+	if (exposures.empty() || gains.empty())
+		return;
+
 	const uint32_t sensorConversionRatio = calcConvRatio(convGainQ16_);
 
 	uint64_t lAgainL, lAgainS, lAgainSPD, lAgainVS;
@@ -1033,7 +1036,7 @@ int CameraHelperMx95mbcam::sensorControlsToMetaData(const ControlList *sensorCtr
 	mdCtrls->set(md::WhiteBalanceGain, Span<float>(wbGainsArray));
 
 	/* No temperature information, report arbitrary value */
-	mdCtrls->set(md::Temperature, 25.0);
+	mdCtrls->set(md::Temperature, kDefaultTemperatureCelsius);
 
 	return ret;
 }

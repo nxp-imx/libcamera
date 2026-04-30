@@ -160,10 +160,10 @@ public:
 			IPADataSerializer<uint32_t>::serialize(data.hwCapabilities);
 		retData.insert(retData.end(), hwCapabilities.begin(), hwCapabilities.end());
 
-		std::vector<uint8_t> apiVersion;
-		std::tie(apiVersion, std::ignore) =
-			IPADataSerializer<uint32_t>::serialize(data.apiVersion);
-		retData.insert(retData.end(), apiVersion.begin(), apiVersion.end());
+		std::vector<uint8_t> supportedParamsBlocks;
+		std::tie(supportedParamsBlocks, std::ignore) =
+			IPADataSerializer<uint64_t>::serialize(data.supportedParamsBlocks);
+		retData.insert(retData.end(), supportedParamsBlocks.begin(), supportedParamsBlocks.end());
 
 		std::vector<uint8_t> sensorEntity;
 		std::tie(sensorEntity, std::ignore) =
@@ -247,16 +247,16 @@ public:
 		dataSize -= 4;
 
 
-		if (dataSize < 4) {
+		if (dataSize < 8) {
 			LOG(IPADataSerializer, Error)
-				<< "Failed to deserialize " << "apiVersion"
+				<< "Failed to deserialize " << "supportedParamsBlocks"
 				<< ": not enough data, expected "
-				<< (4) << ", got " << (dataSize);
+				<< (8) << ", got " << (dataSize);
 			return ret;
 		}
-		ret.apiVersion = IPADataSerializer<uint32_t>::deserialize(m, m + 4);
-		m += 4;
-		dataSize -= 4;
+		ret.supportedParamsBlocks = IPADataSerializer<uint64_t>::deserialize(m, m + 8);
+		m += 8;
+		dataSize -= 8;
 
 
 		if (dataSize < 4) {
@@ -432,7 +432,7 @@ public:
 
 		std::vector<uint8_t> mode;
 		std::tie(mode, std::ignore) =
-			IPADataSerializer<ipa::nxpneo::IPAModeType>::serialize(data.mode);
+			IPADataSerializer<ipa::nxpneo::IPAPipelineMode>::serialize(data.mode);
 		retData.insert(retData.end(), mode.begin(), mode.end());
 
 		std::vector<uint8_t> colorSpace;
@@ -569,7 +569,7 @@ public:
 				<< (4) << ", got " << (dataSize);
 			return ret;
 		}
-		ret.mode = IPADataSerializer<ipa::nxpneo::IPAModeType>::deserialize(m, m + 4);
+		ret.mode = IPADataSerializer<ipa::nxpneo::IPAPipelineMode>::deserialize(m, m + 4);
 		m += 4;
 		dataSize -= 4;
 
@@ -733,11 +733,6 @@ public:
 			IPADataSerializer<uint32_t>::serialize(data.embeddedTopLines);
 		retData.insert(retData.end(), embeddedTopLines.begin(), embeddedTopLines.end());
 
-		std::vector<uint8_t> rgbIr;
-		std::tie(rgbIr, std::ignore) =
-			IPADataSerializer<bool>::serialize(data.rgbIr);
-		retData.insert(retData.end(), rgbIr.begin(), rgbIr.end());
-
 		return {retData, {}};
 	}
 
@@ -790,18 +785,6 @@ public:
 			return ret;
 		}
 		ret.embeddedTopLines = IPADataSerializer<uint32_t>::deserialize(m, m + 4);
-		m += 4;
-		dataSize -= 4;
-
-
-		if (dataSize < 1) {
-			LOG(IPADataSerializer, Error)
-				<< "Failed to deserialize " << "rgbIr"
-				<< ": not enough data, expected "
-				<< (1) << ", got " << (dataSize);
-			return ret;
-		}
-		ret.rgbIr = IPADataSerializer<bool>::deserialize(m, m + 1);
 
 		return ret;
 	}
