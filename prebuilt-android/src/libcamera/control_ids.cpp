@@ -1511,6 +1511,20 @@ namespace controls {
  */
 
 /**
+ * \var Hue
+ * \brief Adjusts the image hue (colour rotation) in degrees, as defined in
+ * the HSL/HSV colour model.
+ *
+ * The value represents a rotation around the hue circle in HSL/HSV space:
+ * positive values rotate hues clockwise (for example a +60° turns
+ * Red hues to Yellow hues), and negative values rotate counter-clockwise
+ * (a -60° turns Red hues to Magenta hues).
+ *
+ * The nominal range is [-180, 180], where 0° leaves hues unchanged and the
+ * range wraps around continuously, with 180° == -180°.
+ */
+
+/**
  * \brief Namespace for draft controls
  */
 namespace draft {
@@ -2193,6 +2207,8 @@ extern const Control<bool> LensDewarpEnable(LENS_DEWARP_ENABLE, "LensDewarpEnabl
 
 extern const Control<bool> LensShadingCorrectionEnable(LENS_SHADING_CORRECTION_ENABLE, "LensShadingCorrectionEnable", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
 
+extern const Control<float> Hue(HUE, "Hue", "libcamera", ControlId::Direction::In | ControlId::Direction::Out);
+
 
 
 namespace draft {
@@ -2376,6 +2392,7 @@ extern const ControlIdMap controls {
 	{ WDR_MAX_BRIGHT_PIXELS, &WdrMaxBrightPixels },
 	{ LENS_DEWARP_ENABLE, &LensDewarpEnable },
 	{ LENS_SHADING_CORRECTION_ENABLE, &LensShadingCorrectionEnable },
+	{ HUE, &Hue },
 	{ draft::AE_PRECAPTURE_TRIGGER, &draft::AePrecaptureTrigger },
 	{ draft::NOISE_REDUCTION_MODE, &draft::NoiseReductionMode },
 	{ draft::COLOR_CORRECTION_ABERRATION_MODE, &draft::ColorCorrectionAberrationMode },

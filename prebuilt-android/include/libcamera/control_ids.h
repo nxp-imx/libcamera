@@ -77,6 +77,7 @@ enum {
 	WDR_MAX_BRIGHT_PIXELS = 50,
 	LENS_DEWARP_ENABLE = 51,
 	LENS_SHADING_CORRECTION_ENABLE = 52,
+	HUE = 53,
 };
 
 
@@ -326,6 +327,8 @@ extern const Control<bool> LensDewarpEnable;
 #define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_LENS_DEWARP_ENABLE
 extern const Control<bool> LensShadingCorrectionEnable;
 #define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_LENS_SHADING_CORRECTION_ENABLE
+extern const Control<float> Hue;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_CONTROLS_HUE
 
 namespace draft {
 
