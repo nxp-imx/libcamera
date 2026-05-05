@@ -144,18 +144,18 @@ PipeConf::PipeConf()
  * \copydoc libcamera::ipa::Algorithm::init
  */
 int PipeConf::init([[maybe_unused]] IPAContext &context,
-		   const YamlObject &tuningData)
+		   const ValueNode &tuningData)
 {
-	const YamlObject &lpAlign0Obj = tuningData["lpalign0"];
+	const ValueNode &lpAlign0Obj = tuningData["lpalign0"];
 	lpAlign0_ = lpAlign0Obj.get<uint8_t>();
-	const YamlObject &lpAlign1Obj = tuningData["lpalign1"];
+	const ValueNode &lpAlign1Obj = tuningData["lpalign1"];
 	lpAlign1_ = lpAlign1Obj.get<uint8_t>();
 
 	uint8_t inAlignAuto =
 		context.hw.hwCapabilities & NEO_CAP_ALIGNMENT_MSB ? 1 : 0;
-	const YamlObject &inAlign0Obj = tuningData["inalign0"];
+	const ValueNode &inAlign0Obj = tuningData["inalign0"];
 	inAlign0_ = inAlign0Obj.get<uint8_t>().value_or(inAlignAuto);
-	const YamlObject &inAlign1Obj = tuningData["inalign1"];
+	const ValueNode &inAlign1Obj = tuningData["inalign1"];
 	inAlign1_ = inAlign1Obj.get<uint8_t>().value_or(inAlignAuto);
 
 	return 0;

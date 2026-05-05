@@ -20,7 +20,7 @@
 #include <libcamera/base/log.h>
 #include <libcamera/base/utils.h>
 
-#include "libcamera/internal/yaml_parser.h"
+#include "libcamera/internal/value_node.h"
 
 /**
  * \file lsc.cpp
@@ -118,11 +118,11 @@ LOG_DEFINE_CATEGORY(NxpNeoAlgoLsc)
 class LscTableLoader
 {
 public:
-	int parseLscData(const YamlObject &yamlProfile,
+	int parseLscData(const ValueNode &yamlProfile,
 			 std::map<unsigned int, LensShadingCorrection::Components> &lscData)
 	{
 		/* Get all defined sets to apply. */
-		const YamlObject &yamlSets = yamlProfile["sets"];
+		const ValueNode &yamlSets = yamlProfile["sets"];
 		if (!yamlSets.isList()) {
 			LOG(NxpNeoAlgoLsc, Warning)
 				<< "'sets' parameter not found in tuning file";
@@ -159,11 +159,11 @@ public:
 		return 0;
 	}
 	const std::optional<LensShadingCorrection::BlockCount> parseBlockCnt(
-		const YamlObject &yamlProfile) const
+		const ValueNode &yamlProfile) const
 	{
 		std::vector<uint16_t> blockCnt =
 			yamlProfile["block-count"]
-				.getList<uint16_t>()
+				.get<std::vector<uint16_t>>()
 				.value_or(std::vector<uint16_t>{});
 		if (blockCnt.size() != 2) {
 			LOG(NxpNeoAlgoLsc, Error)
@@ -175,11 +175,11 @@ public:
 	}
 
 private:
-	std::vector<uint16_t> parseLut(const YamlObject &tuningData,
+	std::vector<uint16_t> parseLut(const ValueNode &tuningData,
 				       const char *prop)
 	{
 		std::vector<uint16_t> lut =
-			tuningData[prop].getList<uint16_t>().value_or(std::vector<uint16_t>{});
+			tuningData[prop].get<std::vector<uint16_t>>().value_or(std::vector<uint16_t>{});
 		if (lut.size() != kChannelLutSize) {
 			LOG(NxpNeoAlgoLsc, Error)
 				<< "Invalid '" << prop << "' values: expected "
@@ -210,12 +210,12 @@ LensShadingCorrection::LensShadingCorrection()
  * \copydoc libcamera::ipa::Algorithm::init
  */
 int LensShadingCorrection::init([[maybe_unused]] IPAContext &context,
-				const YamlObject &tuningData)
+				const ValueNode &tuningData)
 {
 	auto loader = LscTableLoader();
 
 	/* Get all defined profiles. */
-	const YamlObject &yamlProfiles = tuningData["profiles"];
+	const ValueNode &yamlProfiles = tuningData["profiles"];
 	if (!yamlProfiles.isList()) {
 		LOG(NxpNeoAlgoLsc, Error)
 			<< "'profiles' parameter not found in tuning file";

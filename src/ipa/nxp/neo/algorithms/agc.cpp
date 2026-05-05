@@ -93,11 +93,11 @@ Agc::Agc()
 /**
  * \brief Initialise the AGC algorithm from tuning file
  * \param[in] context The shared IPA context
- * \param[in] tuningData The YamlObject containing Agc tuning data
+ * \param[in] tuningData The ValueNode containing Agc tuning data
  *
  * \return 0 on success or errors from the base class
  */
-int Agc::init(IPAContext &context, const YamlObject &tuningData)
+int Agc::init(IPAContext &context, const ValueNode &tuningData)
 {
 	for (const auto &[id, agc] : agcs_) {
 		int ret = agc->init(context, tuningData);
@@ -338,14 +338,14 @@ void AgcStats::configure(IPAContext &context)
 /**
  * \brief Initialise the AGC RGB instance from tuning file
  * \param[in] context The shared IPA context
- * \param[in] tuningData The YamlObject containing Agc tuning data
+ * \param[in] tuningData The ValueNode containing Agc tuning data
  *
  * This function calls the base class' tuningData parsers to discover which
  * control values are supported.
  *
  * \return 0 on success or errors from the base class
  */
-int AgcStatsRgb::init(IPAContext &context, const YamlObject &tuningData)
+int AgcStatsRgb::init(IPAContext &context, const ValueNode &tuningData)
 {
 	int ret = parseTuningData(tuningData);
 	if (ret)
@@ -359,11 +359,11 @@ int AgcStatsRgb::init(IPAContext &context, const YamlObject &tuningData)
 
 /**
  * \brief Parse the tuning data required for the RGB context
- * \param[in] tuningData The YamlObject representing the tuning data
+ * \param[in] tuningData The ValueNode representing the tuning data
  *
  * \return 0 on success or a negative error code
  */
-int AgcStatsRgb::parseTuningDataRgb(const YamlObject &tuningData)
+int AgcStatsRgb::parseTuningDataRgb(const ValueNode &tuningData)
 {
 	/*
 	 * Histogram scale parsing
@@ -375,7 +375,7 @@ int AgcStatsRgb::parseTuningDataRgb(const YamlObject &tuningData)
 	 * The histScale_ list contains the histogram scaling factor to
 	 * program for each of the 4 histograms.
 	 */
-	const YamlObject &obj = tuningData["hist-scale"];
+	const ValueNode &obj = tuningData["hist-scale"];
 	if (!obj.size()) {
 		LOG(NxpNeoAlgoAgc, Debug) << "Use default histogram scaling value: "
 					  << HIST_SCALE_DEFAULT;
@@ -385,7 +385,7 @@ int AgcStatsRgb::parseTuningDataRgb(const YamlObject &tuningData)
 		return 0;
 	}
 
-	histScale_ = obj.getList<uint32_t>().value_or(std::vector<uint32_t>{});
+	histScale_ = obj.get<std::vector<uint32_t>>().value_or(std::vector<uint32_t>{});
 	if (histScale_.size() != NEO_STAT_HIST_CNT) {
 		LOG(NxpNeoAlgoAgc, Error)
 			<< "histScale_ list size must be " << NEO_STAT_HIST_CNT;
@@ -586,7 +586,7 @@ double AgcStatsRgb::estimateLuminance(double gain) const
 /**
  * \brief Initialise the AGC IR instance from tuning file
  * \param[in] context The shared IPA context
- * \param[in] tuningData The YamlObject containing Agc tuning data
+ * \param[in] tuningData The ValueNode containing Agc tuning data
  *
  * This function calls the base class' tuningData parsers.
  * The controls discovered by the AgcMeanLuminance parsers are the same
@@ -596,7 +596,7 @@ double AgcStatsRgb::estimateLuminance(double gain) const
  * \return 0 on success or errors from the base class
  */
 int AgcStatsIr::init([[maybe_unused]] IPAContext &context,
-		     const YamlObject &tuningData)
+		     const ValueNode &tuningData)
 {
 	return parseTuningData(tuningData);
 }

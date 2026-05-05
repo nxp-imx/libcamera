@@ -44,7 +44,7 @@ protected:
 class IPAProxyNxpNeoThreaded : public IPAProxyNxpNeo
 {
 public:
-	IPAProxyNxpNeoThreaded(IPAModule *ipam, const GlobalConfiguration &configuration);
+	IPAProxyNxpNeoThreaded(IPAModule *ipam, const CameraManager &cm);
 	~IPAProxyNxpNeoThreaded();
 
 
@@ -162,7 +162,7 @@ private:
 class IPAProxyNxpNeoIsolated : public IPAProxyNxpNeo
 {
 public:
-	IPAProxyNxpNeoIsolated(IPAModule *ipam, const GlobalConfiguration &configuration);
+	IPAProxyNxpNeoIsolated(IPAModule *ipam, const CameraManager &cm);
 	~IPAProxyNxpNeoIsolated();
 
 

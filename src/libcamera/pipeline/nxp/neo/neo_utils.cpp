@@ -199,18 +199,18 @@ PipelineConfig::cameraProperties(const std::string &name,
  * \param[in] cameras The cameras node in yaml file
  * \return 0 if no error was detected, a negative error code otherwise
  */
-int PipelineConfig::parseCameras(const YamlObject &cameras)
+int PipelineConfig::parseCameras(const ValueNode &cameras)
 {
 	for (const auto &cameraObj : cameras.asList()) {
 		CameraProperties properties = {};
 
-		const YamlObject &modelObj = cameraObj["model"];
+		const ValueNode &modelObj = cameraObj["model"];
 		std::string model = modelObj.get<std::string>().value_or("");
 
-		const YamlObject &entityObj = cameraObj["entity"];
+		const ValueNode &entityObj = cameraObj["entity"];
 		std::string entity = entityObj.get<std::string>().value_or("");
 
-		const YamlObject &streamsObj = cameraObj["streams"];
+		const ValueNode &streamsObj = cameraObj["streams"];
 		for (const auto &streamObj : streamsObj.asList()) {
 			std::string stream =
 				streamObj.get<std::string>().value_or("");
@@ -220,15 +220,15 @@ int PipelineConfig::parseCameras(const YamlObject &cameras)
 				properties.eDataStream = true;
 		}
 
-		const YamlObject &fmtObj = cameraObj["format"];
+		const ValueNode &fmtObj = cameraObj["format"];
 		properties.formatBpp = fmtObj["bpp"].get<uint32_t>();
 		properties.formatSize = fmtObj["size"].get<Size>();
 
-		const YamlObject &rgbirCfaObj = cameraObj["rgbir-cfa"];
+		const ValueNode &rgbirCfaObj = cameraObj["rgbir-cfa"];
 		if (rgbirCfaObj.isValue())
 			properties.rgbirCfa = rgbirCfaObj.get<bool>().value_or(false);
 
-		const YamlObject &orientationObj = cameraObj["orientation"];
+		const ValueNode &orientationObj = cameraObj["orientation"];
 		if (orientationObj.isValue()) {
 			uint32_t orientation = orientationObj.get<uint32_t>().value_or(0);
 			if (orientation >= static_cast<uint32_t>(Orientation::Rotate0) &&
@@ -239,7 +239,7 @@ int PipelineConfig::parseCameras(const YamlObject &cameras)
 					<< "Invalid orientation value " << orientation;
 		}
 
-		const YamlObject &controlsDelayObj = cameraObj["controls-delay"];
+		const ValueNode &controlsDelayObj = cameraObj["controls-delay"];
 		uint32_t controlsDelay = controlsDelayObj.get<uint32_t>().value_or(0);
 		if (controlsDelay)
 			properties.controlsDelay = controlsDelay * 1ms;
@@ -250,14 +250,14 @@ int PipelineConfig::parseCameras(const YamlObject &cameras)
 			<< "] streams image1 " << properties.image1Stream
 			<< " edata " << properties.eDataStream;
 
-		const YamlObject &vividInstancesObj = cameraObj["vivid-instances"];
+		const ValueNode &vividInstancesObj = cameraObj["vivid-instances"];
 		auto parseVividInstance =
-			[&](const YamlObject &instanceObj,
+			[&](const ValueNode &instanceObj,
 			    CameraProperties::VividConfig &instance) -> int {
 			if (!instanceObj.isDictionary())
 				return -ENOENT;
 			/* Pixel format parsing (mandatory). */
-			const YamlObject &formatObj = instanceObj["pixel-format"];
+			const ValueNode &formatObj = instanceObj["pixel-format"];
 			std::string formatString =
 				formatObj.get<std::string>().value_or("");
 			PixelFormat &pixelFormat = instance.pixelFormat;
@@ -269,7 +269,7 @@ int PipelineConfig::parseCameras(const YamlObject &cameras)
 			}
 
 			/* Size parsing (mandatory). */
-			const YamlObject &sizeObj = instanceObj["size"];
+			const ValueNode &sizeObj = instanceObj["size"];
 			Size &size = instance.size;
 			size = sizeObj.get<Size>().value_or(Size{});
 			if (size.isNull()) {
@@ -279,19 +279,19 @@ int PipelineConfig::parseCameras(const YamlObject &cameras)
 			}
 
 			/* All other parameters are optional. */
-			const YamlObject &loopbackObj = instanceObj["loopback"];
+			const ValueNode &loopbackObj = instanceObj["loopback"];
 			instance.loopback =
 				loopbackObj.get<bool>().value_or(
 					CameraProperties::kVividLoopbackDefault);
-			const YamlObject &tpgPatternObj = instanceObj["tpg-pattern"];
+			const ValueNode &tpgPatternObj = instanceObj["tpg-pattern"];
 			instance.tpgPattern =
 				tpgPatternObj.get<unsigned int>().value_or(
 					CameraProperties::kVividTpgPatternDefault);
-			const YamlObject &tpgHMoveObj = instanceObj["tpg-hmove"];
+			const ValueNode &tpgHMoveObj = instanceObj["tpg-hmove"];
 			instance.tpgHorizontalMovement =
 				tpgHMoveObj.get<unsigned int>().value_or(
 					CameraProperties::kVividTpgHMovementDefault);
-			const YamlObject &tpgVMoveObj = instanceObj["tpg-vmove"];
+			const ValueNode &tpgVMoveObj = instanceObj["tpg-vmove"];
 			instance.tpgVerticalMovement =
 				tpgVMoveObj.get<unsigned int>().value_or(
 					CameraProperties::kVividTpgVMovementDefault);
@@ -343,9 +343,9 @@ int PipelineConfig::parseCameras(const YamlObject &cameras)
  * \param[in] global The global node in yaml file
  * \return 0 if no error was detected, a negative error code otherwise
  */
-int PipelineConfig::parseGlobal(const YamlObject &global)
+int PipelineConfig::parseGlobal(const ValueNode &global)
 {
-	const YamlObject &bufferCountObj = global["buffer-count"];
+	const ValueNode &bufferCountObj = global["buffer-count"];
 	globalInfo_.bufferCount =
 		bufferCountObj.get<unsigned int>().value_or(GlobalInfo::kBufferCount);
 
@@ -367,7 +367,7 @@ int PipelineConfig::loadFileConfig(const std::string &filename)
 		return -ENOENT;
 	}
 
-	std::unique_ptr<YamlObject> root = YamlParser::parse(file);
+	std::unique_ptr<ValueNode> root = YamlParser::parse(file);
 	if (!root) {
 		LOG(NxpNeoPipe, Warning)
 			<< "Failed to parse pipeline config file " << filename;
@@ -383,13 +383,13 @@ int PipelineConfig::loadFileConfig(const std::string &filename)
 
 	LOG(NxpNeoPipe, Debug) << "Parsing pipeline config file " << filename;
 
-	const YamlObject &global = (*root)["global"];
+	const ValueNode &global = (*root)["global"];
 	int ret = parseGlobal(global);
 	if (ret)
 		LOG(NxpNeoPipe, Warning)
 			<< "Invalid global section in config file";
 
-	const YamlObject &cameras = (*root)["cameras"];
+	const ValueNode &cameras = (*root)["cameras"];
 	ret = parseCameras(cameras);
 	if (ret)
 		LOG(NxpNeoPipe, Warning)

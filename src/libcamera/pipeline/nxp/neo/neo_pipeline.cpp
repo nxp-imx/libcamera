@@ -2183,7 +2183,7 @@ int NxpNeoCameraData::updateControls()
 
 int NxpNeoCameraData::loadIPA()
 {
-	ipa_ = IPAManager::createIPA<ipa::nxpneo::IPAProxyNxpNeo>(pipe(), 1, 1);
+	ipa_ = pipe()->createIPA<ipa::nxpneo::IPAProxyNxpNeo>(1, 1);
 	if (!ipa_)
 		return -ENOENT;
 

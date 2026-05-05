@@ -81,12 +81,12 @@ RgbIr::RgbIr()
  * \copydoc libcamera::ipa::Algorithm::init
  */
 int RgbIr::init([[maybe_unused]] IPAContext &context,
-		const YamlObject &tuningData)
+		const ValueNode &tuningData)
 {
 	int ret;
 
 	headColor_ = tuningData["head-color"]
-			     .getList<uint32_t>()
+			     .get<std::vector<uint32_t>>()
 			     .value_or(std::vector<uint32_t>{});
 	if (headColor_.size() != kNumHeadColorEntries) {
 		LOG(NxpNeoAlgoRgbIr, Error)
@@ -97,7 +97,7 @@ int RgbIr::init([[maybe_unused]] IPAContext &context,
 	}
 
 	ccm_ = tuningData["ccm"]
-		       .getList<uint32_t>()
+		       .get<std::vector<uint32_t>>()
 		       .value_or(std::vector<uint32_t>{});
 	if (ccm_.size() != kNumColorChannels) {
 		LOG(NxpNeoAlgoRgbIr, Error)
@@ -108,7 +108,7 @@ int RgbIr::init([[maybe_unused]] IPAContext &context,
 	}
 
 	crossTalkThreshold_ = tuningData["crosstalk-threshold"]
-				      .getList<uint32_t>()
+				      .get<std::vector<uint32_t>>()
 				      .value_or(std::vector<uint32_t>{});
 	if (crossTalkThreshold_.size() != kNumColorChannels) {
 		LOG(NxpNeoAlgoRgbIr, Error)
@@ -236,38 +236,38 @@ void RgbIr::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
  * \param[out] irComp The IR compression structure to populate
  * \return 0 on success, negative error code otherwise
  */
-int RgbIr::parseIrCompression(const YamlObject &tuningData, const char *key,
+int RgbIr::parseIrCompression(const ValueNode &tuningData, const char *key,
 			      IrCompression &irComp)
 {
-	const YamlObject &compObj = tuningData[key];
+	const ValueNode &compObj = tuningData[key];
 	if (!compObj.isDictionary() || (!compObj.size())) {
 		LOG(NxpNeoAlgoRgbIr, Debug)
 			<< "compression " << key << " not configured";
 		return -EINVAL;
 	}
 
-	irComp.points = compObj["points"].getList<uint32_t>().value_or(std::vector<uint32_t>{});
+	irComp.points = compObj["points"].get<std::vector<uint32_t>>().value_or(std::vector<uint32_t>{});
 	if (irComp.points.size() != kNumPoints) {
 		LOG(NxpNeoAlgoRgbIr, Error)
 			<< "compression points list size must be " << kNumPoints;
 		return -EINVAL;
 	}
 
-	irComp.offsets = compObj["offsets"].getList<uint32_t>().value_or(std::vector<uint32_t>{});
+	irComp.offsets = compObj["offsets"].get<std::vector<uint32_t>>().value_or(std::vector<uint32_t>{});
 	if (irComp.offsets.size() != kNumOffsets) {
 		LOG(NxpNeoAlgoRgbIr, Error)
 			<< "compression offsets list size must be " << kNumOffsets;
 		return -EINVAL;
 	}
 
-	irComp.newpoints = compObj["newpoints"].getList<uint16_t>().value_or(std::vector<uint16_t>{});
+	irComp.newpoints = compObj["newpoints"].get<std::vector<uint16_t>>().value_or(std::vector<uint16_t>{});
 	if (irComp.newpoints.size() != kNumNewPoints) {
 		LOG(NxpNeoAlgoRgbIr, Error)
 			<< "compression newpoints list size must be " << kNumNewPoints;
 		return -EINVAL;
 	}
 
-	irComp.ratios = compObj["ratios"].getList<uint16_t>().value_or(std::vector<uint16_t>{});
+	irComp.ratios = compObj["ratios"].get<std::vector<uint16_t>>().value_or(std::vector<uint16_t>{});
 	if (irComp.ratios.size() != kNumRatios) {
 		LOG(NxpNeoAlgoRgbIr, Error)
 			<< "compression ratios list size must be " << kNumRatios;

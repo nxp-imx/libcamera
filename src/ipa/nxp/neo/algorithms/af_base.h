@@ -17,7 +17,7 @@
 #include <libcamera/control_ids.h>
 #include <libcamera/ipa/core_ipa_interface.h>
 
-#include "libcamera/internal/yaml_parser.h"
+#include "libcamera/internal/value_node.h"
 
 #include "region_stats.h"
 
@@ -119,7 +119,7 @@ public:
 	 * Triggers to activate the algorithm to be invoked from their
 	 * respective IPA calls.
 	 */
-	virtual int doInit(const YamlObject &tuningData) = 0;
+	virtual int doInit(const ValueNode &tuningData) = 0;
 	virtual int doConfigure(const IPACameraSensorInfo &sensorInfo) = 0;
 	virtual void doPrepare(const PdafRegions &regions, AfStatus &status) = 0;
 	virtual void doProcess(const FocusRegions &focusRegions,

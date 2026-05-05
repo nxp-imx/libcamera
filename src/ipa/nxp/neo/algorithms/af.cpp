@@ -83,7 +83,7 @@ const ControlInfoMap::Map afControls{
 /**
  * \copydoc libcamera::ipa::Algorithm::init
  */
-int Af::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData)
+int Af::init([[maybe_unused]] IPAContext &context, const ValueNode &tuningData)
 {
 	algo_ = std::make_unique<AfImpl>();
 	int ret = algo_->doInit(tuningData);
@@ -93,12 +93,13 @@ int Af::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData)
 	/* Parse calibration file ISP filters coefficients and shifts. */
 	static_assert(kFilterTapsCount == NEO_AF_FILTERS_CNT,
 		      "Unexpected numbers of AF filters taps");
-	auto parseFilter = [](const YamlObject &node,
+	auto parseFilter = [](const ValueNode &node,
 			      const std::string &name,
 			      const std::array<int8_t, kFilterTapsCount> &defaultFilter,
 			      std::array<int8_t, kFilterTapsCount> &out) {
 		std::copy(defaultFilter.begin(), defaultFilter.end(), out.begin());
-		std::optional<std::vector<int8_t>> filter = node[name].getList<int8_t>();
+		std::optional<std::vector<int8_t>> filter =
+			node[name].get<std::vector<int8_t>>();
 		if (filter) {
 			if (filter->size() != kFilterTapsCount)
 				LOG(NxpNeoAlgoAf, Warning) << "Invalid filter size for " << name;
@@ -110,7 +111,7 @@ int Af::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData)
 	parseFilter(tuningData, "filter0", kFilter0Default, filters_[0]);
 	parseFilter(tuningData, "filter1", kFilter1Default, filters_[1]);
 
-	auto parseShift = [](const YamlObject &node,
+	auto parseShift = [](const ValueNode &node,
 			     const std::string &name,
 			     const uint8_t defaultShift,
 			     uint8_t &out) {

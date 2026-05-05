@@ -726,6 +726,15 @@ namespace properties {
  */
 
 /**
+ * \var PipelineHandler
+ * \brief The name of the pipeline handler that manages this camera device.o
+ *
+ * This property is meant to help development, debugging and support. The
+ * pipeline handler name is not guaranteed to be stable across libcamera
+ * releases.
+ */
+
+/**
  * \brief Namespace for draft properties
  */
 namespace draft {
@@ -810,6 +819,8 @@ extern const Control<float> SensorSensitivity(SENSOR_SENSITIVITY, "SensorSensiti
 
 extern const Control<Span<const int64_t>> SystemDevices(SYSTEM_DEVICES, "SystemDevices", "libcamera", ControlId::Direction::Out);
 
+extern const Control<std::string_view> PipelineHandler(PIPELINE_HANDLER, "PipelineHandler", "libcamera", ControlId::Direction::Out);
+
 
 
 namespace draft {
@@ -852,6 +863,7 @@ extern const ControlIdMap properties {
 	{ SCALER_CROP_MAXIMUM, &ScalerCropMaximum },
 	{ SENSOR_SENSITIVITY, &SensorSensitivity },
 	{ SYSTEM_DEVICES, &SystemDevices },
+	{ PIPELINE_HANDLER, &PipelineHandler },
 	{ draft::COLOR_FILTER_ARRANGEMENT, &draft::ColorFilterArrangement },
 };
 

@@ -190,7 +190,7 @@ HdrMerge::HdrMerge()
  * \copydoc libcamera::ipa::Algorithm::init
  */
 int HdrMerge::init([[maybe_unused]] IPAContext &context,
-		   const YamlObject &tuningData)
+		   const ValueNode &tuningData)
 {
 	autoEnabled_ = tuningData["auto"].get<bool>().value_or(kAutoEnabled);
 
@@ -209,11 +209,11 @@ int HdrMerge::init([[maybe_unused]] IPAContext &context,
 
 /**
  * \brief Parse the tuning data used for both auto and manual configurations
- * \param[in] tuningData The YamlObject representing the tuning data
+ * \param[in] tuningData The ValueNode representing the tuning data
  *
  * \return 0 on success or a negative error code
  */
-int HdrMerge::parseCommonParams(const YamlObject &tuningData)
+int HdrMerge::parseCommonParams(const ValueNode &tuningData)
 {
 	/* Ratio is a mandatory parameter. */
 	std::optional<uint16_t> ratio =
@@ -230,10 +230,10 @@ int HdrMerge::parseCommonParams(const YamlObject &tuningData)
 		ratioL2S_ = ratio.value();
 	}
 
-	const YamlObject &motionObj = tuningData["motion-fix-en"];
+	const ValueNode &motionObj = tuningData["motion-fix-en"];
 	motionfixEn_ = motionObj.get<uint8_t>().value_or(kDefaultMotionFixEn);
 
-	const YamlObject &blend3x3Obj = tuningData["blend-3x3"];
+	const ValueNode &blend3x3Obj = tuningData["blend-3x3"];
 	blend3x3_ = blend3x3Obj.get<uint8_t>().value_or(kDefaultBlend3x3);
 
 	return 0;
@@ -245,11 +245,11 @@ int HdrMerge::parseCommonParams(const YamlObject &tuningData)
  * All manual paramaters are mandatory. If one manual parameter is missing
  * an error is returned.
  *
- * \param[in] tuningData The YamlObject representing the tuning data
+ * \param[in] tuningData The ValueNode representing the tuning data
  *
  * \return 0 on success or a negative error code
  */
-int HdrMerge::parseManualParams(const YamlObject &tuningData)
+int HdrMerge::parseManualParams(const ValueNode &tuningData)
 {
 	/* All manual parameters are mandatory. */
 
@@ -262,7 +262,7 @@ int HdrMerge::parseManualParams(const YamlObject &tuningData)
 	obpp_ = obpp.value();
 
 	std::optional<std::vector<uint8_t>> gainBpp =
-		tuningData["gain-bpp"].getList<uint8_t>();
+		tuningData["gain-bpp"].get<std::vector<uint8_t>>();
 	if (!gainBpp || gainBpp->size() != kNumImages) {
 		LOG(NxpNeoAlgoHdrMerge, Error)
 			<< "Invalid number of gain-bpp entries";
@@ -271,7 +271,7 @@ int HdrMerge::parseManualParams(const YamlObject &tuningData)
 	gainBpp_ = std::move(gainBpp.value());
 
 	std::optional<std::vector<uint16_t>> gainOffset =
-		tuningData["gain-offset"].getList<uint16_t>();
+		tuningData["gain-offset"].get<std::vector<uint16_t>>();
 	if (!gainOffset || gainOffset->size() != kNumImages) {
 		LOG(NxpNeoAlgoHdrMerge, Error)
 			<< "Invalid number of gain-offset entries";
@@ -280,7 +280,7 @@ int HdrMerge::parseManualParams(const YamlObject &tuningData)
 	gainOffset_ = std::move(gainOffset.value());
 
 	std::optional<std::vector<uint16_t>> gainScale =
-		tuningData["gain-scale"].getList<uint16_t>();
+		tuningData["gain-scale"].get<std::vector<uint16_t>>();
 	if (!gainScale || gainScale->size() != kNumImages) {
 		LOG(NxpNeoAlgoHdrMerge, Error)
 			<< "Invalid number of gain-scale entries";
@@ -289,7 +289,7 @@ int HdrMerge::parseManualParams(const YamlObject &tuningData)
 	gainScale_ = std::move(gainScale.value());
 
 	std::optional<std::vector<uint8_t>> gainShift =
-		tuningData["gain-shift"].getList<uint8_t>();
+		tuningData["gain-shift"].get<std::vector<uint8_t>>();
 	if (!gainShift || gainShift->size() != kNumImages) {
 		LOG(NxpNeoAlgoHdrMerge, Error)
 			<< "Invalid number of gain-shift entries";
@@ -334,7 +334,7 @@ int HdrMerge::parseManualParams(const YamlObject &tuningData)
 	lumaScaleThShift_ = lumaScaleThShift.value();
 
 	std::optional<std::vector<uint8_t>> downscale =
-		tuningData["downscale"].getList<uint8_t>();
+		tuningData["downscale"].get<std::vector<uint8_t>>();
 	if (!downscale || downscale->size() != kNumImages) {
 		LOG(NxpNeoAlgoHdrMerge, Error)
 			<< "Invalid number of downscale entries";
@@ -343,7 +343,7 @@ int HdrMerge::parseManualParams(const YamlObject &tuningData)
 	downscale_ = std::move(downscale.value());
 
 	std::optional<std::vector<uint8_t>> upscale =
-		tuningData["upscale"].getList<uint8_t>();
+		tuningData["upscale"].get<std::vector<uint8_t>>();
 	if (!upscale || upscale->size() != kNumImages) {
 		LOG(NxpNeoAlgoHdrMerge, Error)
 			<< "Invalid number of upscale entries";
@@ -365,17 +365,17 @@ int HdrMerge::parseManualParams(const YamlObject &tuningData)
 
 /**
  * \brief Parse the tuning data used for the auto configuration
- * \param[in] tuningData The YamlObject representing the tuning data
+ * \param[in] tuningData The ValueNode representing the tuning data
  *
  * \return 0 on success or a negative error code
  */
-int HdrMerge::parseAutoParams(const YamlObject &tuningData)
+int HdrMerge::parseAutoParams(const ValueNode &tuningData)
 {
 	static const std::vector<uint16_t> blendingWindowDefault =
 		{ kBlendingWindowLow, kBlendingWindowHigh };
-	const YamlObject &blendingWindowObj = tuningData["blending-window"];
+	const ValueNode &blendingWindowObj = tuningData["blending-window"];
 	blendingWindow_ =
-		blendingWindowObj.getList<uint16_t>().value_or(blendingWindowDefault);
+		blendingWindowObj.get<std::vector<uint16_t>>().value_or(blendingWindowDefault);
 	if (blendingWindow_.size() != kNumThresholds) {
 		LOG(NxpNeoAlgoHdrMerge, Error)
 			<< "Invalid number of blending-window entries";

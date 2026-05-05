@@ -19,7 +19,7 @@
 
 #include <libcamera/control_ids.h>
 
-#include "libcamera/internal/yaml_parser.h"
+#include "libcamera/internal/value_node.h"
 
 #include "libipa/fixedpoint.h"
 
@@ -157,7 +157,7 @@ LOG_DEFINE_CATEGORY(NxpNeoAlgoGoc)
  * \copydoc libcamera::ipa::Algorithm::init
  */
 int GammaOutCorrection::init([[maybe_unused]] IPAContext &context,
-			     const YamlObject &tuningData)
+			     const ValueNode &tuningData)
 {
 	/* Get the gamma value from tuning file. */
 	gamma_ = tuningData["gamma"].get<float>();
@@ -249,8 +249,7 @@ void GammaOutCorrection::setYuv2RgbParams(neoisp_gcm_cfg_s &gcm) const
 		gcm.ioffsets[i] = 0;
 		for (unsigned int j = 0; j < 3; j++) {
 			/* imat in s8.8 */
-			gcm.imat_rxcy[i][j] =
-				floatingToFixedPoint<8, 8, int16_t, float>(imat[i][j]);
+			gcm.imat_rxcy[i][j] = Q<8, 8>(imat[i][j]).quantized();
 		}
 	}
 }
@@ -262,36 +261,25 @@ void GammaOutCorrection::setYuv2RgbParams(neoisp_gcm_cfg_s &gcm) const
 void GammaOutCorrection::setXferParams(neoisp_gcm_cfg_s &gcm) const
 {
 	/* gamma: u1.8 format */
-	gcm.gamma0_gamma0 = floatingToFixedPoint<1, 8, uint16_t, float>(xferFunc_.gammaInverse);
-	gcm.gamma1_gamma1 =
-		floatingToFixedPoint<1, 8, uint16_t, float>(xferFunc_.gammaInverse);
-	gcm.gamma2_gamma2 =
-		floatingToFixedPoint<1, 8, uint16_t, float>(xferFunc_.gammaInverse);
+	gcm.gamma0_gamma0 = UQ<1, 8>(xferFunc_.gammaInverse).quantized();
+	gcm.gamma1_gamma1 = gcm.gamma0_gamma0;
+	gcm.gamma2_gamma2 = gcm.gamma0_gamma0;
 	/* gamma offset: u0.12 format */
-	gcm.gamma0_offset0 =
-		floatingToFixedPoint<0, 12, uint16_t, float>(xferFunc_.nonLinearOffset);
-	gcm.gamma1_offset1 =
-		floatingToFixedPoint<0, 12, uint16_t, float>(xferFunc_.nonLinearOffset);
-	gcm.gamma2_offset2 =
-		floatingToFixedPoint<0, 12, uint16_t, float>(xferFunc_.nonLinearOffset);
+	gcm.gamma0_offset0 = UQ<0, 12>(xferFunc_.nonLinearOffset).quantized();
+	gcm.gamma1_offset1 = gcm.gamma0_offset0;
+	gcm.gamma2_offset2 = gcm.gamma0_offset0;
 	/* black level gain: u8.8 format */
-	gcm.blklvl0_ctrl_gain0 =
-		floatingToFixedPoint<8, 8, uint16_t, float>(xferFunc_.linearGain);
-	gcm.blklvl1_ctrl_gain1 =
-		floatingToFixedPoint<8, 8, uint16_t, float>(xferFunc_.linearGain);
-	gcm.blklvl2_ctrl_gain2 =
-		floatingToFixedPoint<8, 8, uint16_t, float>(xferFunc_.linearGain);
+	gcm.blklvl0_ctrl_gain0 = UQ<8, 8>(xferFunc_.linearGain).quantized();
+	gcm.blklvl1_ctrl_gain1 = gcm.blklvl0_ctrl_gain0;
+	gcm.blklvl2_ctrl_gain2 = gcm.blklvl0_ctrl_gain0;
 	/* black level offset set to 0 */
 	gcm.blklvl0_ctrl_offset0 = 0;
 	gcm.blklvl1_ctrl_offset1 = 0;
 	gcm.blklvl2_ctrl_offset2 = 0;
 	/* linear threshold: u0.16 format */
-	gcm.lowth_ctrl01_threshold0 =
-		floatingToFixedPoint<0, 16, uint16_t, float>(xferFunc_.linearThreshold);
-	gcm.lowth_ctrl01_threshold1 =
-		floatingToFixedPoint<0, 16, uint16_t, float>(xferFunc_.linearThreshold);
-	gcm.lowth_ctrl2_threshold2 =
-		floatingToFixedPoint<0, 16, uint16_t, float>(xferFunc_.linearThreshold);
+	gcm.lowth_ctrl01_threshold0 = UQ<0, 16>(xferFunc_.linearThreshold).quantized();
+	gcm.lowth_ctrl01_threshold1 = gcm.lowth_ctrl01_threshold0;
+	gcm.lowth_ctrl2_threshold2 = gcm.lowth_ctrl01_threshold0;
 }
 
 /**
@@ -333,8 +321,7 @@ void GammaOutCorrection::setEncodingParams(neoisp_gcm_cfg_s &gcm, const IPARange
 			/* omat in s8.8 */
 			gcm.omat_rxcy[i][j] =
 				std::round(quantizedOmat(
-					floatingToFixedPoint<8, 8, int16_t, float>(
-						ycbcrEnc_.matrix[i][j]),
+					Q<8, 8>(ycbcrEnc_.matrix[i][j]).quantized(),
 					qFactor[i][0]));
 			LOG(NxpNeoAlgoGoc, Debug) << "ISP gcm.omat_rxcy[" << i << "][" << j << "]: "
 						  << gcm.omat_rxcy[i][j];

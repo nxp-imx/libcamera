@@ -25,7 +25,7 @@ public:
 	RgbIr();
 	~RgbIr() = default;
 
-	int init(IPAContext &context, const YamlObject &tuningData) override;
+	int init(IPAContext &context, const ValueNode &tuningData) override;
 	void prepare(IPAContext &context, const uint32_t frame,
 		     IPAFrameContext &frameContext,
 		     NxpNeoParams *params) override;
@@ -53,7 +53,7 @@ private:
 	IrCompression irComp8bits_;
 	IrCompression irComp16bits_;
 
-	int parseIrCompression(const YamlObject &tuningData, const char *key,
+	int parseIrCompression(const ValueNode &tuningData, const char *key,
 			       IrCompression &irComp);
 };
 

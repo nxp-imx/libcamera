@@ -44,7 +44,7 @@ protected:
 class IPAProxySoftThreaded : public IPAProxySoft
 {
 public:
-	IPAProxySoftThreaded(IPAModule *ipam, const GlobalConfiguration &configuration);
+	IPAProxySoftThreaded(IPAModule *ipam, const CameraManager &cm);
 	~IPAProxySoftThreaded();
 
 
@@ -143,7 +143,7 @@ private:
 class IPAProxySoftIsolated : public IPAProxySoft
 {
 public:
-	IPAProxySoftIsolated(IPAModule *ipam, const GlobalConfiguration &configuration);
+	IPAProxySoftIsolated(IPAModule *ipam, const CameraManager &cm);
 	~IPAProxySoftIsolated();
 
 

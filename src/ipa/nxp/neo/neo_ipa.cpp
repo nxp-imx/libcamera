@@ -165,7 +165,7 @@ int IPANxpNeo::init(const IPASettings &settings, const InitParams &params,
 		return ret;
 	}
 
-	std::unique_ptr<libcamera::YamlObject> data = YamlParser::parse(file);
+	std::unique_ptr<libcamera::ValueNode> data = YamlParser::parse(file);
 	if (!data) {
 		LOG(NxpNeoIPA, Error) << "Failed to parse configuration file";
 		return -EINVAL;

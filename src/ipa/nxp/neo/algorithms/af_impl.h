@@ -18,7 +18,7 @@
 #include <libcamera/control_ids.h>
 #include <libcamera/controls.h>
 
-#include "libcamera/internal/yaml_parser.h"
+#include "libcamera/internal/value_node.h"
 
 #include "libipa/pwl.h"
 
@@ -62,7 +62,7 @@ public:
 	~AfImpl();
 
 	/* IPA callbacks */
-	int doInit(const YamlObject &tuningData) override;
+	int doInit(const ValueNode &tuningData) override;
 	int doConfigure(const IPACameraSensorInfo &configInfo) override;
 	void doPrepare(const PdafRegions &regions, AfStatus &status) override;
 	void doProcess(const FocusRegions &focusRegions, const RgbyRegions &awbRegions) override;
@@ -99,7 +99,7 @@ private:
 		double focusDefault; /* default setting ("hyperfocal") */
 
 		RangeDependentParams();
-		void read(const YamlObject &params);
+		void read(const ValueNode &params);
 	};
 
 	struct SpeedDependentParams {
@@ -116,7 +116,7 @@ private:
 		uint32_t stepFrames; /* frames to skip in between steps of a scan */
 
 		SpeedDependentParams();
-		void read(const YamlObject &params);
+		void read(const ValueNode &params);
 	};
 
 	struct CfgParams {
@@ -130,7 +130,7 @@ private:
 		ipa::Pwl map; /* converts dioptres -> lens driver position */
 
 		CfgParams();
-		int read(const YamlObject &params);
+		int read(const ValueNode &params);
 		void initialise();
 	};
 
@@ -152,7 +152,7 @@ private:
 	};
 
 	char const *name() const;
-	int read(const YamlObject &params);
+	int read(const ValueNode &params);
 	void initialise();
 	void computeWeights(RegionWeights *wgts, unsigned rows, unsigned cols);
 	void invalidateWeights();

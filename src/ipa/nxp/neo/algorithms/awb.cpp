@@ -117,7 +117,7 @@ Awb::Awb()
 /**
  * \copydoc libcamera::ipa::Algorithm::init
  */
-int Awb::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData)
+int Awb::init([[maybe_unused]] IPAContext &context, const ValueNode &tuningData)
 {
 	context.ctrlMap[&controls::AwbEnable] = ControlInfo(false, true);
 	context.ctrlMap[&controls::ColourGains] = ControlInfo(0.1f, 32.0f);

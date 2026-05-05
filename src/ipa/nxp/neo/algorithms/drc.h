@@ -17,40 +17,15 @@ namespace libcamera {
 
 namespace ipa::nxpneo::algorithms {
 
-struct DrcControlContext {
-	static constexpr unsigned int kDrcMaxHistory = 10;
-	uint32_t maxValue;
-	uint32_t minValue;
-	uint32_t maxBin;
-	uint32_t minBin;
-	uint32_t maxHistory[kDrcMaxHistory];
-	uint32_t maxBinHistory[kDrcMaxHistory];
-	uint8_t historyPointer;
-	uint32_t historyMax;
-	uint32_t historyMaxBin;
-	uint16_t globalDrcAlpha;
-	uint16_t extraGainOut;
-	uint16_t gamma;
-	uint16_t gammaFixed;
-};
-
-struct DrcLut {
-	float ratio[NEO_DRC_GLOBAL_TONEMAP_SIZE];
-	double hist[NEO_DRC_GLOBAL_TONEMAP_SIZE];
-	float nextRange;
-	float effGamma;
-	float maxRatio;
-	double histEqSum;
-};
-
 class Drc : public Algorithm
 {
 public:
 	Drc();
 	~Drc() = default;
 
-	int init(IPAContext &context, const YamlObject &tuningData) override;
-	int configure(IPAContext &context, const IPACameraSensorInfo &configInfo) override;
+	int init(IPAContext &context, const ValueNode &tuningData) override;
+	int configure(IPAContext &context,
+		      const IPACameraSensorInfo &configInfo) override;
 	void prepare(IPAContext &context, const uint32_t frame,
 		     IPAFrameContext &frameContext,
 		     NxpNeoParams *params) override;
@@ -60,48 +35,100 @@ public:
 		     ControlList &metadata) override;
 
 private:
-	void configureGblDrcContext();
+	enum class GlobalMode {
+		Passthrough = 0, /* Data passes through unchanged */
+		Static = 1, /* Use pre-configured LUT from tuning file */
+		Dynamic = 2, /* Dynamically compute LUT from histogram */
+	};
+
+	struct ControlContext {
+		struct Range {
+			uint32_t min;
+			uint32_t max;
+		};
+
+		struct History {
+			static constexpr unsigned int kMaxSize = 10;
+			std::array<uint32_t, kMaxSize> values;
+			std::array<uint32_t, kMaxSize> bins;
+			uint8_t pointer;
+			uint32_t maxValue;
+			uint32_t maxBin;
+		};
+
+		Range value;
+		Range bin;
+		History history;
+
+		uint16_t globalDrcAlpha;
+		uint16_t extraGainOut;
+		uint16_t gamma;
+		uint16_t gammaFixed;
+	};
+
+	struct LutVariables {
+		std::array<float, NEO_DRC_GLOBAL_TONEMAP_SIZE> ratio;
+		std::array<float, NEO_DRC_GLOBAL_TONEMAP_SIZE> hist;
+		float nextRange;
+		float effGamma;
+		float maxRatio;
+		float histEqSum;
+
+		LutVariables()
+			: nextRange(0.0f), effGamma(0.0f), maxRatio(0.0f),
+			  histEqSum(0.0f)
+		{
+			ratio.fill(1.0f);
+			hist.fill(0.0f);
+		}
+	};
+
+	void configureGlobalContext();
 	uint32_t binToLinear(uint32_t bin) const;
 	void fixedModeLut();
-	void getMinMax(const std::vector<uint32_t> &inputHistogram, const uint32_t frame);
+	void getMinMax(const std::vector<uint32_t> &inputHistogram,
+		       const uint32_t frame);
 	void getMin(const std::vector<uint32_t> &inputHistogram);
 	void getMax(const std::vector<uint32_t> &inputHistogram);
 	void getHistoryMax();
-	void controlDynamicMode(const std::vector<uint32_t> &inputHistogram,
-				uint16_t *extraGainOut);
-	void dynamicModeSum(const std::vector<uint32_t> &inputHistogram, DrcLut *lutVars) const;
-	void effectiveGamma(DrcLut *lutVars) const;
-	uint16_t lutFirstRun(DrcLut *lutVars);
-	void lutSecondRun(DrcLut *lutVars);
+	void controlDynamicMode(const std::vector<uint32_t> &inputHistogram);
+	void dynamicModeSum(const std::vector<uint32_t> &inputHistogram,
+			    LutVariables *lutVars) const;
+	void effectiveGamma(LutVariables *lutVars) const;
+	void lutFirstRun(LutVariables *lutVars);
+	void lutSecondRun(LutVariables *lutVars);
 
-	/* Initial values of control constants. May be overriden by config yaml */
-	static constexpr uint16_t kGblMode = 0;
+	/* Control constants default values. May be overriden by config yaml */
+	static constexpr uint16_t kGlobalMode = 0;
 
-	/* Min count can be adjusted to steer the contrast by avoiding dark input regions. */
+	/*
+	 * Pixel count can be adjusted to steer the contrast:
+	 *     - min adjustement avoids dark input regions
+	 *     - max adjustement avoids bright input regions
+	 */
 	static constexpr uint32_t kMinPixelCount = 100;
-	/* Max count can be adjusted to steer the contrast by avoiding bright input regions. */
 	static constexpr uint32_t kMaxPixelCount = 100;
 
 	static constexpr uint16_t kLocalStretchvalue = 256;
 	static constexpr uint16_t kAlphaValue = 256;
 	static constexpr uint16_t kGdrcAlphaValue = 128;
-	static constexpr uint16_t kGblGain = 256;
+	static constexpr uint16_t kGlobalGain = 256;
 
 	static constexpr uint16_t kGdrcGammaValue = 140;
 
-	static constexpr uint16_t kHEThreshold = 2000;
-	static constexpr float kHESaturation = 0.5;
+	static constexpr uint32_t kHEThreshold = 2000;
+	static constexpr float kHESaturation = 0.5f;
 
 	/* Global DRC configuration */
-	std::array<uint16_t, NEO_DRC_GLOBAL_TONEMAP_SIZE> gblLut_;
-	std::array<uint16_t, NEO_DRC_GLOBAL_TONEMAP_SIZE> gblFixedLut_;
+	std::array<uint16_t, NEO_DRC_GLOBAL_TONEMAP_SIZE> globalLut_;
+	std::array<uint16_t, NEO_DRC_GLOBAL_TONEMAP_SIZE> globalFixedLut_;
 
-	uint16_t gblGain_;
+	uint16_t globalGain_;
 	/* init global DRC mode */
-	uint16_t gblInitMode_;
+	GlobalMode globalInitMode_;
 	std::string restrictMode_;
 
-	DrcControlContext gblDrcContext_;
+	ControlContext globalContext_;
 };
 
 } /* namespace ipa::nxpneo::algorithms */

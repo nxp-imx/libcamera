@@ -25,7 +25,7 @@ public:
 	HdrMerge();
 	~HdrMerge() = default;
 
-	int init(IPAContext &context, const YamlObject &tuningData) override;
+	int init(IPAContext &context, const ValueNode &tuningData) override;
 	int configure(IPAContext &context,
 		      const IPACameraSensorInfo &configInfo) override;
 	void prepare(IPAContext &context, const uint32_t frame,
@@ -33,9 +33,9 @@ public:
 		     NxpNeoParams *params) override;
 
 private:
-	int parseCommonParams(const YamlObject &tuningData);
-	int parseManualParams(const YamlObject &tuningData);
-	int parseAutoParams(const YamlObject &tuningData);
+	int parseCommonParams(const ValueNode &tuningData);
+	int parseManualParams(const ValueNode &tuningData);
+	int parseAutoParams(const ValueNode &tuningData);
 	void computeParams(IPAContext &context);
 	bool isPowerOf2(int n) const
 	{

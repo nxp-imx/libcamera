@@ -35,6 +35,7 @@ enum {
 	SCALER_CROP_MAXIMUM = 8,
 	SENSOR_SENSITIVITY = 9,
 	SYSTEM_DEVICES = 10,
+	PIPELINE_HANDLER = 11,
 };
 
 
@@ -65,6 +66,8 @@ extern const Control<float> SensorSensitivity;
 #define LIBCAMERA_HAS_LIBCAMERA_VENDOR_PROPERTIES_SENSOR_SENSITIVITY
 extern const Control<Span<const int64_t>> SystemDevices;
 #define LIBCAMERA_HAS_LIBCAMERA_VENDOR_PROPERTIES_SYSTEM_DEVICES
+extern const Control<std::string_view> PipelineHandler;
+#define LIBCAMERA_HAS_LIBCAMERA_VENDOR_PROPERTIES_PIPELINE_HANDLER
 
 namespace draft {
 

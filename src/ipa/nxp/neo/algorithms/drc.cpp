@@ -8,6 +8,8 @@
 #include "drc.h"
 
 #include <algorithm>
+#include <limits>
+#include <stdint.h>
 
 #include <libcamera/base/log.h>
 #include <libcamera/base/utils.h>
@@ -24,153 +26,199 @@ namespace ipa::nxpneo::algorithms {
 
 /**
  * \class Drc
- * \brief DRC configuration
+ * \brief Dynamic Range Compression (DRC) configuration algorithm
  *
- * This Algorithm configures the DRC unit.
- * It provides the configuration for the global DRC operation.
+ * This algorithm configures the DRC unit, providing configuration for the
+ * global DRC operation.
  *
- * The DRC unit compresses the bit depth from 20 bit (used in the
- * ISP pipeline) to 16 bits.
- * The DRC operation controls the brightness of the output image.
+ * The DRC unit compresses the bit depth from 20 bits (used in the ISP pipeline)
+ * to 16 bits. The DRC operation controls the brightness of the output image.
  *
  * The following DRC operation is applied on each YUV component.
- * For the Y component: Y_GDRC = Y_IN * LUT[Linear2Bin(Y_IN)] * DRC_GBL_GAIN >> 4
+ * For the Y component:
+ *   Y_GDRC = Y_IN * LUT[Linear2Bin(Y_IN)] * DRC_GBL_GAIN >> 4
+ *
  * Through the configuration of the LUT, the DRC unit can amplify or attenuate
- * the input Y value. To this end, the input value is assigned to a histogram bin,
- * and the LUT entry valid for the particular bin is applied to the input value.
+ * the input Y value. The input value is assigned to a histogram bin, and the
+ * LUT entry valid for the particular bin is applied to the input value.
  * This algorithm calculates the LUT entries.
  *
- * It is possible to restrict the DRC operation to run only if the pipeline is in HDR merge mode.
- * Such restriction can be set with following key:
- * "restrict-mode": allow to restrict the DRC to run only if the pipeline is in HDR merge mode.
- *                  If set to "hdr-merge" and if the pipeline is not in HDR merge mode,
- *                  the DRC operation is disabled (the DRC mode is forced to gbl-mode=0, Copy mode)
- *                  valid values: { "hdr-merge", "none" }
- *                  Any other values than the valid ones are ignored.
+ * It is possible to restrict the DRC operation to run only if the pipeline is
+ * in HDR merge mode. Such restriction can be set with the following key:
+ * "restrict-mode": Restrict the DRC to run only in HDR merge mode.
+ *                  If set to "hdr-merge" and the pipeline is not in such mode,
+ *                  the DRC operation is disabled (the DRC mode is forced to
+ *                                                 gbl-mode=0, Copy mode)
+ *                  Valid values: { "hdr-merge", "none" }
+ *                  Other values are ignored.
  *
- * Three modes of operation are supported to determine the global DRC lookup table,
- * as specified by the "gbl-mode" attribute:
- * "gbl-mode: 0" is the Copy mode. In this case, the generated lookup table only
- * contains values corresponding to unit gain, which means no effective dynamic range
- * compression is done and the data passes through as is. This mode is especially
- * useful for sensors with pixel value bit depth up to 16.
- * No tunable values are required in the calibration file for this mode
+ * Three modes of operation are supported to determine the global DRC lookup
+ * table, as specified by the "gbl-mode" attribute:
+ * "gbl-mode: 0": Copy/Passthrough mode.
+ *                The generated lookup table contains only unit gain values,
+ *                meaning no effective dynamic range compression is performed.
+ *                Data passes through as-is.
+ *                Useful for sensors with pixel value bit depth up to 16.
+ *                No tunable values required in the calibration file.
+ * "gbl-mode: 1": Pre-configured mode.
+ *                The lookup table must be configured in the tuning file via
+ *                "gbl-lut". The "gbl-gain" may also be used.
  *
- * "gbl-mode: 1" is the Pre-configured mode. In this case the lookup table needs
- * to be configured in the tuning file, in the "gbl-lut" attribute. Also the "gbl-gain"
- * may be used in this case.
- * Tunable values:
- * - gbl-lut: list [1-416] of u16 values with 8.8 format.
- * If no configuration is set, default values from the driver are used.
- * - gbl-gain: global gain applied at the output of the global tonemapping step
- * where all entries of the Global LUT are multiplied by this gain. u16 value with 8.8 format.
- * If no configuration is set, the default value set by kGblGain is used.
+ *                The lookup table contains 416 entries corresponding to the
+ *                416 non-linear histogram bins. Each LUT entry is a gain value
+ *                applied to pixels whose values fall within the corresponding
+ *                bin's range. The mapping from pixel values to bin indices is
+ *                described in the binToLinear() function, but mainly follows a
+ *                structure of 13 levels each containing 32 bins.
  *
- * "gbl-mode: 2" is the Dynamic mode. In this case, the lookup table is generated based
- * on the image histogram measured by the ISP.
- * Tunable values:
- * - gdrc-alpha: Selects between histogram equalization (=0) and histogram stretching (=256)
- * If not configured, the default kGdrcAlphaValue is used.
- * - gdrc-gamma: Controls the strength of dynamic range compression with histogram stretching
- * Value is in u8.8 format. If not configured, the default kGdrcGammaValue is used.
- * - fixed-gamma: Controls the default compression curve which GDRC works with
- * Value is in u8.8 format. If not configured, the default kGdrcGammaValue is used.
+ *                Tunable values:
+ *                - gbl-lut: List [1-416] of u16 values with 8.8 format.
+ *                  If not set, driver default values are used.
+ *                - gbl-gain: Global gain applied at the output of the global
+ *                  tonemapping step, being a u16 value with 8.8 format.
+ *                  All Global LUT entries are multiplied by this gain.
+ *                  If not set, the default value kGlobalGain is used.
+ * "gbl-mode: 2": Dynamic mode.
+ *                The lookup table is generated based on the image histogram
+ *                measured by the ISP.
  *
- * The dynamic mode is based on two principles, namely histogram equalization and
- * non-linear histogram stretching:
- * Histogram equalization relies on the linearization of the cumulative distribution
- * function evaluated from the input histogram - the gain for each bin is calculated
- * as the ratio between the relative cumulative frequency for a linear histogram
- * and for the empiric histogram (the real-time luminance histogram measured by the ISP).
- * Histogram stretching evaluates the empiric dynamic range of the input data,
- * scales the input histogram according to its real range, and applies a power
- * function whose exponent represents the strength of the dynamic range compression.
+ *                Tunable values:
+ *                - gdrc-alpha: Selects between histogram equalization (=0)
+ *                  and histogram stretching (=256).
+ *                  If not set, the default value kGdrcAlphaValue is used.
+ *                - gdrc-gamma: Controls the strength of dynamic range
+ *                  compression with histogram stretching. Value in u8.8 format.
+ *                  If not set, the default value kGdrcGammaValue is used.
+ *                - fixed-gamma: Controls the default compression curve which
+ *                  GDRC works with. Value in u8.8 format
+ *                  If not set, the default value kGdrcGammaValue is used.
+ *
+ * The dynamic mode is based on two principles:
+ * - Histogram equalization: Relies on linearization of the cumulative
+ *   distribution function evaluated from the input histogram. The gain for
+ *   each bin is calculated as the ratio between the relative cumulative
+ *   frequency for a linear histogram and for the empiric histogram (real-time
+ *   luminance histogram measured by the ISP).
+ *
+ * - Histogram stretching: Evaluates the empiric dynamic range of the
+ *   input data, scales the input histogram according to its real range, and
+ *   applies a power function whose exponent represents the strength of the
+ *   dynamic range compression.
  */
 
 /**
- * \struct DrcControlContext
+ * \struct Drc::ControlContext
  * \brief Properties of the dynamic range compression algorithm
  *
- * \var DrcControlContext::maxValue
- * \brief Maximum pixel value evaluated from the histogram
+ * \struct Drc::ControlContext::Range
+ * \brief A simple min/max pair representing a bounded interval
  *
- * \var DrcControlContext::minValue
- * \brief Minimum pixel value evaluated from the histogram
+ * Used to store minimum and maximum bounds for pixel values and histogram
+ * bin indices.
  *
- * \var DrcControlContext::maxBin
- * \brief Histogram bin index corresponding to the maximum pixel value
+ * \var Drc::ControlContext::Range::min
+ * \brief Minimum value of the range
  *
- * \var DrcControlContext::minBin
- * \brief Histogram bin index corresponding to the minimum pixel value
+ * \var Drc::ControlContext::Range::max
+ * \brief Maximum value of the range
  *
- * \var DrcControlContext::maxHistory
- * \brief History of maximum values. The histogram maximum is tracked for the
- * last n frames and the second largest maximum is then taken as the empirical
- * histogram upper limit. Taking second maximum mitigates power supply flicker.
+ * \var Drc::ControlContext::value
+ * \brief Minimum and maximum pixel values evaluated from the histogram
  *
- * \var DrcControlContext::maxBinHistory
+ * \var Drc::ControlContext::bin
+ * \brief Histogram bin index for minimal and maximal pixel values
+ *
+ * \struct Drc::ControlContext::History
+ * \brief Circular buffer tracking histogram maxima across multiple frames
+ *
+ * Maintains a history of the last kMaxSize frame histogram maximum values
+ * and their corresponding bin indices. This temporal tracking allows the
+ * algorithm to use the second-largest maximum instead of the absolute
+ * maximum, providing stability against transient brightness spikes such
+ * as power supply flicker or brief specular highlights.
+ *
+ * \var Drc::ControlContext::History::values
+ * \brief History of maximum values
+ *
+ * The histogram maximum is tracked for the last n frames and the second
+ * largest maximum is then taken as the empirical histogram upper limit.
+ * Taking second maximum mitigates power supply flicker.
+ *
+ * \var Drc::ControlContext::History::bins
  * \brief History of maximum histogram bins
  *
- * \var DrcControlContext::historyPointer
+ * \var Drc::ControlContext::History::pointer
  * \brief Pointer to the next maximum value to be written in the history
  *
- * \var DrcControlContext::historyMax
+ * \var Drc::ControlContext::History::maxValue
  * \brief Maximum value found in the history
  *
- * \var DrcControlContext::historyMaxBin
- * \brief Histogram bin index corresponding to the maximum value found in the history
+ * \var Drc::ControlContext::History::maxBin
+ * \brief Histogram bin index
  *
- * \var DrcControlContext::globalDrcAlpha
- * \brief Alpha blending value for stretching: 256 = stretch, 0 = histogram equalization [1.8]
+ * Corresponds to the maximum value found in the history
+ *
+ * \var Drc::ControlContext::history
+ * \brief History buffer for temporal maximum value tracking
+ *
+ * \var Drc::ControlContext::globalDrcAlpha
+ * \brief Alpha blending value for stretching [u1.8 format]
+ *
+ * - 256 = stretch
+ * - 0 = histogram equalization
+ *
  * Alpha blending is the weighted sum of two inputs:
- * output = globalDrcAlpha/256 * stretch + (1 - (globalDrcAlpha/256)) * hist_eq
+ *   output = globalDrcAlpha/256 * stretch +
+ *            (1 - (globalDrcAlpha/256)) * hist_eq
  *
- * \var DrcControlContext::extraGainOut
- * \brief Extra multiplication factor required after applying the global DRC LUT [8.8]
+ * \var Drc::ControlContext::extraGainOut
+ * \brief Extra multiplication factor required after applying the global DRC LUT
  *
- * \var DrcControlContext::gamma
+ * Value in u8.8 fixed-point format.
+ *
+ * \var Drc::ControlContext::gamma
  * \brief Dynamic gamma, selected according to occupied dynamic range
  *
- * \var DrcControlContext::gammaFixed
- * \brief Fixed gamma applied for histogram stretching on top of the dynamic gamma
- * GammaFixed is not depending on the dynamic range of the input histogram.
+ * \var Drc::ControlContext::gammaFixed
+ * \brief Fixed gamma applied for histogram stretching on top of dynamic gamma
+ *
+ * This gamma is independent of the dynamic range of the input histogram.
  *
  */
 
 /**
- * \struct DrcLut
+ * \struct Drc::LutVariables
  * \brief Lookup table related properties for the DRC algorithm
  *
- * \var ratio
+ * \var Drc::LutVariables::ratio
  * \brief The output gain lookup table, expressed for each histogram bin
  *
- * \var hist
- * \brief Preprocessed input histogram
+ * \var Drc::LutVariables::hist
+ * \brief Preprocessed input histogram table
  *
- * \var nextRange
+ * \var Drc::LutVariables::nextRange
  * \brief Dynamic range of the histogram
  *
- * \var effGamma
+ * \var Drc::LutVariables::effGamma
  * \brief Effective gamma, taking into account the fixed and the dynamic gamma
  *
- * \var maxRatio
+ * \var Drc::LutVariables::maxRatio
  * \brief Maximum gain in the current lookup table
  *
- * \var histEqSum
+ * \var Drc::LutVariables::histEqSum
  * \brief Sum of the histogram frequencies for histogram equalization
  */
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoDrc)
 
-#define DRC_INPUT_BPP 20
-#define DRC_MINCLZ 8 /* Min count leading zero (clz) histogram category */
-#define DRC_BITCLZ 5 /* 2<<n bins per histogram clz category */
-#define DRC_BINCLZ (1 << DRC_BITCLZ)
-#define MASK_LSB (DRC_BINCLZ - 1)
-#define DRC_INPUT_UMAX ((1 << DRC_INPUT_BPP) - 1)
-
-/* In the fixed point 8.8 representation, one is given as 0x100 */
-static constexpr uint16_t kQ8One = 0x100;
+static constexpr uint32_t kInputBpp = 20;
+static constexpr uint32_t kInputMax = (1 << kInputBpp) - 1;
+static constexpr uint16_t kQ8Unit = 0x100; /* Unit gain in u8.8 format */
+/* Histogram structure constants */
+static constexpr uint32_t kLevel0Size = 8; /* Min count leading zero */
+static constexpr uint32_t kBinIndexSize = 5; /* 2^n bins per histogram level */
+static constexpr uint32_t kBinsPerLevel = 1 << kBinIndexSize;
+static constexpr uint32_t kBinIndexMask = kBinsPerLevel - 1;
 
 Drc::Drc()
 {
@@ -178,330 +226,353 @@ Drc::Drc()
 
 /**
  * \brief Configure the global context for a new streaming session
+ *
+ * Initializes the DRC control context with default values, including the
+ * history arrays for tracking maximum values across frames.
  */
-void Drc::configureGblDrcContext()
+void Drc::configureGlobalContext()
 {
-	/* Init arrays for history of maximum values */
-	for (uint32_t index = 0; index < gblDrcContext_.kDrcMaxHistory; index++) {
-		gblDrcContext_.maxHistory[index] = 0U;
-		gblDrcContext_.maxBinHistory[index] = 0U;
+	/* Initialize history arrays for maximum values tracking */
+	globalContext_.history.values[0] = kInputMax;
+	globalContext_.history.bins[0] = NEO_DRC_GLOBAL_TONEMAP_SIZE - 1;
+	for (uint32_t idx = 1; idx < globalContext_.history.kMaxSize; idx++) {
+		globalContext_.history.values[idx] = 0U;
+		globalContext_.history.bins[idx] = 0U;
 	}
 
-	/* Min and max computed from Histogram */
-	gblDrcContext_.maxValue = ((1 << (DRC_INPUT_BPP)) - 1);
-	gblDrcContext_.minValue = 0;
-	gblDrcContext_.maxBin = NEO_DRC_GLOBAL_TONEMAP_SIZE - 1;
-	gblDrcContext_.minBin = 0;
+	/* Set min/max values computed from Histogram */
+	globalContext_.value = {
+		.min = 0,
+		.max = kInputMax
+	};
+	globalContext_.bin = {
+		.min = 0,
+		.max = NEO_DRC_GLOBAL_TONEMAP_SIZE - 1
+	};
 
-	/* Set first items in arrays */
-	gblDrcContext_.maxHistory[0] = ((1 << DRC_INPUT_BPP) - 1);
-	gblDrcContext_.maxBinHistory[0] = NEO_DRC_GLOBAL_TONEMAP_SIZE - 1;
+	/* Reset history state */
+	globalContext_.history.pointer = 0;
+	globalContext_.history.maxValue = kInputMax;
+	globalContext_.history.maxBin = NEO_DRC_GLOBAL_TONEMAP_SIZE - 1;
 
-	gblDrcContext_.historyPointer = 0; /* Pointer to next maximum value to be written */
-	gblDrcContext_.historyMax = ((1 << DRC_INPUT_BPP) - 1); /* Maximum value in History */
-	gblDrcContext_.historyMaxBin = NEO_DRC_GLOBAL_TONEMAP_SIZE - 1; /* Maximum value in History */
-
-	gblDrcContext_.extraGainOut = kQ8One;
-	gblDrcContext_.gamma = kGdrcGammaValue;
+	globalContext_.extraGainOut = kQ8Unit;
+	globalContext_.gamma = kGdrcGammaValue;
 }
 
 /**
  * \brief Convert bin index to pixel value
- * \param[in] bin The bin index
+ * \param[in] binIndex The bin index to convert
  *
- * The DRC block is using 416-bin nonlinear histograms:
- * The value range is split into 13 logarithmic levels, each of these levels
- * is further split into 32 linear bins.
+ * The DRC block uses 416-bin nonlinear histograms. The 20-bit pixel value
+ * range is split into 13 logarithmic levels, each further divided into 32
+ * linear bins.
  *
- * When converting the pixel value to the corresponding bin index:
- * - the first one in the binary representation of the 20-bit pixel value is
- * found. The position of the first one gives the logarithmic level.
- * First one at bit 19 corresponds to level 12, first one at bit 18
- * to level 11, etc. Level 0 is selected when there are no ones at
- * bit 19 .. bit 8.
- * - the linear bin index at the given level is given by the five bits
- * immediately following the first one found in the binary number. For level 0,
- * bin index corresponds to the value of bits 7 .. 3
- * - finally, the bin is calculated as level * 32 + index.
+ * Conversion from pixel value to bin index:
+ * - Find the MSB first '1' bit in the 20-bit pixel value binary representation.
+ *   The position gives the logarithmic level:
+ *   - Bit 19 = level 12
+ *   - Bit 18 = level 11
+ *   - ...
+ *   - Level 0 is selected when no '1' exists at bits 19..8
+ * - The linear bin index within the level is given by the five bits
+ *   immediately following the first '1'. For level 0, the bin index
+ *   corresponds to bits 7..3.
+ * - Finally, bin = level * 32 + index
  *
- * The function binToLinear provides the mapping from the bin index to
- * the corresponding linear pixel value, returning the value of the starting
- * pixel level for the given histogram bin.
+ * This function provides the mapping from the bin index to the corresponding
+ * linear pixel value, returning the value of the starting pixel level for the
+ * given histogram bin.
  *
  * \return Pixel value corresponding to the bin index
  */
-uint32_t Drc::binToLinear(uint32_t bin) const
+uint32_t Drc::binToLinear(uint32_t binIndex) const
 {
-	int lFf1 = bin >> DRC_BITCLZ;
-	bin &= MASK_LSB;
+	unsigned int level = binIndex >> kBinIndexSize;
+	uint32_t pixelValue;
 
-	if (lFf1 == 0)
-		bin <<= DRC_MINCLZ - DRC_BITCLZ;
+	binIndex &= kBinIndexMask;
+	if (level == 0)
+		pixelValue = binIndex << (kLevel0Size - kBinIndexSize);
 	else {
-		bin |= DRC_BINCLZ;
-		bin <<= (lFf1 + DRC_MINCLZ - DRC_BITCLZ - 1);
+		pixelValue = binIndex | kBinsPerLevel;
+		pixelValue <<= (level + kLevel0Size - kBinIndexSize - 1);
 	}
-	return bin;
+	return pixelValue;
 }
 
 /**
  * \brief Generate lookup table from gamma only
  *
- * In the dynamic mode, for the first frame, no input histogram is taken
- * into account. The LUT for compression of the dynamic range is generated
- * by only following the configured gamma.
- * This function would typically only be called once at init time.
+ * In dynamic mode, the first frame has no input histogram available. The LUT
+ * for dynamic range compression is generated using only the configured gamma.
+ * This function is typically called once at initialization time.
  */
 void Drc::fixedModeLut()
 {
-	constexpr float inputUnsignedMaximum = ((1 << DRC_INPUT_BPP) - 1);
-	float gamma = gblDrcContext_.gamma / 256.0;
+	float gamma = globalContext_.gamma / 256.0f;
 
-	LOG(NxpNeoAlgoDrc, Debug) << "Fixed-mode global DRC Gamma: " << gblDrcContext_.gamma;
+	LOG(NxpNeoAlgoDrc, Debug)
+		<< "Fixed-mode global DRC Gamma: " << globalContext_.gamma;
 
-	for (unsigned int index = 1; index < gblLut_.size(); index++) {
+	for (unsigned int idx = 1; idx < globalLut_.size(); idx++) {
 		float in, outRatio, ratio;
 
-		in = binToLinear(index) / inputUnsignedMaximum;
+		in = binToLinear(idx) / static_cast<float>(kInputMax);
 
 		outRatio = pow(in, gamma);
 		outRatio = std::min(outRatio, 1.0f);
 
-		ratio = outRatio / in * kQ8One;
-		gblLut_[index] = static_cast<uint16_t>(std::min<int>(ratio, UINT16_MAX));
+		ratio = outRatio / in * kQ8Unit;
+		globalLut_[idx] = static_cast<uint16_t>(
+			std::min<int>(ratio,
+				      std::numeric_limits<uint16_t>::max()));
 	}
 
-	gblLut_[0] = gblLut_[1];
-	gblDrcContext_.extraGainOut = kQ8One;
+	globalLut_[0] = globalLut_[1];
+	globalContext_.extraGainOut = kQ8Unit;
 }
 
 /**
- * \brief Find the histogram minimum nonempty bin index and corresponding pixel value
+ * \brief Find the histogram minimum non-empty bin index and pixel value
  * \param[in] inputHistogram Vector containing the input histogram for analysis
  *
- * Find the constrained minimum and minimum bin index from the input histogram.
- * Constraint is the minimum pixel count kMinPixelCount.
- * Bins which do not cumulatively reach the minimum pixel count are ignored, which
- * improves the stability of minimum detection in a series of frames.
- * The result is stored in the global context gblDrcContext_.minBin
- * and gblDrcContext_.minValue.
+ * Finds the constrained minimum bin index and corresponding pixel value from
+ * the input histogram. Constraint is the minimum pixel count kMinPixelCount.
+ *
+ * Bins which do not cumulatively reach the minimum pixel count are ignored,
+ * which improves minimum detection stability across frames.
+ *
+ * Results are stored in globalContext_.bin.min and globalContext_.value.min.
  */
 void Drc::getMin(const std::vector<uint32_t> &inputHistogram)
 {
 	uint32_t sum = 0U;
 
-	gblDrcContext_.minBin = 0U;
-	gblDrcContext_.minValue = 0U;
+	globalContext_.bin.min = 0U;
+	globalContext_.value.min = 0U;
 
-	for (unsigned int index = 0; index < inputHistogram.size(); index++) {
-		sum += inputHistogram[index];
+	for (unsigned int idx = 0; idx < inputHistogram.size(); idx++) {
+		sum += inputHistogram[idx];
 
 		if (sum > kMinPixelCount)
 			break;
-		gblDrcContext_.minBin = index;
-		gblDrcContext_.minValue = binToLinear(index);
+		globalContext_.bin.min = idx;
+		globalContext_.value.min = binToLinear(idx);
 	}
 }
 
 /**
- * \brief Find the histogram maximum nonempty bin index and corresponding pixel value
+ * \brief Find the histogram maximum non-empty bin index and pixel value
  * \param[in] inputHistogram Vector containing the input histogram for analysis
  *
- * Find the constrained maximum and maximum bin index from the input histogram.
- * Constraint is the maximum pixel count kMaxPixelCount.
- * Bins which do not cumulatively reach the maximum pixel count are ignored, which
- * improves the stability of maximum detection in a series of frames.
- * The result is stored in the global context gblDrcContext_.maxBin
- * and gblDrcContext_.maxValue.
+ * Finds the constrained maximum bin index and corresponding pixel value from
+ * the input histogram. Constraint is the maximum pixel count kMaxPixelCount.
+ *
+ * Bins that do not cumulatively reach the maximum pixel count are ignored,
+ * which improves maximum detection stability across frames.
+ *
+ * Results are stored in globalContext_.bin.max and globalContext_.value.max.
  */
 void Drc::getMax(const std::vector<uint32_t> &inputHistogram)
 {
 	uint32_t sum = 0U;
 
-	gblDrcContext_.maxBin = inputHistogram.size() - 1;
-	gblDrcContext_.maxValue = DRC_INPUT_UMAX;
+	globalContext_.bin.max = inputHistogram.size() - 1;
+	globalContext_.value.max = kInputMax;
 
-	for (unsigned int index = inputHistogram.size() - 1; index > 0; index--) {
-		sum += inputHistogram[index];
+	for (unsigned int idx = inputHistogram.size() - 1; idx > 0; idx--) {
+		sum += inputHistogram[idx];
 
 		if (sum > kMaxPixelCount)
 			break;
-		gblDrcContext_.maxBin = index;
-		gblDrcContext_.maxValue = binToLinear(index);
+		globalContext_.bin.max = idx;
+		globalContext_.value.max = binToLinear(idx);
 	}
 }
 
 /**
- * \brief Find the maximum bin and corresponding pixel value in history of maxima
+ * \brief Find the maximum bin and pixel value in history of maxima
  *
- * Search through the stored history of n frame histogram maxima and find the
- * second largest bin index and corresponding pixel level. The second maximum
- * is more stable than the first and avoids light source flicker.
+ * Searches through the stored history of n frame histogram maxima and finds
+ * the second largest bin index and corresponding pixel level.
+ *
+ * The second maximum is more stable than the first one and helps avoid light
+ * source flickering.
  */
 void Drc::getHistoryMax()
 {
-	gblDrcContext_.historyMax = 0;
-	gblDrcContext_.historyMaxBin = 0;
+	unsigned int maxSize = globalContext_.history.kMaxSize;
+	globalContext_.history.maxValue = 0;
+	globalContext_.history.maxBin = 0;
 	uint32_t maxIndex = 0;
 	uint32_t maxValue = 0;
 
-	/* Find maximum */
-	for (unsigned int index = 0; index < gblDrcContext_.kDrcMaxHistory; index++) {
-		if (maxValue < gblDrcContext_.maxHistory[index]) {
-			maxIndex = index;
-			maxValue = gblDrcContext_.maxHistory[index];
+	/* Find the maximum value in history */
+	for (unsigned int idx = 0; idx < maxSize; idx++) {
+		if (maxValue < globalContext_.history.values[idx]) {
+			maxIndex = idx;
+			maxValue = globalContext_.history.values[idx];
 		}
-		/* Use current frame as default HistoryMax */
+		/* Use current frame as default history.maxValue */
 	}
 
-	/* Find 2nd maximum */
-	gblDrcContext_.historyMax = 0;
-	for (unsigned int index = 0; index < gblDrcContext_.kDrcMaxHistory; index++) {
-		if (static_cast<uint32_t>(index) != maxIndex) {
-			if (gblDrcContext_.historyMax < gblDrcContext_.maxHistory[index]) {
-				gblDrcContext_.historyMax = gblDrcContext_.maxHistory[index];
-				gblDrcContext_.historyMaxBin = gblDrcContext_.maxBinHistory[index];
+	/* Find the second maximum value in history */
+	for (unsigned int idx = 0; idx < maxSize; idx++) {
+		if (static_cast<uint32_t>(idx) != maxIndex) {
+			if (globalContext_.history.maxValue <
+			    globalContext_.history.values[idx]) {
+				globalContext_.history.maxValue =
+					globalContext_.history.values[idx];
+				globalContext_.history.maxBin =
+					globalContext_.history.bins[idx];
 			}
 		}
 	}
+
+	if (globalContext_.history.maxValue < globalContext_.value.min)
+		LOG(NxpNeoAlgoDrc, Warning) << "DRC control found Min > Max!";
 }
 
 /**
- * \brief Find the histogram min/max nonempty bin index and corresponding pixel value
+ * \brief Find histogram min/max non-empty bin index and pixel value
  * \param[in] inputHistogram Vector containing the input histogram for analysis
  * \param[in] frame Frame number to decide for initialization at stream start
  *
- * Analyse the extrema of the histogram and store the min and max values in the
- * global context.
+ * Analyzes the extrema of the histogram and stores the min and max values
+ * in the global context. Also maintains the history of maximum values for
+ * temporal stability.
  */
-void Drc::getMinMax(const std::vector<uint32_t> &inputHistogram, const uint32_t frame)
+void Drc::getMinMax(const std::vector<uint32_t> &inputHistogram,
+		    const uint32_t frame)
 {
 	getMin(inputHistogram);
 	getMax(inputHistogram);
+
+	/* Store current maximum to history */
+	globalContext_.history.values[globalContext_.history.pointer] =
+		globalContext_.value.max;
+	globalContext_.history.bins[globalContext_.history.pointer] =
+		globalContext_.bin.max;
+
 	/*
-	 * add histogram maximum - write first frame result twice,
-	 * as we search for the second biggest value
+	 * Add histogram maximum to history. Write first frame result twice,
+	 * as we search for the second largest value.
 	 */
 	if (frame == 0) {
-		gblDrcContext_.historyPointer = 0;
-		gblDrcContext_.maxHistory[gblDrcContext_.historyPointer + 1] = gblDrcContext_.maxValue;
-		gblDrcContext_.maxBinHistory[gblDrcContext_.historyPointer + 1] = gblDrcContext_.maxBin;
+		unsigned int nextIdx = (globalContext_.history.pointer + 1) %
+				       globalContext_.history.kMaxSize;
+		globalContext_.history.values[nextIdx] =
+			globalContext_.value.max;
+		globalContext_.history.bins[nextIdx] =
+			globalContext_.bin.max;
 	}
 
-	/* Store Max to History */
-	gblDrcContext_.maxHistory[gblDrcContext_.historyPointer] = gblDrcContext_.maxValue;
-	gblDrcContext_.maxBinHistory[gblDrcContext_.historyPointer] = gblDrcContext_.maxBin;
-
-	/* Increment History pointer and wrap if required */
-	gblDrcContext_.historyPointer++;
-
-	if (gblDrcContext_.historyPointer >= gblDrcContext_.kDrcMaxHistory)
-		gblDrcContext_.historyPointer = 0;
+	/* Increment history pointer and wrap if required */
+	globalContext_.history.pointer = (globalContext_.history.pointer + 1) %
+					 globalContext_.history.kMaxSize;
 
 	getHistoryMax();
-
-	if (gblDrcContext_.historyMax < gblDrcContext_.minValue)
-		LOG(NxpNeoAlgoDrc, Warning) << "Warning: DRC control found Min > Max!";
 }
 
 /**
- * \brief Preprocess the input histogram and calculate sum
+ * \brief Pre-process the input histogram and calculate sum
  * \param[in] inputHistogram The measured histogram of the image
- * \param[in, out] lutVars Structure containing the input histogram, the lut and other needed parameters
+ * \param[in,out] lutVars Structure containing histogram, LUT, and parameters
  *
- * Each of the histogram bin frequencies is preprocessed by applying an upper bound
- * (kHEThreshold) and power(kHEThreshold) to each frequency value, respectively.
+ * Each histogram bin frequency is preprocessed by applying:
+ * - An upper bound (kHEThreshold)
+ * - A power function (kHESaturation) to each frequency value
+ *
  * The preprocessed histogram and its sum are stored in the lutVars structure.
  */
-void Drc::dynamicModeSum(const std::vector<uint32_t> &inputHistogram, DrcLut *lutVars) const
+void Drc::dynamicModeSum(const std::vector<uint32_t> &inputHistogram,
+			 LutVariables *lutVars) const
 {
-	for (unsigned int index = 0; index < inputHistogram.size(); index++) {
-		uint32_t merged = inputHistogram[index];
+	for (unsigned int idx = 0; idx < inputHistogram.size(); idx++) {
+		uint32_t merged = std::min(inputHistogram[idx], kHEThreshold);
 
-		/* Hard bin value limiter */
-		if (merged > kHEThreshold)
-			merged = kHEThreshold;
-
-		/* Smooth bin value limiter */
-		lutVars->hist[index] = pow(merged, kHESaturation);
-		lutVars->histEqSum += lutVars->hist[index];
+		/* Apply smooth bin value limiter */
+		lutVars->hist[idx] = pow(merged, kHESaturation);
+		lutVars->histEqSum += lutVars->hist[idx];
 	}
 }
 
 /**
  * \brief Calculate the effective gamma from the histogram range
- * \param[in, out] lutVars Structure containing the input histogram, the lut and other needed parameters
+ * \param[in,out] lutVars Structure containing histogram, LUT, and parameters
+ *
+ * Computes the effective gamma by combining the fixed gamma with a dynamic
+ * gamma that adapts to the current histogram's dynamic range.
  */
-void Drc::effectiveGamma(DrcLut *lutVars) const
+void Drc::effectiveGamma(LutVariables *lutVars) const
 {
-	lutVars->nextRange = static_cast<float>(gblDrcContext_.historyMax -
-						gblDrcContext_.minValue);
-	float gamma = gblDrcContext_.gamma * 1.0 / kQ8One;
-	float dynGamma = 1.0;
-	if (lutVars->nextRange == 1)
-		LOG(NxpNeoAlgoDrc, Warning) << "Warning: The normalized histogram range should be larger than 0";
+	lutVars->nextRange = static_cast<float>(
+		globalContext_.history.maxValue - globalContext_.value.min);
+	float gamma = globalContext_.gamma * 1.0f / kQ8Unit;
+	float dynGamma = 1.0f;
+
+	if (lutVars->nextRange > 0.0f && lutVars->nextRange != 1.0f)
+		/* Target bit range / Input bit range */
+		dynGamma = log2f(pow(kInputMax, gamma)) /
+			   log2f(lutVars->nextRange);
 	else
-		dynGamma = log2f(pow(DRC_INPUT_UMAX, gamma)) / /* Target bit range */
-			   log2f(lutVars->nextRange); /* Input bit range */
+		LOG(NxpNeoAlgoDrc, Warning)
+			<< "The normalized histogram range should be > 0";
+	dynGamma = std::min(dynGamma, 1.0f);
 
-	if (dynGamma > 1.0)
-		dynGamma = 1.0;
-
-	lutVars->effGamma = dynGamma * gblDrcContext_.gammaFixed * 1.0 / kQ8One;
+	lutVars->effGamma =
+		dynGamma * globalContext_.gammaFixed * 1.0f / kQ8Unit;
 }
 
 /**
  * \brief First run to generate the DRC lookup table from measured histogram
- * \param[in, out] lutVars Structure containing the input histogram, the lut and other needed parameters
+ * \param[in,out] lutVars Structure containing histogram, LUT, and parameters
  *
- * Generate the lookup table from the input histogram with the use of two principles:
- * 1) Histogram equalization, calculating the gain for each histogram bin from the cumulative
- * distribution function of the measured histogram;
- * 2) non-linear gamma-based stretching  * using a fixed gamma and a dynamic gamma
- * calculated from histogram value range;
- * The output of the two is blended (taken as a weighted sum) depending on the
- * gblDrcContext_.globalDrcAlpha parameter.
+ * Generates the lookup table from the input histogram using two principles:
  *
- * \return Extra gain to be applied on top of LUT
+ * 1) Histogram equalization: Calculates the gain for each histogram bin
+ *    from the cumulative distribution function of the measured histogram.
+ *
+ * 2) Non-linear gamma-based stretching: Uses a fixed gamma and a dynamic
+ *    gamma calculated from the histogram value range.
+ *
+ * The outputs are blended (weighted sum) depending on the
+ * globalContext_.globalDrcAlpha parameter.
  */
-uint16_t Drc::lutFirstRun(DrcLut *lutVars)
+void Drc::lutFirstRun(LutVariables *lutVars)
 {
-	float alpha = gblDrcContext_.globalDrcAlpha * 1.0 / kQ8One;
-	float nextOffset = gblDrcContext_.minValue * 1.0;
-	float alphaQ = 1.0 - alpha;
-	double histEqAcc = 0.0;
+	float alpha = globalContext_.globalDrcAlpha * 1.0f / kQ8Unit;
+	float nextOffset = globalContext_.value.min * 1.0f;
+	float alphaQ = 1.0f - alpha;
+	float histEqAcc = 0.0f;
 
-	for (int index = 1; index < NEO_DRC_GLOBAL_TONEMAP_SIZE; index++) {
-		float inVal, outRatio, inStretch, outStretch; /* Stretching of Gamma based */
-		inVal = static_cast<float>(binToLinear(index));
+	for (int idx = 1; idx < NEO_DRC_GLOBAL_TONEMAP_SIZE; idx++) {
+		float inVal, outRatio, inStretch, outStretch;
+		inVal = static_cast<float>(binToLinear(idx));
 		inStretch = inVal - nextOffset;
 
-		/* Low end clipping... high end clipping is done after scaling */
-		if (inStretch < 0.0)
-			inStretch = 0.0;
-
-		/* Stretch it to next dynamic range */
-		if (lutVars->nextRange == 0)
-			LOG(NxpNeoAlgoDrc, Warning) << "Warning: value range calculated from current histogram is 0";
+		/* Stretch to next dynamic range */
+		if (lutVars->nextRange <= 0.0f)
+			LOG(NxpNeoAlgoDrc, Warning)
+				<< "Histogram value range is <= 0";
 		else
 			inStretch /= lutVars->nextRange;
 
-		/* High end clipping */
-		if (inStretch > 1.0)
-			inStretch = 1.0;
+		inStretch = std::clamp(inStretch, 0.0f, 1.0f);
 
 		outStretch = pow(inStretch, lutVars->effGamma);
-
-		if (outStretch > 1.0) {
-			LOG(NxpNeoAlgoDrc, Warning) << "Warning: gamma output in first run of LUT calculation should not be > 1.0 ";
-			outStretch = 1.0;
+		if (outStretch > 1.0f) {
+			LOG(NxpNeoAlgoDrc, Warning)
+				<< "Gamma output should not be > 1.0 ";
+			outStretch = 1.0f;
 		}
 
 		/* Do histogram equalization */
-		histEqAcc += lutVars->hist[index];
-		float histEq = 0.0;
-		if (lutVars->histEqSum == 0)
-			LOG(NxpNeoAlgoDrc, Warning) << "Warning: sum for histogram equalization should not be 0";
+		histEqAcc += lutVars->hist[idx];
+		float histEq = 0.0f;
+		if (lutVars->histEqSum == 0.0f)
+			LOG(NxpNeoAlgoDrc, Warning)
+				<< "Histogram equalization sum should not be 0";
 		else
 			histEq = histEqAcc / lutVars->histEqSum;
 
@@ -509,121 +580,141 @@ uint16_t Drc::lutFirstRun(DrcLut *lutVars)
 		outRatio = (histEq * alphaQ) + (outStretch * alpha);
 
 		/* Convert output value to ratio */
-		if (inVal == 0) {
-			LOG(NxpNeoAlgoDrc, Warning) << "Warning: pixel level corresponding to bin " << index << " should not be 0";
-			lutVars->ratio[index] = 1.0f;
+		if (inVal == 0.0f) {
+			LOG(NxpNeoAlgoDrc, Warning)
+				<< "Pixel level corresponding to bin "
+				<< idx << " should not be 0";
+			lutVars->ratio[idx] = 1.0f;
 		} else {
-			inVal /= DRC_INPUT_UMAX;
-			lutVars->ratio[index] = outRatio / inVal;
+			inVal /= kInputMax;
+			lutVars->ratio[idx] = outRatio / inVal;
 		}
 
-		/* Check for maximum ratio to get the required extra factor */
-		if ((static_cast<uint32_t>(index) >= gblDrcContext_.minBin) && /* Limit the bin range at Minimum */
-		    (static_cast<uint32_t>(index) <= gblDrcContext_.historyMaxBin) &&
-		    (lutVars->maxRatio < lutVars->ratio[index]))
-			lutVars->maxRatio = lutVars->ratio[index];
+		/* Track maximum ratio within valid bin range */
+		uint32_t binIdx = static_cast<uint32_t>(idx);
+		if ((binIdx >= globalContext_.bin.min) &&
+		    (binIdx <= globalContext_.history.maxBin) &&
+		    (lutVars->maxRatio < lutVars->ratio[idx]))
+			lutVars->maxRatio = lutVars->ratio[idx];
 	}
 
 	lutVars->ratio[0] = lutVars->ratio[1];
+	lutVars->hist[0] = lutVars->hist[1];
 
-	/* Normalize ratio and make it fixed point; compute extra digital gain before LUT */
-	lutVars->maxRatio = std::clamp<float>(lutVars->maxRatio, UINT8_MAX * 1.0, UINT16_MAX * 1.0);
+	/* Normalize ratio and compute extra digital gain before LUT */
+	lutVars->maxRatio = std::clamp<float>(
+		lutVars->maxRatio,
+		std::numeric_limits<uint8_t>::max() * 1.0f,
+		std::numeric_limits<uint16_t>::max() * 1.0f);
 
 	/* Make limit extra gain to 16 bit */
-	gblDrcContext_.extraGainOut = static_cast<int>(lutVars->maxRatio);
+	globalContext_.extraGainOut = static_cast<int>(lutVars->maxRatio);
 
 	/* Store ExtraGain in MaxRatio variable */
-	lutVars->maxRatio = gblDrcContext_.extraGainOut * 1.0 / kQ8One;
-
-	return gblDrcContext_.extraGainOut;
+	lutVars->maxRatio = globalContext_.extraGainOut * 1.0f / kQ8Unit;
 }
 
 /**
- * \brief Postprocess the generated LUT
+ * \brief Second run to post-process the generated LUT
  * \param[in] lutVars Structure with LUT-related parameters
+ *
+ * Normalizes the ratio values computed in the first run and converts them
+ * to the final u8.8 fixed-point format for the hardware LUT.
  */
-void Drc::lutSecondRun(DrcLut *lutVars)
+void Drc::lutSecondRun(LutVariables *lutVars)
 {
-	for (unsigned int index = 1; index < NEO_DRC_GLOBAL_TONEMAP_SIZE; index++) {
-		float ratio = 1.0;
-		if (lutVars->maxRatio == 0)
-			LOG(NxpNeoAlgoDrc, Warning) << "Warning: maximum LUT ratio should not be 0";
+	for (unsigned int idx = 1; idx < NEO_DRC_GLOBAL_TONEMAP_SIZE; idx++) {
+		float ratio = 1.0f;
+		if (lutVars->maxRatio == 0.0f)
+			LOG(NxpNeoAlgoDrc, Warning)
+				<< "Maximum LUT ratio should not be 0";
 		else
-			ratio = lutVars->ratio[index] / lutVars->maxRatio;
-		ratio *= 256.0; /* 8.8 */
+			ratio = lutVars->ratio[idx] / lutVars->maxRatio;
 
-		if (ratio > UINT16_MAX * 1.0)
-			ratio = UINT16_MAX * 1.0;
+		/* Convert to u8.8 fixed-point format */
+		ratio *= 256.0f;
 
-		gblLut_[index] = static_cast<uint16_t>(ratio);
+		if (ratio > std::numeric_limits<uint16_t>::max() * 1.0f)
+			ratio = std::numeric_limits<uint16_t>::max() * 1.0f;
+
+		globalLut_[idx] = static_cast<uint16_t>(ratio);
 	}
 }
 
 /**
  * \brief Generate the dynamic DRC lookup table from measured image histogram
  * \param[in] inputHistogram The measured non-linear histogram from the ISP
- * \param[out] extraGainOut Global gain to be applied on top of the LUT values
+ *
+ * Coordinates the histogram preprocessing, gamma calculation, and two-pass LUT
+ * generation.
  */
-void Drc::controlDynamicMode(const std::vector<uint32_t> &inputHistogram,
-			     uint16_t *extraGainOut)
+void Drc::controlDynamicMode(const std::vector<uint32_t> &inputHistogram)
 {
-	DrcLut lLutVars;
-
-	/* Init variables */
-	lLutVars.nextRange = 0.0;
-	lLutVars.effGamma = 0.0;
-	lLutVars.maxRatio = 0.0;
-	lLutVars.histEqSum = 0.0;
+	LutVariables lutVars;
 
 	/* Smooth histogram - HE pre-processing */
-	dynamicModeSum(inputHistogram, &lLutVars);
+	dynamicModeSum(inputHistogram, &lutVars);
 
 	/* Effective gamma - stretching pre-processing */
-	effectiveGamma(&lLutVars);
+	effectiveGamma(&lutVars);
 
 	/* LUT first run */
-	*(extraGainOut) = lutFirstRun(&lLutVars);
+	lutFirstRun(&lutVars);
 
 	/* LUT second run */
-	lutSecondRun(&lLutVars);
+	lutSecondRun(&lutVars);
 }
 
 /**
  * \copydoc libcamera::ipa::Algorithm::init
  */
-int Drc::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData)
+int Drc::init([[maybe_unused]] IPAContext &context,
+	      const ValueNode &tuningData)
 {
 	restrictMode_ = tuningData["restrict-mode"].get<std::string>("none");
 
 	/* Parsing GDRC mode */
-	gblInitMode_ = tuningData["gbl-mode"].get<uint16_t>(kGblMode);
-
-	/* Global fixed LUT (needed for global mode 1) */
-	auto lut = tuningData["gbl-lut"].getList<uint16_t>().value_or(std::vector<uint16_t>{});
-	if (lut.size() && lut.size() != NEO_DRC_GLOBAL_TONEMAP_SIZE) {
-		LOG(NxpNeoAlgoDrc, Error) << "global lut list size must be "
-					  << NEO_DRC_GLOBAL_TONEMAP_SIZE;
+	uint16_t mode = tuningData["gbl-mode"].get<uint16_t>(kGlobalMode);
+	if (mode > static_cast<uint16_t>(GlobalMode::Dynamic)) {
+		LOG(NxpNeoAlgoDrc, Error) << "Invalid gbl-mode: " << mode;
 		return -EINVAL;
 	}
-	if (lut.size() == NEO_DRC_GLOBAL_TONEMAP_SIZE)
-		std::copy(lut.begin(), lut.end(), gblFixedLut_.begin());
-	else
-		/* Initialize with unit gain if the fixed LUT is not provided in calibration file. */
-		std::fill(gblFixedLut_.begin(), gblFixedLut_.end(), kQ8One);
+	globalInitMode_ = static_cast<GlobalMode>(mode);
 
-	/* Global DRC gain parsing - for GDRC modes. Will be overriden by dynamic control */
-	gblGain_ = tuningData["gbl-gain"].get<uint16_t>(kGblGain);
+	/*
+	 * Global fixed LUT (needed for global mode 1).
+	 * Initialize LUT with unit gain if nothing provided
+	 * by calibration file.
+	 */
+	std::fill(globalFixedLut_.begin(), globalFixedLut_.end(), kQ8Unit);
+	auto lut = tuningData["gbl-lut"].get<std::vector<uint16_t>>().value_or(
+		std::vector<uint16_t>{});
+	if (!lut.empty()) {
+		if (lut.size() != NEO_DRC_GLOBAL_TONEMAP_SIZE) {
+			LOG(NxpNeoAlgoDrc, Error)
+				<< "global LUT list size must be "
+				<< NEO_DRC_GLOBAL_TONEMAP_SIZE;
+			return -EINVAL;
+		}
+		std::copy(lut.begin(), lut.end(), globalFixedLut_.begin());
+	}
 
-	/* Global DRC gamma and alpha parsing - for dynamic control */
-	gblDrcContext_.gammaFixed = tuningData["fixed-gamma"].get<uint16_t>(kGdrcGammaValue);
-	gblDrcContext_.gamma = tuningData["gdrc-gamma"].get<uint16_t>(kGdrcGammaValue);
-	gblDrcContext_.globalDrcAlpha = tuningData["gdrc-alpha"].get<uint16_t>(kGdrcAlphaValue);
+	/* Parse global DRC gain (overridden by dynamic control) */
+	globalGain_ = tuningData["gbl-gain"].get<uint16_t>(kGlobalGain);
 
-	LOG(NxpNeoAlgoDrc, Debug) << "global GAIN=" << gblGain_
+	/* Parse global DRC gamma and alpha parsing for dynamic control */
+	globalContext_.gammaFixed =
+		tuningData["fixed-gamma"].get<uint16_t>(kGdrcGammaValue);
+	globalContext_.gamma =
+		tuningData["gdrc-gamma"].get<uint16_t>(kGdrcGammaValue);
+	globalContext_.globalDrcAlpha =
+		tuningData["gdrc-alpha"].get<uint16_t>(kGdrcAlphaValue);
+
+	LOG(NxpNeoAlgoDrc, Debug) << "global GAIN=" << globalGain_
 				  << " GDRC gammaFixed/gamma/alpha: "
-				  << gblDrcContext_.gammaFixed << "/"
-				  << gblDrcContext_.gamma << "/"
-				  << gblDrcContext_.globalDrcAlpha;
+				  << globalContext_.gammaFixed << "/"
+				  << globalContext_.gamma << "/"
+				  << globalContext_.globalDrcAlpha;
 
 	return 0;
 }
@@ -634,48 +725,50 @@ int Drc::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData
 int Drc::configure(IPAContext &context, const IPACameraSensorInfo &configInfo)
 {
 	IPAPipelineMode &pipelineMode = context.configuration.pipelineMode;
+	GlobalMode globalMode = globalInitMode_;
 
-	context.configuration.drc.gblMode = gblInitMode_;
 	if (restrictMode_ == "hdr-merge" &&
 	    pipelineMode != IPAPipelineMode::HdrMerge) {
 		/*
-		 * Disable the dynamic DRC (set to Copy mode) if the restrict mode
-		 * is set to "hdr-merge"
-		 * and if the pipeline is not in HDR merge mode.
+		 * Disable dynamic DRC (set to Copy mode) if restrict mode is
+		 * "hdr-merge" but pipeline is not in HDR merge mode.
 		 */
-		context.configuration.drc.gblMode = 0;
+		globalMode = GlobalMode::Passthrough;
 		LOG(NxpNeoAlgoDrc, Debug)
-			<< "DRC is disabled - the pipeline mode doesn't match the restrict mode.";
+			<< "DRC is disabled - "
+			<< "pipeline mode doesn't match the restrict mode.";
 	}
 
-	switch (context.configuration.drc.gblMode) {
-	case 0: {
-		LOG(NxpNeoAlgoDrc, Debug) << "Global DRC Mode = 0: Passthrough (no compression)";
-		std::fill(gblLut_.begin(), gblLut_.end(), kQ8One);
+	switch (globalMode) {
+	case GlobalMode::Passthrough:
+		LOG(NxpNeoAlgoDrc, Debug)
+			<< "Global DRC Mode = 0: Passthrough (no compression)";
+		std::fill(globalLut_.begin(), globalLut_.end(), kQ8Unit);
 		break;
-	}
-	case 1: {
-		LOG(NxpNeoAlgoDrc, Debug) << "Global DRC Mode = 1: Using pre-configured LUT.";
-		std::copy(gblFixedLut_.begin(), gblFixedLut_.end(), gblLut_.begin());
+
+	case GlobalMode::Static:
+		LOG(NxpNeoAlgoDrc, Debug)
+			<< "Global DRC Mode = 1: Using pre-configured LUT.";
+		std::copy(globalFixedLut_.begin(),
+			  globalFixedLut_.end(),
+			  globalLut_.begin());
 		break;
-	}
-	case 2: {
-		LOG(NxpNeoAlgoDrc, Debug) << "Global DRC Mode = 2: Dynamic LUT computed from histogram.";
-		std::fill(gblLut_.begin(), gblLut_.end(), 0);
-		configureGblDrcContext();
+
+	case GlobalMode::Dynamic:
+		LOG(NxpNeoAlgoDrc, Debug)
+			<< "Global DRC Mode = 2: "
+			<< "Dynamic LUT computed from histogram.";
+		std::fill(globalLut_.begin(), globalLut_.end(), 0);
+		configureGlobalContext();
 		fixedModeLut();
 		break;
-	}
-	default: {
-		LOG(NxpNeoAlgoDrc, Error) << "gbl-mode must be 0 / 1 / 2";
-		return -EINVAL;
-	}
 	}
 
 	context.configuration.drc.roi.xpos = 0;
 	context.configuration.drc.roi.ypos = 0;
 	context.configuration.drc.roi.width = configInfo.outputSize.width;
 	context.configuration.drc.roi.height = configInfo.outputSize.height;
+	context.configuration.drc.gblMode = static_cast<uint16_t>(globalMode);
 
 	return 0;
 }
@@ -683,65 +776,72 @@ int Drc::configure(IPAContext &context, const IPACameraSensorInfo &configInfo)
 /**
  * \copydoc libcamera::ipa::Algorithm::prepare
  */
-void Drc::prepare([[maybe_unused]] IPAContext &context,
-		  [[maybe_unused]] const uint32_t frame,
+void Drc::prepare(IPAContext &context,
+		  const uint32_t frame,
 		  [[maybe_unused]] IPAFrameContext &frameContext,
 		  NxpNeoParams *params)
 {
-	bool update = context.configuration.drc.gblMode == 2 || frame == 0;
-	if (update) {
-		auto drcGlobalTonemapConfig = params->block<BlockParamsType::DrcGlobalTonemap>();
-		/* Set global lut */
-		drcGlobalTonemapConfig.setEnabled(true);
+	GlobalMode globalMode = static_cast<GlobalMode>(
+		context.configuration.drc.gblMode);
 
-		std::copy(gblLut_.begin(), gblLut_.end(), drcGlobalTonemapConfig->drc_global_tonemap);
+	bool update = globalMode == GlobalMode::Dynamic || frame == 0;
+	if (update) {
+		auto globalTonemap =
+			params->block<BlockParamsType::DrcGlobalTonemap>();
+		/* Set global lut */
+		globalTonemap.setEnabled(true);
+
+		std::copy(globalLut_.begin(),
+			  globalLut_.end(),
+			  globalTonemap->drc_global_tonemap);
 	}
 
-	auto drcConfig = params->block<BlockParamsType::DrComp>();
-	drcConfig.setEnabled(true);
+	auto config = params->block<BlockParamsType::DrComp>();
+	config.setEnabled(true);
 
 	/* Set global gain */
-	drcConfig->lcl_stretch_stretch = kLocalStretchvalue;
-	drcConfig->alpha_alpha = kAlphaValue;
-	drcConfig->gbl_gain_gain = gblGain_;
+	config->lcl_stretch_stretch = kLocalStretchvalue;
+	config->alpha_alpha = kAlphaValue;
+	config->gbl_gain_gain = globalGain_;
 
-	/* Set ROI */
-	/* Make ROI0 (foreground) empty, ROI1 covers the whole image */
-	drcConfig->roi0.xpos = UINT16_MAX;
-	drcConfig->roi0.ypos = UINT16_MAX;
-	drcConfig->roi0.height = 0;
-	drcConfig->roi0.width = 0;
+	/* Disable ROI0 (foreground) and set ROI1 to cover the full image */
+	config->roi0.xpos = std::numeric_limits<uint16_t>::max();
+	config->roi0.ypos = std::numeric_limits<uint16_t>::max();
+	config->roi0.height = 0;
+	config->roi0.width = 0;
 
-	drcConfig->roi1.xpos = context.configuration.drc.roi.xpos;
-	drcConfig->roi1.ypos = context.configuration.drc.roi.ypos;
-	drcConfig->roi1.width = context.configuration.drc.roi.width;
-	drcConfig->roi1.height = context.configuration.drc.roi.height;
+	config->roi1.xpos = context.configuration.drc.roi.xpos;
+	config->roi1.ypos = context.configuration.drc.roi.ypos;
+	config->roi1.width = context.configuration.drc.roi.width;
+	config->roi1.height = context.configuration.drc.roi.height;
 }
 
 /**
  * \copydoc libcamera::ipa::Algorithm::process
  */
-void Drc::process([[maybe_unused]] IPAContext &context,
+void Drc::process(IPAContext &context,
 		  const uint32_t frame,
 		  [[maybe_unused]] IPAFrameContext &frameContext,
 		  const NxpNeoStats *stats,
 		  [[maybe_unused]] ControlList &metadata)
 {
-	if (context.configuration.drc.gblMode == 2) {
-		auto drcMemStats = stats->block<BlockStatsType::MDrc>();
-		const unsigned int *statsHistogram = drcMemStats->drc_global_hist_roi1;
-		std::vector<uint32_t> inputHistogram(statsHistogram,
-						     statsHistogram + NEO_DRC_GLOBAL_TONEMAP_SIZE);
+	GlobalMode globalMode = static_cast<GlobalMode>(
+		context.configuration.drc.gblMode);
 
-		getMinMax(inputHistogram, frame);
+	if (globalMode != GlobalMode::Dynamic)
+		return;
 
-		uint16_t extraGainOut = 0;
-		controlDynamicMode(inputHistogram,
-				   &extraGainOut);
-		gblGain_ = extraGainOut;
+	auto memStats = stats->block<BlockStatsType::MDrc>();
+	const unsigned int *statsHistogram = memStats->drc_global_hist_roi1;
+	std::vector<uint32_t> inputHistogram(
+		statsHistogram, statsHistogram + NEO_DRC_GLOBAL_TONEMAP_SIZE);
 
-		LOG(NxpNeoAlgoDrc, Debug) << "Extra gain out: " << extraGainOut;
-	}
+	getMinMax(inputHistogram, frame);
+
+	controlDynamicMode(inputHistogram);
+	globalGain_ = globalContext_.extraGainOut;
+
+	LOG(NxpNeoAlgoDrc, Debug) << "Extra gain out: " << globalGain_;
 }
 
 REGISTER_IPA_ALGORITHM(Drc, "Drc")

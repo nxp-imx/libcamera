@@ -18,7 +18,7 @@
 
 #include <libcamera/control_ids.h>
 
-#include "libcamera/internal/yaml_parser.h"
+#include "libcamera/internal/value_node.h"
 
 namespace libcamera {
 
@@ -128,7 +128,7 @@ BlackLevelCorrection::BlackLevelCorrection()
 /**
  * \copydoc libcamera::ipa::Algorithm::init
  */
-int BlackLevelCorrection::init(IPAContext &context, const YamlObject &tuningData)
+int BlackLevelCorrection::init(IPAContext &context, const ValueNode &tuningData)
 {
 	std::optional<int16_t> r = tuningData["R"].get<int16_t>();
 	std::optional<int16_t> gR = tuningData["Gr"].get<int16_t>();

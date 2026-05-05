@@ -125,16 +125,16 @@ HdrDecomp::HdrDecomp()
  * \copydoc libcamera::ipa::Algorithm::init
  */
 int HdrDecomp::init([[maybe_unused]] IPAContext &context,
-		    const YamlObject &tuningData)
+		    const ValueNode &tuningData)
 {
 	/*
 	 * Input0 calibration parsing
 	 */
 
-	const YamlObject &obj0 = tuningData["input0"];
+	const ValueNode &obj0 = tuningData["input0"];
 	if (obj0.isDictionary() || obj0.size()) {
 		std::optional<std::vector<uint16_t>> points =
-			obj0["points"].getList<uint16_t>();
+			obj0["points"].get<std::vector<uint16_t>>();
 		if (points && points->size() != kNumPoints) {
 			LOG(NxpNeoAlgoHdrDecomp, Error)
 				<< "input0 points list size must be "
@@ -143,7 +143,7 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 		}
 
 		std::optional<std::vector<uint16_t>> offsets =
-			obj0["offsets"].getList<uint16_t>();
+			obj0["offsets"].get<std::vector<uint16_t>>();
 		if (offsets && offsets->size() != kNumOffsets) {
 			LOG(NxpNeoAlgoHdrDecomp, Error)
 				<< "input0 offsets list size must be "
@@ -152,7 +152,7 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 		}
 
 		std::optional<std::vector<uint32_t>> newpoints =
-			obj0["newpoints"].getList<uint32_t>();
+			obj0["newpoints"].get<std::vector<uint32_t>>();
 		if (newpoints && newpoints->size() != kNumNewPoints) {
 			LOG(NxpNeoAlgoHdrDecomp, Error)
 				<< "input0 newpoints list size must be "
@@ -161,7 +161,7 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 		}
 
 		std::optional<std::vector<uint16_t>> ratios =
-			obj0["ratios"].getList<uint16_t>();
+			obj0["ratios"].get<std::vector<uint16_t>>();
 		if (ratios && ratios->size() != kNumRatios) {
 			LOG(NxpNeoAlgoHdrDecomp, Error)
 				<< "input0 ratios list size must be "
@@ -190,10 +190,10 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 	 * Input1 calibration parsing
 	 */
 
-	const YamlObject &obj1 = tuningData["input1"];
+	const ValueNode &obj1 = tuningData["input1"];
 	if (obj1.isDictionary() || obj1.size()) {
 		std::optional<std::vector<uint16_t>> points =
-			obj1["points"].getList<uint16_t>();
+			obj1["points"].get<std::vector<uint16_t>>();
 		if (points && points->size() != kNumPoints) {
 			LOG(NxpNeoAlgoHdrDecomp, Error)
 				<< "input1 points list size must be "
@@ -202,7 +202,7 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 		}
 
 		std::optional<std::vector<uint16_t>> offsets =
-			obj1["offsets"].getList<uint16_t>();
+			obj1["offsets"].get<std::vector<uint16_t>>();
 		if (offsets && offsets->size() != kNumOffsets) {
 			LOG(NxpNeoAlgoHdrDecomp, Error)
 				<< "input1 offsets list size must be "
@@ -211,7 +211,7 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 		}
 
 		std::optional<std::vector<uint16_t>> newpoints =
-			obj1["newpoints"].getList<uint16_t>();
+			obj1["newpoints"].get<std::vector<uint16_t>>();
 		if (newpoints && newpoints->size() != kNumNewPoints) {
 			LOG(NxpNeoAlgoHdrDecomp, Error)
 				<< "input1 newpoints list size must be "
@@ -220,7 +220,7 @@ int HdrDecomp::init([[maybe_unused]] IPAContext &context,
 		}
 
 		std::optional<std::vector<uint16_t>> ratios =
-			obj1["ratios"].getList<uint16_t>();
+			obj1["ratios"].get<std::vector<uint16_t>>();
 		if (ratios && ratios->size() != kNumRatios) {
 			LOG(NxpNeoAlgoHdrDecomp, Error)
 				<< "input1 ratios list size must be "

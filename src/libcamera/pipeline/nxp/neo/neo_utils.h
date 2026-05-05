@@ -19,7 +19,7 @@
 #include <libcamera/orientation.h>
 
 #include "libcamera/internal/media_device.h"
-#include "libcamera/internal/yaml_parser.h"
+#include "libcamera/internal/value_node.h"
 
 namespace libcamera {
 
@@ -80,8 +80,8 @@ public:
 						 const std::string &model);
 
 private:
-	int parseCameras(const YamlObject &cameras);
-	int parseGlobal(const YamlObject &global);
+	int parseCameras(const ValueNode &cameras);
+	int parseGlobal(const ValueNode &global);
 	int loadFileConfig(const std::string &file);
 
 	std::map<std::string, CameraProperties> camPropertiesMap_;

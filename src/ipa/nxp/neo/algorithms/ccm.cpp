@@ -24,7 +24,7 @@
 
 #include <libcamera/ipa/core_ipa_interface.h>
 
-#include "libcamera/internal/yaml_parser.h"
+#include "libcamera/internal/value_node.h"
 
 #include "libipa/interpolator.h"
 
@@ -52,7 +52,7 @@ LOG_DEFINE_CATEGORY(NxpNeoAlgoCcm)
 /**
  * \copydoc libcamera::ipa::Algorithm::init
  */
-int Ccm::init([[maybe_unused]] IPAContext &context, const YamlObject &tuningData)
+int Ccm::init([[maybe_unused]] IPAContext &context, const ValueNode &tuningData)
 {
 	int ret = ccm_.readYaml(tuningData["ccms"], "ct", "ccm");
 	if (ret < 0) {

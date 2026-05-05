@@ -38,8 +38,8 @@ namespace ipa {
 namespace nxpneo {
 
 
-IPAProxyNxpNeoThreaded::IPAProxyNxpNeoThreaded(IPAModule *ipam, const GlobalConfiguration &configuration)
-	: IPAProxyNxpNeo(ipam, configuration), thread_("IPAProxyNxpNeo")
+IPAProxyNxpNeoThreaded::IPAProxyNxpNeoThreaded(IPAModule *ipam, const CameraManager &cm)
+	: IPAProxyNxpNeo(ipam, cm), thread_("IPAProxyNxpNeo")
 {
 	LOG(IPAProxy, Debug)
 		<< "initializing nxpneo proxy in thread: loading IPA from "
@@ -197,8 +197,8 @@ void IPAProxyNxpNeoThreaded::metadataReadyHandler(
 
 /* ========================================================================== */
 
-IPAProxyNxpNeoIsolated::IPAProxyNxpNeoIsolated(IPAModule *ipam, const GlobalConfiguration &configuration)
-	: IPAProxyNxpNeo(ipam, configuration),
+IPAProxyNxpNeoIsolated::IPAProxyNxpNeoIsolated(IPAModule *ipam, const CameraManager &cm)
+	: IPAProxyNxpNeo(ipam, cm),
 	  controlSerializer_(ControlSerializer::Role::Proxy), seq_(0)
 {
 	LOG(IPAProxy, Debug)

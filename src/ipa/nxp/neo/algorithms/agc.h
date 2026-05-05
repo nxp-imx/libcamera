@@ -32,7 +32,7 @@ public:
 	AgcStats() {}
 	virtual ~AgcStats() = default;
 
-	virtual int init(IPAContext &context, const YamlObject &tuningData) = 0;
+	virtual int init(IPAContext &context, const ValueNode &tuningData) = 0;
 	virtual void configure(IPAContext &context);
 	virtual void setupHistograms(IPAContext &context,
 				     NxpNeoParams *params) const = 0;
@@ -64,14 +64,14 @@ class AgcStatsRgb : public AgcStats
 public:
 	AgcStatsRgb() { cameraContext_ = IPACameraContext::Rgb; }
 
-	int init(IPAContext &context, const YamlObject &tuningData) override;
+	int init(IPAContext &context, const ValueNode &tuningData) override;
 	void configure(IPAContext &context) override;
 	void setupHistograms(IPAContext &context, NxpNeoParams *params) const override;
 	void setAwbGains(IPAContext &context, IPAFrameContext &frameContext) override;
 	void parseStatistics(const NxpNeoStats *stats) override;
 
 private:
-	int parseTuningDataRgb(const YamlObject &tuningData);
+	int parseTuningDataRgb(const ValueNode &tuningData);
 	void configureHistScale(IPAContext &context);
 	double estimateLuminance(double gain) const override;
 
@@ -87,7 +87,7 @@ class AgcStatsIr : public AgcStats
 public:
 	AgcStatsIr() { cameraContext_ = IPACameraContext::Ir; }
 
-	int init(IPAContext &context, const YamlObject &tuningData) override;
+	int init(IPAContext &context, const ValueNode &tuningData) override;
 	void setupHistograms(IPAContext &context, NxpNeoParams *params) const override;
 	void parseStatistics(const NxpNeoStats *stats) override;
 
@@ -105,7 +105,7 @@ public:
 	Agc();
 	~Agc() = default;
 
-	int init(IPAContext &context, const YamlObject &tuningData) override;
+	int init(IPAContext &context, const ValueNode &tuningData) override;
 	int configure(IPAContext &context, const IPACameraSensorInfo &configInfo) override;
 	void queueRequest(IPAContext &context,
 			  const uint32_t frame,

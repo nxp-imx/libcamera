@@ -38,8 +38,8 @@ namespace ipa {
 namespace soft {
 
 
-IPAProxySoftThreaded::IPAProxySoftThreaded(IPAModule *ipam, const GlobalConfiguration &configuration)
-	: IPAProxySoft(ipam, configuration), thread_("IPAProxySoft")
+IPAProxySoftThreaded::IPAProxySoftThreaded(IPAModule *ipam, const CameraManager &cm)
+	: IPAProxySoft(ipam, cm), thread_("IPAProxySoft")
 {
 	LOG(IPAProxy, Debug)
 		<< "initializing soft proxy in thread: loading IPA from "
@@ -168,8 +168,8 @@ void IPAProxySoftThreaded::metadataReadyHandler(
 
 /* ========================================================================== */
 
-IPAProxySoftIsolated::IPAProxySoftIsolated(IPAModule *ipam, const GlobalConfiguration &configuration)
-	: IPAProxySoft(ipam, configuration),
+IPAProxySoftIsolated::IPAProxySoftIsolated(IPAModule *ipam, const CameraManager &cm)
+	: IPAProxySoft(ipam, cm),
 	  controlSerializer_(ControlSerializer::Role::Proxy), seq_(0)
 {
 	LOG(IPAProxy, Debug)
