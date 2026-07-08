@@ -52,7 +52,7 @@ int DeviceEnumeratorSysfs::addSysfsDevice(const char *name)
 		std::string("/dev/") + name;
 
 	if (stat(deviceNode.c_str(), &devStat) < 0) {
-		LOG(DeviceEnumerator, Warning)
+		LOG(DeviceEnumerator, Debug)
 			<< "Device node " << deviceNode << "should exist but doesn't";
 		return -ENODEV;
 	}
@@ -60,8 +60,10 @@ int DeviceEnumeratorSysfs::addSysfsDevice(const char *name)
 	if (!strncmp(name, "media", 5)) {
 		std::unique_ptr<MediaDevice> media = createDevice(deviceNode.c_str());
 
-		if (!media)
+		if (!media) {
+			pendingWithUnknownEntities_.insert(name);
 			return -ENODEV;
+		}
 
 		DependencyMap deps;
 
@@ -70,6 +72,8 @@ int DeviceEnumeratorSysfs::addSysfsDevice(const char *name)
 			LOG(DeviceEnumerator, Warning)
 				<< "Failed to populate media device "
 				<< media->deviceNode() << " (" << media->driver() << "), skipping";
+			if (ret == -EAGAIN)
+				pendingWithUnknownEntities_.insert(name);
 			return ret;
 		}
 		if (!deps.empty()) {
@@ -144,8 +148,8 @@ int DeviceEnumeratorSysfs::populateMediaDevice(MediaDevice *media, DependencyMap
 
 	/* Associate entities to device node paths. */
 	for (MediaEntity *entity : media->entities()) {
-		if (entity->deviceMajor() == 0 && entity->deviceMinor() == 0)
-			continue;
+		if (entity->deviceMajor() == 0 && entity->deviceMinor() == 0) 
+			return -EAGAIN;
 
 		dev_t devnum = makedev(entity->deviceMajor(), entity->deviceMinor());
 
@@ -241,6 +245,21 @@ int DeviceEnumeratorSysfs::addV4L2Device(dev_t devnum)
 	auto it = devMap_.find(devnum);
 	if (it == devMap_.end()) {
 		orphans_.insert(devnum);
+		/*
+		 * Resolve media devices, that had dependencies without devnodes.
+		 * If devnum didn't exist, there were no devMap_ entries thus such
+		 * devices always take this path.
+		 */
+		while (!pendingWithUnknownEntities_.empty()) {
+			auto it = pendingWithUnknownEntities_.begin();
+			const std::string name = *it;
+			/*
+			 * Removing from pending list, since addSysfsDevice will add this
+			 * again if needed.
+			 */
+			pendingWithUnknownEntities_.erase(it);
+			addSysfsDevice(name.c_str());
+		}
 		return 0;
 	}
 

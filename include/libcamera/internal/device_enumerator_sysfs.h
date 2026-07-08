@@ -63,6 +63,7 @@ private:
 
 	std::set<dev_t> orphans_;
 	std::list<MediaDeviceDeps> pending_;
+	std::set<std::string> pendingWithUnknownEntities_;
 	std::map<dev_t, MediaDeviceDeps *> devMap_;
 };
 
