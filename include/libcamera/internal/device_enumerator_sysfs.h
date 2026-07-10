@@ -12,6 +12,7 @@
 #include <set>
 #include <string>
 
+#include <libcamera/base/timer.h>
 #include <libcamera/base/event_notifier.h>
 
 #include "libcamera/internal/device_enumerator.h"
@@ -54,6 +55,8 @@ private:
 	int populateMediaDevice(MediaDevice *media, DependencyMap *deps);
 	std::string lookupDeviceNode(int major, int minor);
 
+	void retryPendingWintUnknownDeps();
+
 	int addV4L2Device(dev_t devum);
 	void sysfsNotify();
 
@@ -63,7 +66,10 @@ private:
 
 	std::set<dev_t> orphans_;
 	std::list<MediaDeviceDeps> pending_;
-	std::set<std::string> pendingWithUnknownEntities_;
+	std::set<std::string> pendingWithUnknowns_;
+	Timer pendingWithUnknownsTimer_;
+
+	std::chrono::milliseconds pendingWithUnknownsDelayMs_;
 	std::map<dev_t, MediaDeviceDeps *> devMap_;
 };
 

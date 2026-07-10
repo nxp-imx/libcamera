@@ -28,8 +28,11 @@ namespace libcamera {
 LOG_DECLARE_CATEGORY(DeviceEnumerator)
 
 DeviceEnumeratorSysfs::DeviceEnumeratorSysfs()
-	: inotFd_(-1), inotWd_(-1), notifier_(nullptr)
+	: inotFd_(-1), inotWd_(-1), notifier_(nullptr), pendingWithUnknownsDelayMs_(500)
 {
+	pendingWithUnknownsTimer_.timeout.connect(
+		this,
+		&DeviceEnumeratorSysfs::retryPendingWintUnknownDeps);
 }
 
 DeviceEnumeratorSysfs::~DeviceEnumeratorSysfs()
@@ -61,7 +64,7 @@ int DeviceEnumeratorSysfs::addSysfsDevice(const char *name)
 		std::unique_ptr<MediaDevice> media = createDevice(deviceNode.c_str());
 
 		if (!media) {
-			pendingWithUnknownEntities_.insert(name);
+			pendingWithUnknowns_.insert(name);
 			return -ENODEV;
 		}
 
@@ -73,7 +76,7 @@ int DeviceEnumeratorSysfs::addSysfsDevice(const char *name)
 				<< "Failed to populate media device "
 				<< media->deviceNode() << " (" << media->driver() << "), skipping";
 			if (ret == -EAGAIN)
-				pendingWithUnknownEntities_.insert(name);
+				pendingWithUnknowns_.insert(name);
 			return ret;
 		}
 		if (!deps.empty()) {
@@ -94,6 +97,13 @@ int DeviceEnumeratorSysfs::addSysfsDevice(const char *name)
 
 	if (!strncmp(name, "video", 5) || !strncmp(name, "v4l-subdev", 10)) {
 		addV4L2Device(devStat.st_rdev);
+		/*
+		 * Resolve media devices, that had dependencies without devnodes.
+		 * If devnum didn't exist, there were no devMap_ entries thus such
+		 * devices always take this path.
+		 */
+		if (!pendingWithUnknowns_.empty() && !pendingWithUnknownsTimer_.isRunning())
+			pendingWithUnknownsTimer_.start(pendingWithUnknownsDelayMs_);
 		return 0;
 	}
 
@@ -148,7 +158,7 @@ int DeviceEnumeratorSysfs::populateMediaDevice(MediaDevice *media, DependencyMap
 
 	/* Associate entities to device node paths. */
 	for (MediaEntity *entity : media->entities()) {
-		if (entity->deviceMajor() == 0 && entity->deviceMinor() == 0) 
+		if (entity->deviceMajor() == 0 && entity->deviceMinor() == 0)
 			return -EAGAIN;
 
 		dev_t devnum = makedev(entity->deviceMajor(), entity->deviceMinor());
@@ -245,21 +255,6 @@ int DeviceEnumeratorSysfs::addV4L2Device(dev_t devnum)
 	auto it = devMap_.find(devnum);
 	if (it == devMap_.end()) {
 		orphans_.insert(devnum);
-		/*
-		 * Resolve media devices, that had dependencies without devnodes.
-		 * If devnum didn't exist, there were no devMap_ entries thus such
-		 * devices always take this path.
-		 */
-		while (!pendingWithUnknownEntities_.empty()) {
-			auto it = pendingWithUnknownEntities_.begin();
-			const std::string name = *it;
-			/*
-			 * Removing from pending list, since addSysfsDevice will add this
-			 * again if needed.
-			 */
-			pendingWithUnknownEntities_.erase(it);
-			addSysfsDevice(name.c_str());
-		}
 		return 0;
 	}
 
@@ -296,6 +291,24 @@ int DeviceEnumeratorSysfs::addV4L2Device(dev_t devnum)
 	}
 
 	return 0;
+}
+
+void DeviceEnumeratorSysfs::retryPendingWintUnknownDeps()
+{
+	if (pendingWithUnknownsTimer_.isRunning())
+		LOG(DeviceEnumerator, Warning) << "The pendingWithUnknownsTimer_ did not stop.";
+	pendingWithUnknownsTimer_.stop();
+	if (pendingWithUnknowns_.empty())
+		return;
+
+	std::set<std::string> devicesToAdd;
+	devicesToAdd.swap(pendingWithUnknowns_);
+
+	for (auto it = devicesToAdd.begin(); it != devicesToAdd.end(); it = devicesToAdd.erase(it)) {
+		const std::string name = *it;
+
+		addSysfsDevice(name.c_str());
+	}
 }
 
 void DeviceEnumeratorSysfs::sysfsNotify()
