@@ -5,3 +5,4 @@
 from libtuning.modules.lsc.lsc import LSC
 from libtuning.modules.lsc.raspberrypi import ALSCRaspberryPi
 from libtuning.modules.lsc.rkisp1 import LSCRkISP1
+from libtuning.modules.lsc.nxpneo import LSCNxpNeo

@@ -4,3 +4,4 @@
 
 from libtuning.modules.ccm.ccm import CCM
 from libtuning.modules.ccm.rkisp1 import CCMRkISP1
+from libtuning.modules.ccm.nxpneo import CCMNxpNeo
