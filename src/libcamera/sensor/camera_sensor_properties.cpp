@@ -81,6 +81,12 @@ LOG_DEFINE_CATEGORY(CameraSensorProperties)
 const CameraSensorProperties *CameraSensorProperties::get(const std::string &sensor)
 {
 	static const std::map<std::string, const CameraSensorProperties> sensorProps = {
+		{ "ap1302", {
+			/* Camera module based on AR0144 with AP1302 ISP */
+			.unitCellSize = { 3000, 3000 },
+			.testPatternModes = { },
+			.sensorDelays = { },
+		} },
 		{ "ar0144", {
 			.unitCellSize = { 3000, 3000 },
 			.testPatternModes = {
@@ -335,6 +341,27 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
 				.hblankDelay = 3
 			},
 		} },
+		{ "mx95mbcam", {
+			/* Camera module based on OX03C10 + MAX96717 serializer  */
+			.unitCellSize = { 3000, 3000 },
+			.testPatternModes = { },
+			.sensorDelays = {
+				.exposureDelay = 3,
+				.gainDelay = 3,
+				.vblankDelay = 2,
+				.hblankDelay = 2
+			},
+		} },
+		{ "os08a20", {
+			.unitCellSize = { 2000, 2000 },
+			.testPatternModes = { },
+			.sensorDelays = {
+				.exposureDelay = 3,
+				.gainDelay = 3,
+				.vblankDelay = 2,
+				.hblankDelay = 2
+			},
+		} },
 		{ "ov2685", {
 			.unitCellSize = { 1750, 1750 },
 			.testPatternModes = {
@@ -502,6 +529,27 @@ const CameraSensorProperties *CameraSensorProperties::get(const std::string &sen
 				{ controls::draft::TestPatternModeColorBars, 1 },
 			},
 			.sensorDelays = { },
+		} },
+		{ "ox03c10_drv", {
+			/* Camera module based on OX03C10 + DS90UB953 serializer  */
+			.unitCellSize = { 3000, 3000 },
+			.testPatternModes = { },
+			.sensorDelays = {
+				.exposureDelay = 3,
+				.gainDelay = 3,
+				.vblankDelay = 2,
+				.hblankDelay = 2
+			},
+		} },
+		{ "ox05b1s", {
+			.unitCellSize = { 2200, 2200 },
+			.testPatternModes = { },
+			.sensorDelays = {
+				.exposureDelay = 2,
+				.gainDelay = 1,
+				.vblankDelay = 2,
+				.hblankDelay = 2
+			},
 		} },
 		{ "vd55g1", {
 			.unitCellSize = { 2160, 2160 },
