@@ -93,7 +93,7 @@ Span<uint8_t> NxpNeoParams::block(BlockParamsType type)
 	/* Make sure to align 8-bytes */
 	size_t size = (sizeof(struct v4l2_isp_block_header) + info.size + 7) & ~7;
 
-	return V4L2Params::block(utils::to_underlying(type), info.type, size);
+	return V4L2ParamsBase::block(utils::to_underlying(type), info.type, size);
 }
 
 } /* namespace ipa::nxpneo */
