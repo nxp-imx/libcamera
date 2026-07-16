@@ -102,7 +102,7 @@ private:
 
 	bool autoEnabled_;
 	uint16_t gainScale20bitsImage0_;
-	uint16_t gainShift20bitsImage0_;
+	uint8_t gainShift20bitsImage0_;
 };
 
 } /* namespace ipa::nxpneo::algorithms */

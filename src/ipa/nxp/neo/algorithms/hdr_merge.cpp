@@ -627,14 +627,18 @@ void HdrMerge::prepare([[maybe_unused]] IPAContext &context,
 
 	/*
 	 * If HDR is disabled, disable blending and output image0 only.
-	 * For this, the luma threshold is set to the highest value of the
-	 * 20-bit range.
+	 * For this,
+	 * - image0 should be scaled to 20-bit
+	 * - luma value should be scaled to the max luma threshold 16-bit value
+	 * - luma threshold is set to its highest 16-bit value
 	 */
-	config->luma_th_th0 =
-		frameContext.hdr.enabled ? lumaTh0_ : (1 << 20) - 1;
+	const uint8_t lumaScaleThShift20bitsImage0 = 20 - 16;
+	const uint16_t maxLumaTh0 = std::numeric_limits<uint16_t>::max();
+	config->luma_th_th0 = frameContext.hdr.enabled ? lumaTh0_ : maxLumaTh0;
 	config->luma_scale_scale = lumaScale_;
 	config->luma_scale_shift = lumaScaleShift_;
-	config->luma_scale_thshift = lumaScaleThShift_;
+	config->luma_scale_thshift = frameContext.hdr.enabled ?
+		lumaScaleThShift_ : lumaScaleThShift20bitsImage0;
 
 	LOG(NxpNeoAlgoHdrMerge, Debug)
 		<< "luma th0 " << utils::hex(config->luma_th_th0)
