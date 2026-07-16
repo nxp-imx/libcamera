@@ -11,6 +11,8 @@
 #include <cmath>
 
 #include <libcamera/base/log.h>
+#include <libcamera/base/utils.h>
+
 #include <libcamera/control_ids.h>
 
 #include "exposure_mode_helper.h"
@@ -216,9 +218,9 @@ int AgcMeanLuminance::parseConstraintModes(const ValueNode &tuningData)
 {
 	std::vector<ControlValue> availableConstraintModes;
 
-	const ValueNode &yamlConstraintModes = tuningData[controls::AeConstraintMode.name()];
-	if (yamlConstraintModes.isDictionary()) {
-		for (const auto &[modeName, modeDict] : yamlConstraintModes.asDict()) {
+	const ValueNode &constraintModes = tuningData[controls::AeConstraintMode.name()];
+	if (constraintModes.isDictionary()) {
+		for (const auto &[modeName, modeDict] : constraintModes.asDict()) {
 			if (AeConstraintModeNameValueMap.find(modeName) ==
 			    AeConstraintModeNameValueMap.end()) {
 				LOG(AgcMeanLuminance, Warning)
@@ -271,9 +273,9 @@ int AgcMeanLuminance::parseExposureModes(const ValueNode &tuningData)
 {
 	std::vector<ControlValue> availableExposureModes;
 
-	const ValueNode &yamlExposureModes = tuningData[controls::AeExposureMode.name()];
-	if (yamlExposureModes.isDictionary()) {
-		for (const auto &[modeName, modeValues] : yamlExposureModes.asDict()) {
+	const ValueNode &exposureModes = tuningData[controls::AeExposureMode.name()];
+	if (exposureModes.isDictionary()) {
+		for (const auto &[modeName, modeValues] : exposureModes.asDict()) {
 			if (AeExposureModeNameValueMap.find(modeName) ==
 			    AeExposureModeNameValueMap.end()) {
 				LOG(AgcMeanLuminance, Warning)
@@ -288,9 +290,9 @@ int AgcMeanLuminance::parseExposureModes(const ValueNode &tuningData)
 			}
 
 			std::vector<uint32_t> exposureTimes =
-				modeValues["exposureTime"].get<std::vector<uint32_t>>().value_or(std::vector<uint32_t>{});
+				modeValues["exposureTime"].get<std::vector<uint32_t>>().value_or(utils::defopt);
 			std::vector<double> gains =
-				modeValues["gain"].get<std::vector<double>>().value_or(std::vector<double>{});
+				modeValues["gain"].get<std::vector<double>>().value_or(utils::defopt);
 
 			if (exposureTimes.size() != gains.size()) {
 				LOG(AgcMeanLuminance, Error)

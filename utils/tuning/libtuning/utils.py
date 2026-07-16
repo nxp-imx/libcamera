@@ -126,6 +126,14 @@ def load_images(input_dir: str, config: dict, load_nonlsc: bool, load_lsc: bool)
         if 'blacklevel' in config['general']:
             image.blacklevel_16 = config['general']['blacklevel']
 
+        load_image_config = config['general'].get('load-image')
+        # Cropping of the top rows can be defined in the config file, in case of
+        # e.g. embedded data lines presence
+        if load_image_config and 'crop-top-lines' in load_image_config:
+            lines_to_crop = load_image_config['crop-top-lines']
+            image.channels = [channel[lines_to_crop:, :] for channel in image.channels]
+            image.h -= lines_to_crop
+
         if lsc_only:
             images.append(image)
             continue

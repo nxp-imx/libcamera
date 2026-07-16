@@ -35,34 +35,8 @@ namespace ipa::nxpneo::algorithms {
  * from the IMG_CONF_CAM0 register, relevant to configuration of the input0
  * and input1 paths of the ISP.
  *
- *       input0              input1
- *     AXI IN0 DMA         AXI IN1 DMA
- *          │                   │
- *  ┌───────▼───────────────────▼───────┐
- *  │ PIPECONF                          │
- *  │    LPALIGN0             LPALIGN1  │
- *  │    INALIGN0             INALIGN1  │
- *  └───────┬───────────────────┬───────┘
- *  ┌───────▼───────┐   ┌───────▼───────┐
- *  │      HC0      │   │      HC1      │
- *  └───────┬───────┘   └───────┬───────┘
- *  ┌───────▼───────┐   ┌───────▼───────┐
- *  │  HDR Decomp0  │   │  HDR Decomp1  │
- *  └───────┬───────┘   └───────┬───────┘
- *  ┌───────▼───────┐   ┌───────▼───────┐
- *  │     OBWB0     │   │     OBWB1     │
- *  └───────┬───────┘   └───────┬───────┘
- *  ┌───────▼───────────────────▼───────┐
- *  │             HDR Merge             │
- *  └─────────────────┬─────────────────┘
- *  ┌─────────────────▼─────────────────┐
- *  │               RGBIR               │
- *  └───────┬───────────────────┬───────┘
- *  ┌───────▼───────┐           │
- *  │     OBWB2     │           │
- *  └───────┬───────┘           │
- *          ▼                   ▼
- *      to RGB Path        to IR path
+ * The upstream ISP block diagram, including the PIPE_CONF unit, can be found in:
+ * <src/ipa/nxp/neo/Documentation/source/neo_ipa_algorithms.rst>.
  *
  * INALIGN0/1 configures, for the 10, 12, 14 and 20-bit bit depths, if the
  * significant bits should be fetched MSB or LSB-aligned from the 16-bit aligned
@@ -112,10 +86,8 @@ namespace ipa::nxpneo::algorithms {
  *
  * When LPALIGN0/1 is explicitly configured in the calibration file with above
  * entries, those are applied with priority. If not configured, the algorithm
- * falls back into automatic configuration mode using the following logic:
- * - For non HDR-merge mode of operation, configure LPALIGN0/1=1
- * - For HDR-merge mode of operation, configure LPALIGN0/1=0 to keep the native
- *   camera bit depth, as required for the HDR merge block.
+ * considerations described in the Neo IPA algorithms document are used:
+ * <src/ipa/nxp/neo/Documentation/source/neo_ipa_algorithms.rst>.
  *
  * When INALIGN0/1 is explicitly configured in the calibration file with above
  * entries, those are applied with priority. If not configured, the algorithm

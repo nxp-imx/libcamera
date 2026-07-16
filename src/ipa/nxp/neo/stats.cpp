@@ -31,13 +31,13 @@ struct BlockStatsTypeInfo {
 	size_t size;
 };
 
-#define NXPNEO_BLOCK_STATS_TYPE_ENTRY(block, id, type)          \
-	{                                                       \
-		BlockStatsType::block,                          \
-		{                                               \
-			NEOISP_STATS_BLK_##id,                  \
-			sizeof(struct neoisp_##type##_stats_s), \
-		}                                               \
+#define NXPNEO_BLOCK_STATS_TYPE_ENTRY(block, id, type)                  \
+	{                                                               \
+		BlockStatsType::block,                                  \
+		{                                                       \
+			NEOISP_STATS_BLK_##id,                          \
+				sizeof(struct neoisp_##type##_stats_s), \
+		}                                                       \
 	}
 
 const std::map<BlockStatsType, BlockStatsTypeInfo> kBlockStatsTypeInfo = {

@@ -57,11 +57,8 @@ namespace ipa::nxpneo::algorithms {
  * In RGBIr Dual mode, the controls provided part of the capture request
  * apply the same to each context (RGB and Ir).
  *
- * The AGC algorithm should run after the AWB and HDR algorithms
- * due to following dependencies:
- * - AGC is using the AWB gains to adapt the calculated luminance.
- * - AGC is using the ratio between the long and short captures
- *   configured by the HDR algorithm to adapt the histogram scaling factor.
+ * Details about AGC dependencies can be found in the:
+ * <src/ipa/nxp/neo/Documentation/source/neo_ipa_algorithms.rst>
  */
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoAgc)
@@ -206,10 +203,10 @@ void Agc::prepare(IPAContext &context, const uint32_t frame,
 		agcFrameContext.gain = agcActiveState.gain;
 	}
 
-	if (frame > 0)
+	if (frame > 0 && !frameContext.hdr.update)
 		return;
 
-	agcs_[cameraContext]->setupHistograms(context, params);
+	agcs_[cameraContext]->setupHistograms(context, frameContext, params);
 }
 
 void Agc::fillMetadata(IPAContext &context, IPAFrameContext &frameContext,
@@ -397,18 +394,13 @@ int AgcStatsRgb::parseTuningDataRgb(const ValueNode &tuningData)
 	return 0;
 }
 
-void AgcStatsRgb::configure(IPAContext &context)
-{
-	AgcStats::configure(context);
-
-	configureHistScale(context);
-}
-
 /**
  * \brief Update histogram scaling factor according to the pipeline mode
  * \param[in] context The shared IPA context
+ * \param[in] frameContext The current frame context
  */
-void AgcStatsRgb::configureHistScale(IPAContext &context)
+void AgcStatsRgb::configureHistScale(const IPAContext &context,
+				     const IPAFrameContext &frameContext)
 {
 	/*
 	 * In HDR mode, the histogram scaling factor is adapted considering
@@ -420,24 +412,38 @@ void AgcStatsRgb::configureHistScale(IPAContext &context)
 	 * Note that HIST_SCALE_DEFAULT is configured for the default 20-bits
 	 * scaling format.
 	 */
-	IPAPipelineMode &mode = context.configuration.pipelineMode;
-	if (!userConfig_ && mode == IPAPipelineMode::HdrMerge) {
+	if (!userConfig_) {
 		uint16_t ratioL2S = context.configuration.hdr.ratioLong2Short;
-		uint32_t scaleHdr = HIST_SCALE_DEFAULT * ratioL2S;
-		histScale_ = { scaleHdr, scaleHdr, scaleHdr, scaleHdr };
+		/*
+		 * Image0 is scaled to:
+		 * - if HDR is enabled:
+		 *     a range corresponding to 20-bit divided by the exposure
+		 *     ratio.
+		 * - if HDR is disabled:
+		 *     20-bit.
+		 */
+		uint32_t scale = frameContext.hdr.enabled ?
+			HIST_SCALE_DEFAULT * ratioL2S :
+			HIST_SCALE_DEFAULT;
+		histScale_ = { scale, scale, scale, scale };
 	}
 }
 
 /**
  * \brief Setup the STAT block of the ISP needed for the RGB histograms
  * \param[in] context The shared IPA context
+ * \param[in] frameContext The current frame context
  * \param[out] params Params of the ISP to update
  */
-void AgcStatsRgb::setupHistograms(IPAContext &context, NxpNeoParams *params) const
+void AgcStatsRgb::setupHistograms(const IPAContext &context,
+				  const IPAFrameContext &frameContext,
+				  NxpNeoParams *params)
 {
 	/* STAT Histogram configuration for RGB channels */
 	auto statConfig = params->block<BlockParamsType::Stat>();
 	statConfig.setEnabled(true);
+
+	configureHistScale(context, frameContext);
 
 	/* Foreground ROI disabled (> Image geometry means invalid ROI) */
 	statConfig->roi0.xpos = HIST_ROI_INVALID_IMAGE_GEOMETRY;
@@ -478,7 +484,7 @@ void AgcStatsRgb::setupHistograms(IPAContext &context, NxpNeoParams *params) con
  * \brief Store AWB gains needed to adjust the luminance estimation of
  *        the RGB channels
  * \param[in] context The shared IPA context
- * \param[out] params Params of the ISP to update
+ * \param[in] frameContext The current frame context
  *
  * The AWB gains computed for the frame context are stored to be used
  * by the luminance estimation of the RGB channels.
@@ -604,9 +610,12 @@ int AgcStatsIr::init([[maybe_unused]] IPAContext &context,
 /**
  * \brief Setup the RGBIR block of the ISP needed for the Ir channel histogram
  * \param[in] context The shared IPA context
+ * \param[in] frameContext The current frame context
  * \param[out] params Params of the ISP to update
  */
-void AgcStatsIr::setupHistograms(IPAContext &context, NxpNeoParams *params) const
+void AgcStatsIr::setupHistograms(const IPAContext &context,
+				 [[maybe_unused]] const IPAFrameContext &frameContext,
+				 NxpNeoParams *params)
 {
 	/* RGBIR Histogram configuration for the Ir channel*/
 	auto rgbirConfig = params->block<BlockParamsType::RgbIr>();

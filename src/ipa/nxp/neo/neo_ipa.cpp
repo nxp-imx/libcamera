@@ -54,6 +54,26 @@ namespace ipa::nxpneo {
 /* Maximum number of frame contexts to be held */
 static constexpr uint32_t kMaxFrameContexts = 16;
 
+namespace {
+
+const std::string logControlList(const ControlList *ctrls)
+{
+	std::stringstream log;
+
+	for (const auto &[id, value] : *ctrls) {
+		const auto it = ctrls->idMap()->find(id);
+		if (it == ctrls->idMap()->end())
+			continue;
+
+		log << "{ name = \"" << it->second->name()
+		    << "\", value = \"" << value.toString() << "\" } ";
+	}
+
+	return log.str();
+}
+
+} /* anonymous namespace */
+
 class IPANxpNeo : public IPANxpNeoInterface, public Module
 {
 public:
@@ -91,10 +111,6 @@ private:
 					  const IPACameraContext context);
 	void setInitialControls();
 	void setControls(const uint32_t frame);
-	std::string controlListToString(const ControlList *ctrls) const;
-	std::string logSensorParams(const uint32_t frame,
-				    const ControlList *ctrlsApplied,
-				    const ControlList *ctrlsToApply) const;
 
 	static const std::map<const IPAPipelineMode, SensorStreamMode>
 		kSensorStreamModeMap;
@@ -117,7 +133,7 @@ const std::map<const IPAPipelineMode, SensorStreamMode>
 		{ IPAPipelineMode::HdrMerge, SensorStreamMode::Hdr },
 		{ IPAPipelineMode::RgbIr, SensorStreamMode::RgbIr },
 		{ IPAPipelineMode::RgbIrDual, SensorStreamMode::DualContext },
-};
+	};
 
 IPANxpNeo::IPANxpNeo()
 	: context_(kMaxFrameContexts)
@@ -464,6 +480,10 @@ void IPANxpNeo::processStats(const uint32_t frame, const IPACameraContext contex
 	/* Set processed flag for this context. */
 	frameContext.processed.at(context) = true;
 
+	LOG(NxpNeoControlList, Debug)
+		<< "Sensor meta data: { frame = " << frame << " }, "
+		<< logControlList(&mdControls);
+
 	setControls(frame);
 	metadataReady.emit(frame, context, metadata);
 }
@@ -729,38 +749,10 @@ void IPANxpNeo::setControls(const uint32_t frame)
 	}
 
 	LOG(NxpNeoControlList, Debug)
-		<< logSensorParams(frame,
-				   &frameContext.sensor.mdControls,
-				   &ctrls);
+		<< "Controls update: { frame = " << frame << " }, "
+		<< logControlList(&ctrls);
 
 	setSensorControls.emit(frame, ctrls);
-}
-
-std::string IPANxpNeo::controlListToString(const ControlList *ctrls) const
-{
-	std::stringstream log;
-	for (auto it = ctrls->begin(); it != ctrls->end(); ++it) {
-		ControlValue value = it->second;
-		if (it != ctrls->begin())
-			log << "\n";
-		log << it->first << ": val=" << value.toString();
-	}
-
-	return log.str();
-}
-
-std::string IPANxpNeo::logSensorParams(const uint32_t frame,
-				       const ControlList *ctrlsApplied,
-				       const ControlList *ctrlsToApply) const
-{
-	std::stringstream log;
-
-	log << "\n--- frame [" << frame << "] meta data:\n"
-	    << controlListToString(ctrlsApplied)
-	    << "\nupdate:\n"
-	    << controlListToString(ctrlsToApply);
-
-	return log.str();
 }
 
 } // namespace ipa::nxpneo

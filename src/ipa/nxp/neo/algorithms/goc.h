@@ -26,7 +26,8 @@ public:
 	~GammaOutCorrection() = default;
 
 	int init(IPAContext &context, const ValueNode &tuningData) override;
-	int configure(IPAContext &context, const IPACameraSensorInfo &configInfo) override;
+	int configure(IPAContext &context,
+		      const IPACameraSensorInfo &configInfo) override;
 	void queueRequest(IPAContext &context, const uint32_t frame,
 			  IPAFrameContext &frameContext,
 			  const ControlList &controls) override;
@@ -47,8 +48,10 @@ public:
 
 	/*
 	 * Transfer function formula:
-	 * L' = LinearGain * L						(for L <= LinearThreshold)
-	 * L' = NonLinearGain * (L^(GammaInverse) - NonLinearOffset)	(for L > LinearThreshold)
+	 *   - for L <= LinearThreshold:
+	 *        L' = LinearGain * L
+	 *   - for L > LinearThreshold:
+	 *        L' = NonLinearGain * (L^(GammaInverse) - NonLinearOffset)
 	 */
 	struct XferFunc {
 		float linearGain;
@@ -60,8 +63,12 @@ public:
 private:
 	void setYuv2RgbParams(neoisp_gcm_cfg_s &gcm) const;
 	void setXferParams(neoisp_gcm_cfg_s &gcm) const;
-	void setEncodingParams(neoisp_gcm_cfg_s &gcm, const IPARange range) const;
-	uint16_t encOffsetsToParams(uint8_t offset) const { return offset << (12 - 8); }
+	void setEncodingParams(neoisp_gcm_cfg_s &gcm,
+			       const IPARange range) const;
+	uint16_t encOffsetsToParams(uint8_t offset) const
+	{
+		return offset << (12 - 8);
+	}
 	float validateGamma(float gamma) const
 	{
 		/*
@@ -78,10 +85,11 @@ private:
 	}
 	std::string colorSpaceName(IPAColorSpace colorSpace) const
 	{
-		return ColorSpace(static_cast<ColorSpace::Primaries>(colorSpace.primaries),
-				  static_cast<ColorSpace::TransferFunction>(colorSpace.transferFunction),
-				  static_cast<ColorSpace::YcbcrEncoding>(colorSpace.ycbcrEncoding),
-				  static_cast<ColorSpace::Range>(colorSpace.range))
+		return ColorSpace(
+			       static_cast<ColorSpace::Primaries>(colorSpace.primaries),
+			       static_cast<ColorSpace::TransferFunction>(colorSpace.transferFunction),
+			       static_cast<ColorSpace::YcbcrEncoding>(colorSpace.ycbcrEncoding),
+			       static_cast<ColorSpace::Range>(colorSpace.range))
 			.toString();
 	}
 	std::optional<float> gamma_;

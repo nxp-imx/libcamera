@@ -41,6 +41,11 @@ private:
 		Dynamic = 2, /* Dynamically compute LUT from histogram */
 	};
 
+	enum class RestrictMode {
+		None = 0,
+		HdrMerge,
+	};
+
 	struct ControlContext {
 		struct Range {
 			uint32_t min;
@@ -83,11 +88,11 @@ private:
 		}
 	};
 
+	void resetGlobalMode();
 	void configureGlobalContext();
 	uint32_t binToLinear(uint32_t bin) const;
 	void fixedModeLut();
-	void getMinMax(const std::vector<uint32_t> &inputHistogram,
-		       const uint32_t frame);
+	void getMinMax(const std::vector<uint32_t> &inputHistogram);
 	void getMin(const std::vector<uint32_t> &inputHistogram);
 	void getMax(const std::vector<uint32_t> &inputHistogram);
 	void getHistoryMax();
@@ -119,6 +124,8 @@ private:
 	static constexpr uint32_t kHEThreshold = 2000;
 	static constexpr float kHESaturation = 0.5f;
 
+	static const std::map<const std::string, RestrictMode> kRestrictModeMap;
+
 	/* Global DRC configuration */
 	std::array<uint16_t, NEO_DRC_GLOBAL_TONEMAP_SIZE> globalLut_;
 	std::array<uint16_t, NEO_DRC_GLOBAL_TONEMAP_SIZE> globalFixedLut_;
@@ -126,7 +133,9 @@ private:
 	uint16_t globalGain_;
 	/* init global DRC mode */
 	GlobalMode globalInitMode_;
-	std::string restrictMode_;
+	GlobalMode globalMode_;
+	RestrictMode restrictMode_;
+	bool resetGlobalMode_;
 
 	ControlContext globalContext_;
 };

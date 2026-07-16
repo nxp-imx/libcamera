@@ -805,7 +805,7 @@ NxpNeoFrames::find(const FrameBuffer *buffer, BufferType bufferType)
 		}
 	}
 
-	LOG(NxpNeoPipe, Info) << "Can't find frame info from buffer";
+	LOG(NxpNeoPipe, Debug) << "Can't find frame info from buffer";
 	return { nullptr, nullptr, CameraContext::Rgb };
 }
 

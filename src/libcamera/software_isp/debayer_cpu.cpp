@@ -23,6 +23,7 @@
 #include <libcamera/formats.h>
 
 #include "libcamera/internal/bayer_format.h"
+#include "libcamera/internal/camera_manager.h"
 #include "libcamera/internal/framebuffer.h"
 #include "libcamera/internal/global_configuration.h"
 #include "libcamera/internal/mapped_framebuffer.h"
@@ -350,6 +351,78 @@ void DebayerCpu::debayer10P_RGRG_BGR888(uint8_t *dst, const uint8_t *src[])
 	}
 }
 
+template<bool addAlphaByte, bool ccmEnabled>
+void DebayerCpu::debayer12P_BGBG_BGR888(uint8_t *dst, const uint8_t *src[])
+{
+	const int widthInBytes = window_.width * 3 / 2;
+	const uint8_t *prev = src[0];
+	const uint8_t *curr = src[1];
+	const uint8_t *next = src[2];
+
+	for (int x = 0; x < widthInBytes;) {
+		/* Even pixel */
+		BGGR_BGR888(2, 1, 1)
+		/* Odd pixel BGGR -> GBRG */
+		GBRG_BGR888(1, 2, 1)
+		/* Skip 3rd src byte with 2 x 4 least-significant-bits */
+		x++;
+	}
+}
+
+template<bool addAlphaByte, bool ccmEnabled>
+void DebayerCpu::debayer12P_GRGR_BGR888(uint8_t *dst, const uint8_t *src[])
+{
+	const int widthInBytes = window_.width * 3 / 2;
+	const uint8_t *prev = src[0];
+	const uint8_t *curr = src[1];
+	const uint8_t *next = src[2];
+
+	for (int x = 0; x < widthInBytes;) {
+		/* Even pixel */
+		GRBG_BGR888(2, 1, 1)
+		/* Odd pixel GRBG -> RGGB */
+		RGGB_BGR888(1, 2, 1)
+		/* Skip 3rd src byte with 2 x 4 least-significant-bits */
+		x++;
+	}
+}
+
+template<bool addAlphaByte, bool ccmEnabled>
+void DebayerCpu::debayer12P_GBGB_BGR888(uint8_t *dst, const uint8_t *src[])
+{
+	const int widthInBytes = window_.width * 3 / 2;
+	const uint8_t *prev = src[0];
+	const uint8_t *curr = src[1];
+	const uint8_t *next = src[2];
+
+	for (int x = 0; x < widthInBytes;) {
+		/* Even pixel */
+		GBRG_BGR888(2, 1, 1)
+		/* Odd pixel GBRG -> BGGR */
+		BGGR_BGR888(1, 2, 1)
+		/* Skip 3rd src byte with 2 x 4 least-significant-bits */
+		x++;
+	}
+}
+
+template<bool addAlphaByte, bool ccmEnabled>
+void DebayerCpu::debayer12P_RGRG_BGR888(uint8_t *dst, const uint8_t *src[])
+{
+	const int widthInBytes = window_.width * 3 / 2;
+	const uint8_t *prev = src[0];
+	const uint8_t *curr = src[1];
+	const uint8_t *next = src[2];
+
+	for (int x = 0; x < widthInBytes;) {
+		/* Even pixel */
+		RGGB_BGR888(2, 1, 1)
+		/* Odd pixel RGGB -> GRBG */
+		GRBG_BGR888(1, 2, 1)
+		/* Skip 3rd src byte with 2 x 4 least-significant-bits */
+		x++;
+	}
+}
+
 /*
  * Setup the Debayer object according to the passed in parameters.
  * Return 0 on success, a negative errno value on failure
@@ -359,6 +432,12 @@ int DebayerCpu::getInputConfig(PixelFormat inputFormat, DebayerInputConfig &conf
 {
 	BayerFormat bayerFormat =
 		BayerFormat::fromPixelFormat(inputFormat);
+	std::vector<PixelFormat> outputFormats = { formats::RGB888,
+						   formats::XRGB8888,
+						   formats::ARGB8888,
+						   formats::BGR888,
+						   formats::XBGR8888,
+						   formats::ABGR8888 };
 
 	if ((bayerFormat.bitDepth == 8 || bayerFormat.bitDepth == 10 || bayerFormat.bitDepth == 12) &&
 	    bayerFormat.packing == BayerFormat::Packing::None &&
@@ -366,12 +445,7 @@ int DebayerCpu::getInputConfig(PixelFormat inputFormat, DebayerInputConfig &conf
 		config.bpp = (bayerFormat.bitDepth + 7) & ~7;
 		config.patternSize.width = 2;
 		config.patternSize.height = 2;
-		config.outputFormats = std::vector<PixelFormat>({ formats::RGB888,
-								  formats::XRGB8888,
-								  formats::ARGB8888,
-								  formats::BGR888,
-								  formats::XBGR8888,
-								  formats::ABGR8888 });
+		config.outputFormats = outputFormats;
 		return 0;
 	}
 
@@ -381,12 +455,17 @@ int DebayerCpu::getInputConfig(PixelFormat inputFormat, DebayerInputConfig &conf
 		config.bpp = 10;
 		config.patternSize.width = 4; /* 5 bytes per *4* pixels */
 		config.patternSize.height = 2;
-		config.outputFormats = std::vector<PixelFormat>({ formats::RGB888,
-								  formats::XRGB8888,
-								  formats::ARGB8888,
-								  formats::BGR888,
-								  formats::XBGR8888,
-								  formats::ABGR8888 });
+		config.outputFormats = outputFormats;
+		return 0;
+	}
+
+	if (bayerFormat.bitDepth == 12 &&
+	    bayerFormat.packing == BayerFormat::Packing::CSI2 &&
+	    isStandardBayerOrder(bayerFormat.order)) {
+		config.bpp = 12;
+		config.patternSize.width = 2; /* 3 bytes per *2* pixels */
+		config.patternSize.height = 2;
+		config.outputFormats = outputFormats;
 		return 0;
 	}
 
@@ -531,6 +610,26 @@ int DebayerCpu::setDebayerFunctions(PixelFormat inputFormat,
 			return 0;
 		case BayerFormat::RGGB:
 			SET_DEBAYER_METHODS(debayer10P_RGRG_BGR888, debayer10P_GBGB_BGR888)
+			return 0;
+		default:
+			break;
+		}
+	}
+
+	if (bayerFormat.bitDepth == 12 &&
+	    bayerFormat.packing == BayerFormat::Packing::CSI2) {
+		switch (bayerFormat.order) {
+		case BayerFormat::BGGR:
+			SET_DEBAYER_METHODS(debayer12P_BGBG_BGR888, debayer12P_GRGR_BGR888)
+			return 0;
+		case BayerFormat::GBRG:
+			SET_DEBAYER_METHODS(debayer12P_GBGB_BGR888, debayer12P_RGRG_BGR888)
+			return 0;
+		case BayerFormat::GRBG:
+			SET_DEBAYER_METHODS(debayer12P_GRGR_BGR888, debayer12P_BGBG_BGR888)
+			return 0;
+		case BayerFormat::RGGB:
+			SET_DEBAYER_METHODS(debayer12P_RGRG_BGR888, debayer12P_GBGB_BGR888)
 			return 0;
 		default:
 			break;
@@ -880,32 +979,20 @@ void DebayerCpuThread::process4(uint32_t frame, const uint8_t *src, uint8_t *dst
 
 void DebayerCpu::updateGammaTable(const DebayerParams &params)
 {
-	const RGB<float> blackLevel = params.blackLevel;
-	/* Take let's say the green channel black level */
-	const unsigned int blackIndex = blackLevel[1] * gammaTable_.size();
 	const float gamma = params.gamma;
 	const float contrastExp = params.contrastExp;
 
-	const float divisor = gammaTable_.size() - blackIndex - 1.0;
-	for (unsigned int i = blackIndex; i < gammaTable_.size(); i++) {
-		float normalized = (i - blackIndex) / divisor;
+	const float divisor = gammaTable_.size() - 1.0;
+	for (auto [i, value] : utils::enumerate(gammaTable_)) {
+		float normalized = i / divisor;
 		/* Convert 0..2 to 0..infinity; avoid actual inifinity at tan(pi/2) */
 		/* Apply simple S-curve */
 		if (normalized < 0.5)
 			normalized = 0.5 * std::pow(normalized / 0.5, contrastExp);
 		else
 			normalized = 1.0 - 0.5 * std::pow((1.0 - normalized) / 0.5, contrastExp);
-		gammaTable_[i] = UINT8_MAX *
-				 std::pow(normalized, gamma);
+		value = UINT8_MAX * std::pow(normalized, gamma);
 	}
-	/*
-	 * Due to CCM operations, the table lookup may reach indices below the black
-	 * level. Let's set the table values below black level to the minimum
-	 * non-black value to prevent problems when the minimum value is
-	 * significantly non-zero (for example, when the image should be all grey).
-	 */
-	std::fill(gammaTable_.begin(), gammaTable_.begin() + blackIndex,
-		  gammaTable_[blackIndex]);
 }
 
 void DebayerCpu::updateLookupTables(const DebayerParams &params)
@@ -917,14 +1004,20 @@ void DebayerCpu::updateLookupTables(const DebayerParams &params)
 	if (gammaUpdateNeeded)
 		updateGammaTable(params);
 
+	/* Processing order: black level -> gains -> gamma */
 	auto matrixChanged = [](const Matrix<float, 3, 3> &m1, const Matrix<float, 3, 3> &m2) -> bool {
 		return !std::equal(m1.data().begin(), m1.data().end(), m2.data().begin());
 	};
 	const unsigned int gammaTableSize = gammaTable_.size();
-	const double div = static_cast<double>(kRGBLookupSize) / gammaTableSize;
+
+	const RGB<float> blackIndex = params.blackLevel * kRGBLookupSize;
+	const RGB<float> gains = params.gains;
+	const RGB<float> div = (RGB<float>(kRGBLookupSize) - blackIndex).max(1.0);
+
 	if (ccmEnabled_) {
 		if (gammaUpdateNeeded ||
-		    matrixChanged(params.combinedMatrix, params_.combinedMatrix)) {
+		    matrixChanged(params.combinedMatrix, params_.combinedMatrix) ||
+		    params.gains != params_.gains) {
 			auto &red = swapRedBlueGains_ ? blueCcm_ : redCcm_;
 			auto &green = greenCcm_;
 			auto &blue = swapRedBlueGains_ ? redCcm_ : blueCcm_;
@@ -932,30 +1025,32 @@ void DebayerCpu::updateLookupTables(const DebayerParams &params)
 			const unsigned int greenIndex = 1;
 			const unsigned int blueIndex = swapRedBlueGains_ ? 0 : 2;
 			for (unsigned int i = 0; i < kRGBLookupSize; i++) {
-				red[i].r = std::round(i * params.combinedMatrix[redIndex][0]);
-				red[i].g = std::round(i * params.combinedMatrix[greenIndex][0]);
-				red[i].b = std::round(i * params.combinedMatrix[blueIndex][0]);
-				green[i].r = std::round(i * params.combinedMatrix[redIndex][1]);
-				green[i].g = std::round(i * params.combinedMatrix[greenIndex][1]);
-				green[i].b = std::round(i * params.combinedMatrix[blueIndex][1]);
-				blue[i].r = std::round(i * params.combinedMatrix[redIndex][2]);
-				blue[i].g = std::round(i * params.combinedMatrix[greenIndex][2]);
-				blue[i].b = std::round(i * params.combinedMatrix[blueIndex][2]);
-				gammaLut_[i] = gammaTable_[i / div];
+				const RGB<float> rgb = (gains * (RGB<float>(i) - blackIndex) * kRGBLookupSize / div)
+							       .clamp(0.0, kRGBLookupSize - 1);
+				red[i].r = std::round(rgb.r() * params.combinedMatrix[redIndex][0]);
+				red[i].g = std::round(rgb.r() * params.combinedMatrix[greenIndex][0]);
+				red[i].b = std::round(rgb.r() * params.combinedMatrix[blueIndex][0]);
+				green[i].r = std::round(rgb.g() * params.combinedMatrix[redIndex][1]);
+				green[i].g = std::round(rgb.g() * params.combinedMatrix[greenIndex][1]);
+				green[i].b = std::round(rgb.g() * params.combinedMatrix[blueIndex][1]);
+				blue[i].r = std::round(rgb.b() * params.combinedMatrix[redIndex][2]);
+				blue[i].g = std::round(rgb.b() * params.combinedMatrix[greenIndex][2]);
+				blue[i].b = std::round(rgb.b() * params.combinedMatrix[blueIndex][2]);
+				gammaLut_[i] = gammaTable_[i * gammaTableSize / kRGBLookupSize];
 			}
 		}
 	} else {
 		if (gammaUpdateNeeded || params.gains != params_.gains) {
-			auto &gains = params.gains;
 			auto &red = swapRedBlueGains_ ? blue_ : red_;
 			auto &green = green_;
 			auto &blue = swapRedBlueGains_ ? red_ : blue_;
 			for (unsigned int i = 0; i < kRGBLookupSize; i++) {
-				/* Apply gamma after gain! */
-				const RGB<float> lutGains = (gains * i / div).min(gammaTableSize - 1);
-				red[i] = gammaTable_[static_cast<unsigned int>(lutGains.r())];
-				green[i] = gammaTable_[static_cast<unsigned int>(lutGains.g())];
-				blue[i] = gammaTable_[static_cast<unsigned int>(lutGains.b())];
+				const RGB<float> lutGains =
+					(gains * (RGB<float>(i) - blackIndex) * gammaTableSize / div)
+						.clamp(0.0, gammaTableSize - 1);
+				red[i] = gammaTable_[lutGains.r()];
+				green[i] = gammaTable_[lutGains.g()];
+				blue[i] = gammaTable_[lutGains.b()];
 			}
 		}
 	}

@@ -31,13 +31,13 @@ struct BlockParamsTypeInfo {
 	size_t size;
 };
 
-#define NXPNEO_BLOCK_TYPE_ENTRY(block, id, type, ext)             \
-	{                                                         \
-		BlockParamsType::block,                           \
-		{                                                 \
-			NEOISP_PARAM_BLK_##id,                    \
-			sizeof(struct neoisp_##type##_##ext##_s), \
-		}                                                 \
+#define NXPNEO_BLOCK_TYPE_ENTRY(block, id, type, ext)                     \
+	{                                                                 \
+		BlockParamsType::block,                                   \
+		{                                                         \
+			NEOISP_PARAM_BLK_##id,                            \
+				sizeof(struct neoisp_##type##_##ext##_s), \
+		}                                                         \
 	}
 
 #define NXPNEO_BLOCK_TYPE_ENTRY_REGS(block, id, type) \
@@ -93,7 +93,7 @@ Span<uint8_t> NxpNeoParams::block(BlockParamsType type)
 	/* Make sure to align 8-bytes */
 	size_t size = (sizeof(struct v4l2_isp_block_header) + info.size + 7) & ~7;
 
-	return V4L2Params::block(type, info.type, size);
+	return V4L2ParamsBase::block(utils::to_underlying(type), info.type, size);
 }
 
 } /* namespace ipa::nxpneo */

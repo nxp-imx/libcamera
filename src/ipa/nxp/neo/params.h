@@ -22,7 +22,7 @@ namespace libcamera {
 
 namespace ipa::nxpneo {
 
-enum class BlockParamsType {
+enum class BlockParamsType : uint16_t {
 	PipeConf,
 	HeadColor,
 	HdrDec0,

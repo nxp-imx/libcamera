@@ -50,6 +50,7 @@ namespace ipa::nxpneo::algorithms {
  *                  the DRC operation is disabled (the DRC mode is forced to
  *                                                 gbl-mode=0, Copy mode)
  *                  Valid values: { "hdr-merge", "none" }
+ *                  Default value is none.
  *                  Other values are ignored.
  *
  * Three modes of operation are supported to determine the global DRC lookup
@@ -220,8 +221,45 @@ static constexpr uint32_t kBinIndexSize = 5; /* 2^n bins per histogram level */
 static constexpr uint32_t kBinsPerLevel = 1 << kBinIndexSize;
 static constexpr uint32_t kBinIndexMask = kBinsPerLevel - 1;
 
+const std::map<const std::string, Drc::RestrictMode> Drc::kRestrictModeMap = {
+	{ "none", RestrictMode::None },
+	{ "hdr-merge", RestrictMode::HdrMerge },
+};
+
 Drc::Drc()
 {
+}
+
+/**
+ * \brief Reset the global mode
+ */
+void Drc::resetGlobalMode()
+{
+	switch (globalMode_) {
+	case GlobalMode::Passthrough:
+		LOG(NxpNeoAlgoDrc, Debug)
+			<< "Reset global mode to 0: Passthrough (no compression)";
+		std::fill(globalLut_.begin(), globalLut_.end(), kQ8Unit);
+		break;
+
+	case GlobalMode::Static:
+		LOG(NxpNeoAlgoDrc, Debug)
+			<< "Reset global mode to 1: Using pre-configured LUT.";
+		std::copy(globalFixedLut_.begin(),
+			  globalFixedLut_.end(),
+			  globalLut_.begin());
+		break;
+
+	case GlobalMode::Dynamic:
+		LOG(NxpNeoAlgoDrc, Debug)
+			<< "Reset global mode to 2: "
+			<< "Dynamic LUT computed from histogram.";
+		std::fill(globalLut_.begin(), globalLut_.end(), 0);
+		configureGlobalContext();
+		fixedModeLut();
+		break;
+	}
+	resetGlobalMode_ = true;
 }
 
 /**
@@ -436,14 +474,12 @@ void Drc::getHistoryMax()
 /**
  * \brief Find histogram min/max non-empty bin index and pixel value
  * \param[in] inputHistogram Vector containing the input histogram for analysis
- * \param[in] frame Frame number to decide for initialization at stream start
  *
  * Analyzes the extrema of the histogram and stores the min and max values
  * in the global context. Also maintains the history of maximum values for
  * temporal stability.
  */
-void Drc::getMinMax(const std::vector<uint32_t> &inputHistogram,
-		    const uint32_t frame)
+void Drc::getMinMax(const std::vector<uint32_t> &inputHistogram)
 {
 	getMin(inputHistogram);
 	getMax(inputHistogram);
@@ -455,16 +491,18 @@ void Drc::getMinMax(const std::vector<uint32_t> &inputHistogram,
 		globalContext_.bin.max;
 
 	/*
-	 * Add histogram maximum to history. Write first frame result twice,
-	 * as we search for the second largest value.
+	 * Add histogram maximum to history.
+	 * Since the second largest maximum is used, write the histogram
+	 * maximum twice in case of global mode reset.
 	 */
-	if (frame == 0) {
+	if (resetGlobalMode_) {
 		unsigned int nextIdx = (globalContext_.history.pointer + 1) %
 				       globalContext_.history.kMaxSize;
 		globalContext_.history.values[nextIdx] =
 			globalContext_.value.max;
 		globalContext_.history.bins[nextIdx] =
 			globalContext_.bin.max;
+		resetGlobalMode_ = false;
 	}
 
 	/* Increment history pointer and wrap if required */
@@ -671,7 +709,13 @@ void Drc::controlDynamicMode(const std::vector<uint32_t> &inputHistogram)
 int Drc::init([[maybe_unused]] IPAContext &context,
 	      const ValueNode &tuningData)
 {
-	restrictMode_ = tuningData["restrict-mode"].get<std::string>("none");
+	/* Parsing restrict mode. */
+	restrictMode_ = RestrictMode::None;
+	auto restrictMode = tuningData["restrict-mode"].get<std::string>("none");
+	auto it = kRestrictModeMap.find(restrictMode);
+	if (it != kRestrictModeMap.end())
+		restrictMode_ = it->second;
+	LOG(NxpNeoAlgoDrc, Debug) << "restrict mode is " << restrictMode;
 
 	/* Parsing GDRC mode */
 	uint16_t mode = tuningData["gbl-mode"].get<uint16_t>(kGlobalMode);
@@ -725,50 +769,26 @@ int Drc::init([[maybe_unused]] IPAContext &context,
 int Drc::configure(IPAContext &context, const IPACameraSensorInfo &configInfo)
 {
 	IPAPipelineMode &pipelineMode = context.configuration.pipelineMode;
-	GlobalMode globalMode = globalInitMode_;
+	globalMode_ = globalInitMode_;
 
-	if (restrictMode_ == "hdr-merge" &&
+	if (restrictMode_ == RestrictMode::HdrMerge &&
 	    pipelineMode != IPAPipelineMode::HdrMerge) {
 		/*
 		 * Disable dynamic DRC (set to Copy mode) if restrict mode is
 		 * "hdr-merge" but pipeline is not in HDR merge mode.
 		 */
-		globalMode = GlobalMode::Passthrough;
+		globalMode_ = GlobalMode::Passthrough;
 		LOG(NxpNeoAlgoDrc, Debug)
 			<< "DRC is disabled - "
 			<< "pipeline mode doesn't match the restrict mode.";
 	}
 
-	switch (globalMode) {
-	case GlobalMode::Passthrough:
-		LOG(NxpNeoAlgoDrc, Debug)
-			<< "Global DRC Mode = 0: Passthrough (no compression)";
-		std::fill(globalLut_.begin(), globalLut_.end(), kQ8Unit);
-		break;
-
-	case GlobalMode::Static:
-		LOG(NxpNeoAlgoDrc, Debug)
-			<< "Global DRC Mode = 1: Using pre-configured LUT.";
-		std::copy(globalFixedLut_.begin(),
-			  globalFixedLut_.end(),
-			  globalLut_.begin());
-		break;
-
-	case GlobalMode::Dynamic:
-		LOG(NxpNeoAlgoDrc, Debug)
-			<< "Global DRC Mode = 2: "
-			<< "Dynamic LUT computed from histogram.";
-		std::fill(globalLut_.begin(), globalLut_.end(), 0);
-		configureGlobalContext();
-		fixedModeLut();
-		break;
-	}
+	resetGlobalMode();
 
 	context.configuration.drc.roi.xpos = 0;
 	context.configuration.drc.roi.ypos = 0;
 	context.configuration.drc.roi.width = configInfo.outputSize.width;
 	context.configuration.drc.roi.height = configInfo.outputSize.height;
-	context.configuration.drc.gblMode = static_cast<uint16_t>(globalMode);
 
 	return 0;
 }
@@ -778,14 +798,22 @@ int Drc::configure(IPAContext &context, const IPACameraSensorInfo &configInfo)
  */
 void Drc::prepare(IPAContext &context,
 		  const uint32_t frame,
-		  [[maybe_unused]] IPAFrameContext &frameContext,
+		  IPAFrameContext &frameContext,
 		  NxpNeoParams *params)
 {
-	GlobalMode globalMode = static_cast<GlobalMode>(
-		context.configuration.drc.gblMode);
+	bool updateHdr = frameContext.hdr.update &&
+			 restrictMode_ == RestrictMode::HdrMerge;
+	if (updateHdr) {
+		/* Disable DRC if HDR is disabled. */
+		globalMode_ = frameContext.hdr.enabled ?
+			globalInitMode_ :
+			GlobalMode::Passthrough;
+		resetGlobalMode();
+	}
 
-	bool update = globalMode == GlobalMode::Dynamic || frame == 0;
-	if (update) {
+	bool updateDrc = globalMode_ == GlobalMode::Dynamic || frame == 0 ||
+			 updateHdr;
+	if (updateDrc) {
 		auto globalTonemap =
 			params->block<BlockParamsType::DrcGlobalTonemap>();
 		/* Set global lut */
@@ -819,16 +847,13 @@ void Drc::prepare(IPAContext &context,
 /**
  * \copydoc libcamera::ipa::Algorithm::process
  */
-void Drc::process(IPAContext &context,
-		  const uint32_t frame,
+void Drc::process([[maybe_unused]] IPAContext &context,
+		  [[maybe_unused]] const uint32_t frame,
 		  [[maybe_unused]] IPAFrameContext &frameContext,
 		  const NxpNeoStats *stats,
 		  [[maybe_unused]] ControlList &metadata)
 {
-	GlobalMode globalMode = static_cast<GlobalMode>(
-		context.configuration.drc.gblMode);
-
-	if (globalMode != GlobalMode::Dynamic)
+	if (globalMode_ != GlobalMode::Dynamic)
 		return;
 
 	auto memStats = stats->block<BlockStatsType::MDrc>();
@@ -836,7 +861,7 @@ void Drc::process(IPAContext &context,
 	std::vector<uint32_t> inputHistogram(
 		statsHistogram, statsHistogram + NEO_DRC_GLOBAL_TONEMAP_SIZE);
 
-	getMinMax(inputHistogram, frame);
+	getMinMax(inputHistogram);
 
 	controlDynamicMode(inputHistogram);
 	globalGain_ = globalContext_.extraGainOut;

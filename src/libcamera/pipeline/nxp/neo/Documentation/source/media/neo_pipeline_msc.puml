@@ -1,0 +1,93 @@
+@startuml
+
+skinparam SequenceMessageAlign reverseDirection
+
+
+title NXP Neo pipeline Request() timeline\nraw sensor image processed by ISP
+
+participant "Pipeline\nHandler" as pipeh
+participant "NxpNeoPipeline" as neopipe
+participant "IPA proxy" as ipa
+participant "ISI channel\nisp input0\nvideo dev" as isiinput0dev
+participant "Neo ISP\ninput0\nvideo dev" as neoinput0dev
+participant "Neo ISP\nparams\nvideo dev" as neoparamsdev
+participant "Neo ISP\nframe\nvideo dev" as neoframedev
+participant "Neo ISP\nstats\nvideo dev" as neostatsdev
+participant "sensor\nv4l2 subdev" as sensor
+
+pipeh-> neopipe: queueRequestDevice\n(camera, request)
+Activate neopipe
+neopipe->isiinput0dev: queueBuffer(rawBuffer)
+neopipe->ipa: queueRequest(id, controls)
+Activate ipa
+rnote over ipa: for every algo in algos:\n algo->queueRequest()
+Deactivate ipa
+Deactivate neopipe
+
+
+rnote over isiinput0dev:bufferReady signal
+isiinput0dev->isiinput0dev
+isiinput0dev->neopipe: feImage0BufferReady(rawBuffer)
+Activate neopipe
+rnote over neopipe: delayedCtrls->applyControls(sequence)
+neopipe->sensor: setControls()
+neopipe->ipa: computeParams(id, cookie)
+Deactivate neopipe
+
+Activate ipa
+rnote over ipa: for every algo in algos:\n algo->prepare()
+ipa->neopipe: ipaParamsComputed(id)
+Deactivate ipa
+
+Activate neopipe
+neopipe->neoframedev: queueBuffer(frameBuffer)
+neopipe->neoparamsdev: queueBuffer(paramsBuffer)
+neopipe->neostatsdev: queueBuffer(statsBuffer)
+neopipe->neoinput0dev: queueBuffer(rawBuffer)
+Deactivate neopipe
+
+... Neo ISP processing start ...
+
+rnote over neoparamsdev:bufferReady signal
+neoparamsdev->neoparamsdev
+neoparamsdev->neopipe: neoParamsBufferReady(paramsBuffer)
+Activate neopipe
+rnote over neopipe: paramDequeued = true
+Deactivate neopipe
+
+rnote over neoinput0dev:bufferReady signal
+neoinput0dev->neoinput0dev
+neoinput0dev->neopipe: neoInput0BufferReady(rawBuffer)
+Activate neopipe
+Deactivate neopipe
+
+rnote over neoframedev:bufferReady signal
+neoframedev->neoframedev
+neoframedev->neopipe: neoFrameBufferReady(frameBuffer)
+Activate neopipe
+neopipe->pipeh: completeBuffer(request, frameBuffer)
+Deactivate neopipe
+
+rnote over neostatsdev:bufferReady signal
+neostatsdev->neostatsdev
+neostatsdev->neopipe: neoStatsBufferReady(statsBuffer)
+Activate neopipe
+neopipe->ipa: processStats(id, cookie, sensorControls)
+Deactivate neopipe
+rnote over ipa: for every algo in algos:\n algo->process()
+Activate ipa
+ipa->neopipe: ipaSetSensorControls(id, sensorControls)
+Activate neopipe
+rnote over neopipe: delayedCtrls->push(sensorControls)
+Deactivate neopipe
+
+ipa->neopipe: ipaMetadataReady(id, metadataControls)
+Deactivate ipa
+
+Activate neopipe
+rnote over neopipe: metadataProcessed = true
+
+neopipe->pipeh: completeRequest(request)
+Deactivate neopipe
+
+@enduml

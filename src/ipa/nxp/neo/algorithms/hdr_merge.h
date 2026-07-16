@@ -28,9 +28,18 @@ public:
 	int init(IPAContext &context, const ValueNode &tuningData) override;
 	int configure(IPAContext &context,
 		      const IPACameraSensorInfo &configInfo) override;
+	void queueRequest(IPAContext &context,
+			  const uint32_t frame,
+			  IPAFrameContext &frameContext,
+			  const ControlList &controls) override;
 	void prepare(IPAContext &context, const uint32_t frame,
 		     IPAFrameContext &frameContext,
 		     NxpNeoParams *params) override;
+	void process([[maybe_unused]] IPAContext &context,
+		     [[maybe_unused]] const uint32_t frame,
+		     IPAFrameContext &frameContext,
+		     [[maybe_unused]] const NxpNeoStats *stats,
+		     ControlList &metadata) override;
 
 private:
 	int parseCommonParams(const ValueNode &tuningData);
@@ -64,6 +73,9 @@ private:
 	static constexpr uint16_t kBlendingWindowHigh = 95;
 	static constexpr uint16_t kBlendingFactorMax = 256;
 
+	static constexpr int32_t kDefaultHdrMode_ =
+		controls::HdrModeMultiExposure;
+
 	uint8_t obpp_;
 	uint8_t motionfixEn_;
 	uint8_t blend3x3_;
@@ -88,8 +100,9 @@ private:
 	/* Blending window of image0 (needed for the auto computation). */
 	std::vector<uint16_t> blendingWindow_;
 
-	bool enabled_;
 	bool autoEnabled_;
+	uint16_t gainScale20bitsImage0_;
+	uint16_t gainShift20bitsImage0_;
 };
 
 } /* namespace ipa::nxpneo::algorithms */

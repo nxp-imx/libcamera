@@ -10,6 +10,18 @@ This directory contains the Sphinx documentation for the Neo ISP pipeline handle
 
 - Python 3.7 or higher
 - pip
+- graphviz
+
+  on Debian:
+  ```bash
+  sudo apt install graphviz
+  ```
+- plantuml
+
+  on Debian
+  ```
+  sudo apt install plantuml
+  ```
 
 ## Setup and Build Instructions
 

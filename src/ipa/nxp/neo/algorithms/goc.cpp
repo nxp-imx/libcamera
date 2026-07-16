@@ -38,23 +38,27 @@ namespace {
  * as described in this link:
  * https://linuxtv.org/downloads/v4l-dvb-apis/userspace-api/v4l/colorspaces-details.html
  */
-const std::map<const IPATransferFunction, GammaOutCorrection::XferFunc> kXferMap = {
-	/* Linear transfer function */
-	{ IPATransferFunction::Linear, { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f } },
-	/*
-	 * sRGB transfer function:
-	 * L' = 12.92L, for 0 <= L <= 0.0031308
-	 * L' = 1.055L^(1/2.4) - 0.055, for L > 0.0031308
-	 *    = 1.055 * (L^(1/2.4) - (0.055 / 1.055)), for L > 0.0031308
-	 */
-	{ IPATransferFunction::Srgb, { 12.92f, 0.0031308f, 1.055f, 0.0521327f, 0.416667f } },
-	/*
-	 * Rec. 709 transfer function:
-	 * L' = 4.5L, for 0 <= L < 0.018
-	 * L' = 1.099L^0.45 - 0.099, for L >= 0.018
-	 *    = 1.099 * (L^0.45 - (0.099 / 1.099)), for L >= 0.018
-	 */
-	{ IPATransferFunction::Rec709, { 4.5f, 0.018f, 1.099f, 0.0900819f, 0.45f } },
+const std::map<const IPATransferFunction, GammaOutCorrection::XferFunc>
+	kXferMap = {
+		/* Linear transfer function */
+		{ IPATransferFunction::Linear,
+		  { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f } },
+		/*
+		 * sRGB transfer function:
+		 * L' = 12.92L, for 0 <= L <= 0.0031308
+		 * L' = 1.055L^(1/2.4) - 0.055, for L > 0.0031308
+		 *    = 1.055 * (L^(1/2.4) - (0.055 / 1.055)), for L > 0.0031308
+		 */
+		{ IPATransferFunction::Srgb,
+		  { 12.92f, 0.0031308f, 1.055f, 0.0521327f, 0.416667f } },
+		/*
+		 * Rec. 709 transfer function:
+		 * L' = 4.5L, for 0 <= L < 0.018
+		 * L' = 1.099L^0.45 - 0.099, for L >= 0.018
+		 *    = 1.099 * (L^0.45 - (0.099 / 1.099)), for L >= 0.018
+		 */
+		{ IPATransferFunction::Rec709,
+		  { 4.5f, 0.018f, 1.099f, 0.0900819f, 0.45f } },
 };
 
 /*
@@ -115,20 +119,25 @@ const std::map<const IPAYcbcrEncoding, GammaOutCorrection::YCbCrEnc> kEncMap = {
  * pixels into RGB format using the inverse RGB2YUV conversion of the ISP
  * RGB2YUV block. This RGB2YUV conversion is configured by the CCM algorithm and
  * is defined for sRGB YUV encoding: BT.601 full-range encoding.
- * Hence the only color spaces supported are for the sRGB gamut of chromaticities.
+ * Hence the only color spaces supported are for the sRGB gamut of
+ * chromaticities.
  * This YUV2RGB conversion is configured with the GCM input matrix.
  *
  * The second stage of the GCM is applying the gamma correction using
  * the transfer function relevant to the selected color space.
  * The supported standards for the transfer function are sRGB and Rec.709.
  * The ISP applies following operation for the gamma correction:
- * L' = LinearGain * L						(for R <= LinearThreshold)
- * L' = NonLinearGain * (L^(GammaInverse) - NonLinearOffset)	(for R > LinearThreshold)
- * The ISP gamma correction is not applying any non-linear gain for the transfer function.
- * Hence this is compensated by applying this gain in the third stage of the GCM.
- * There is the option to configure the gamma value of the transfer function using
- * the calibration file, overriding the default gamma value relevant to the
- * selected color space.
+ *   - for R <= LinearThreshold:
+ *        L' = LinearGain * L
+ *   - for R > LinearThreshold:
+ *        L' = NonLinearGain * (L^(GammaInverse) - NonLinearOffset)
+ * The ISP gamma correction is not applying any non-linear gain for the transfer
+ * function.
+ * Hence this is compensated by applying this gain in the third stage of the
+ * GCM.
+ * There is the option to configure the gamma value of the transfer function
+ * using the calibration file, overriding the default gamma value relevant to
+ * the selected color space.
  *
  * The third and last stage of the GCM is converting the non linear R'G'B'
  * for the YUV pixel format into the Y'U'V' output format using the Y'CbCr
@@ -144,7 +153,8 @@ const std::map<const IPAYcbcrEncoding, GammaOutCorrection::YCbCrEnc> kEncMap = {
  *              Optional parameter
  *              Float type - range value is inverse of the gamma ISP s1.8 format
  *              Min: inverse(511/256) - Max: inverse(1/256)
- *              Default value: value set by the standards according to the user color space
+ *              Default value: value set by the standards according to the user
+ *              color space.
  *
  * Useful links:
  * - https://linuxtv.org/downloads/v4l-dvb-apis/userspace-api/v4l/colorspaces-details.html
@@ -164,7 +174,8 @@ int GammaOutCorrection::init([[maybe_unused]] IPAContext &context,
 	context.ctrlMap[&controls::Gamma] = ControlInfo(0.5f, 10.0f, 2.2f);
 
 	if (gamma_.has_value())
-		LOG(NxpNeoAlgoGoc, Debug) << "Configured gamma: " << gamma_.value();
+		LOG(NxpNeoAlgoGoc, Debug) << "Configured gamma: "
+					  << gamma_.value();
 
 	return 0;
 }
@@ -172,16 +183,19 @@ int GammaOutCorrection::init([[maybe_unused]] IPAContext &context,
 /**
  * \copydoc libcamera::ipa::Algorithm::configure
  */
-int GammaOutCorrection::configure([[maybe_unused]] IPAContext &context,
-				  [[maybe_unused]] const IPACameraSensorInfo &configInfo)
+int GammaOutCorrection::configure(
+	[[maybe_unused]] IPAContext &context,
+	[[maybe_unused]] const IPACameraSensorInfo &configInfo)
 {
 	IPAColorSpace colorSpace = context.configuration.colorSpace;
-	LOG(NxpNeoAlgoGoc, Debug) << "ColorSpace Name: " << colorSpaceName(colorSpace);
+	LOG(NxpNeoAlgoGoc, Debug) << "ColorSpace Name: "
+				  << colorSpaceName(colorSpace);
 
 	/* Get the Transfer function according to the color space. */
 	auto itXferFunc = kXferMap.find(colorSpace.transferFunction);
 	if (itXferFunc == kXferMap.end()) {
-		LOG(NxpNeoAlgoGoc, Error) << "XferFunc not found - sRGB and Rec.709 are supported";
+		LOG(NxpNeoAlgoGoc, Error)
+			<< "XferFunc not found - sRGB and Rec.709 are supported";
 		return -EINVAL;
 	}
 	xferFunc_ = itXferFunc->second;
@@ -189,16 +203,22 @@ int GammaOutCorrection::configure([[maybe_unused]] IPAContext &context,
 		xferFunc_.gammaInverse = validateGamma(1.0f / gamma_.value());
 	context.activeState.goc.gamma = 1.0f / xferFunc_.gammaInverse;
 
-	LOG(NxpNeoAlgoGoc, Debug) << "[xferFunc] linearGain: " << xferFunc_.linearGain
-				  << ", linearThreshold: " << xferFunc_.linearThreshold
-				  << ", nonLinearGain: " << xferFunc_.nonLinearGain
-				  << ", nonLinearOffset: " << xferFunc_.nonLinearOffset
-				  << ", gammaInverse: " << xferFunc_.gammaInverse;
+	LOG(NxpNeoAlgoGoc, Debug) << "[xferFunc] linearGain: "
+				  << xferFunc_.linearGain
+				  << ", linearThreshold: "
+				  << xferFunc_.linearThreshold
+				  << ", nonLinearGain: "
+				  << xferFunc_.nonLinearGain
+				  << ", nonLinearOffset: "
+				  << xferFunc_.nonLinearOffset
+				  << ", gammaInverse: "
+				  << xferFunc_.gammaInverse;
 
 	/* Get the YCbCr Encoding according to the color space. */
 	auto itEncoding = kEncMap.find(colorSpace.ycbcrEncoding);
 	if (itEncoding == kEncMap.end()) {
-		LOG(NxpNeoAlgoGoc, Error) << "YCbCr Encoding not found - BT.601 and BT.709 are supported";
+		LOG(NxpNeoAlgoGoc, Error)
+			<< "YCbCr Encoding not found - BT.601 and BT.709 are supported";
 		return -EINVAL;
 	}
 	ycbcrEnc_ = itEncoding->second;
@@ -224,7 +244,8 @@ void GammaOutCorrection::queueRequest(IPAContext &context, const uint32_t frame,
 		xferFunc_.gammaInverse = validateGamma(1.0f / *gamma);
 		context.activeState.goc.gamma = 1.0f / xferFunc_.gammaInverse;
 		LOG(NxpNeoAlgoGoc, Debug) << "User gamma: " << *gamma
-					  << " - Set gamma to: " << 1.0f / xferFunc_.gammaInverse;
+					  << " - Set gamma to: "
+					  << 1.0f / xferFunc_.gammaInverse;
 	}
 
 	frameContext.goc.gamma = context.activeState.goc.gamma;
@@ -277,7 +298,8 @@ void GammaOutCorrection::setXferParams(neoisp_gcm_cfg_s &gcm) const
 	gcm.blklvl1_ctrl_offset1 = 0;
 	gcm.blklvl2_ctrl_offset2 = 0;
 	/* linear threshold: u0.16 format */
-	gcm.lowth_ctrl01_threshold0 = UQ<0, 16>(xferFunc_.linearThreshold).quantized();
+	gcm.lowth_ctrl01_threshold0 =
+		UQ<0, 16>(xferFunc_.linearThreshold).quantized();
 	gcm.lowth_ctrl01_threshold1 = gcm.lowth_ctrl01_threshold0;
 	gcm.lowth_ctrl2_threshold2 = gcm.lowth_ctrl01_threshold0;
 }
@@ -287,9 +309,11 @@ void GammaOutCorrection::setXferParams(neoisp_gcm_cfg_s &gcm) const
  * \param[in] gcm The ISP GCM params
  * \param[in] range Limited or full range
  *
- * The RGB formats and the JPEG color space uses full range as default quantization.
+ * The RGB formats and the JPEG color space uses full range as default
+ * quantization.
  */
-void GammaOutCorrection::setEncodingParams(neoisp_gcm_cfg_s &gcm, const IPARange range) const
+void GammaOutCorrection::setEncodingParams(
+	neoisp_gcm_cfg_s &gcm, const IPARange range) const
 {
 	/*
 	 * The offsets are defined for 8-bit full-range
@@ -297,7 +321,8 @@ void GammaOutCorrection::setEncodingParams(neoisp_gcm_cfg_s &gcm, const IPARange
 	 * Full range: (0, 128, 128) for Y, Cb, Cr
 	 * Limited range: (16, 128, 128) for Y, Cb, Cr
 	 */
-	uint32_t yOffset = (range == IPARange::Limited) ? 16 : ycbcrEnc_.offsets[0][0];
+	uint32_t yOffset =
+		(range == IPARange::Limited) ? 16 : ycbcrEnc_.offsets[0][0];
 	gcm.ooffsets[0] = encOffsetsToParams(static_cast<uint8_t>(yOffset));
 	gcm.ooffsets[1] = encOffsetsToParams(
 		static_cast<uint8_t>(ycbcrEnc_.offsets[1][0]));
@@ -306,24 +331,33 @@ void GammaOutCorrection::setEncodingParams(neoisp_gcm_cfg_s &gcm, const IPARange
 
 	/*
 	 * The default matrices are set for full-range.
-	 * In limited range, Y' ranges from 16 to 235, Cb and Cr range from 16 to 240.
-	 * The same quantization factors are applied to Y'CbCr for BT.601 and BT.709:
+	 * In limited range, Y' ranges from 16 to 235, Cb and Cr range
+	 * from 16 to 240.
+	 * The same quantization factors are applied to Y'CbCr for BT.601 and
+	 * BT.709:
 	 * (219*Y, 224*Pb, 224*Pr).
 	 */
-	Matrix<float, 3, 1> qFactor = (range == IPARange::Limited)
-				? Matrix<float, 3, 1>({ 219.0f / 256, 224.0f / 256, 224.0f / 256 })
-				: Matrix<float, 3, 1>({ 256.0f / 256, 256.0f / 256, 256.0f / 256 });
+	Matrix<float, 3, 1> qFactor =
+		(range == IPARange::Limited)
+			? Matrix<float, 3, 1>({
+				219.0f / 256, 224.0f / 256, 224.0f / 256
+			  })
+			: Matrix<float, 3, 1>({
+				256.0f / 256, 256.0f / 256, 256.0f / 256
+			  });
 	LOG(NxpNeoAlgoGoc, Debug) << "Quantized factor: " << qFactor;
 
 	for (unsigned int i = 0; i < 3; i++) {
-		LOG(NxpNeoAlgoGoc, Debug) << "ISP gcm.ooffsets[" << i << "]: " << gcm.ooffsets[i];
+		LOG(NxpNeoAlgoGoc, Debug) << "ISP gcm.ooffsets[" << i << "]: "
+					  << gcm.ooffsets[i];
 		for (unsigned int j = 0; j < 3; j++) {
 			/* omat in s8.8 */
 			gcm.omat_rxcy[i][j] =
 				std::round(quantizedOmat(
 					Q<8, 8>(ycbcrEnc_.matrix[i][j]).quantized(),
 					qFactor[i][0]));
-			LOG(NxpNeoAlgoGoc, Debug) << "ISP gcm.omat_rxcy[" << i << "][" << j << "]: "
+			LOG(NxpNeoAlgoGoc, Debug) << "ISP gcm.omat_rxcy["
+						  << i << "][" << j << "]: "
 						  << gcm.omat_rxcy[i][j];
 		}
 	}

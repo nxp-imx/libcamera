@@ -46,14 +46,17 @@ set +e
 
 # Copy the headers
 headers="
+	drm/drm.h
 	drm/drm_fourcc.h
+	drm/drm_mode.h
+	linux/bits.h
 	linux/dma-buf.h
 	linux/dma-heap.h
 	linux/dw100.h
 	linux/media-bus-format.h
 	linux/media.h
+	linux/media/arm/mali-c55-config.h
 	linux/media/v4l2-isp.h
-	linux/media/nxp/nxp-neoisp.h
 	linux/rkisp1-config.h
 	linux/stddef.h
 	linux/udmabuf.h
@@ -66,7 +69,9 @@ headers="
 
 for header in $headers ; do
 	name="${header#*/}"
-	cp "${install_dir}/usr/include/${header}" "${header_dir}/${name}"
+	dest="${header_dir}/${name}"
+	mkdir -p "$(dirname "$dest")"
+	cp "${install_dir}/usr/include/${header}" "${dest}"
 done
 
 # The IPU3 header is a special case, as it's stored in staging. Handle it
