@@ -42,34 +42,9 @@ namespace ipa::nxpneo::algorithms {
  * channels. That is done using the OBWB blocks of the ISP, either the
  * OBWB0/OBWB1 block instances or the OBWB2 one.
  *
- *       input0              input1
- *     AXI IN0 DMA         AXI IN1 DMA
- *          │                   │
- *  ┌───────▼───────────────────▼───────┐
- *  │ PIPECONF                          │
- *  │    LPALIGN0             LPALIGN1  │
- *  │    INALIGN0             INALIGN1  │
- *  └───────┬───────────────────┬───────┘
- *  ┌───────▼───────┐   ┌───────▼───────┐
- *  │      HC0      │   │      HC1      │
- *  └───────┬───────┘   └───────┬───────┘
- *  ┌───────▼───────┐   ┌───────▼───────┐
- *  │  HDR Decomp0  │   │  HDR Decomp1  │
- *  └───────┬───────┘   └───────┬───────┘
- *  ┌───────▼───────┐   ┌───────▼───────┐
- *  │     OBWB0     │   │     OBWB1     │
- *  └───────┬───────┘   └───────┬───────┘
- *  ┌───────▼───────────────────▼───────┐
- *  │             HDR Merge             │
- *  └─────────────────┬─────────────────┘
- *  ┌─────────────────▼─────────────────┐
- *  │               RGBIR               │
- *  └───────┬───────────────────┬───────┘
- *  ┌───────▼───────┐           │
- *  │     OBWB2     │           │
- *  └───────┬───────┘           │
- *          ▼                   ▼
- *      to RGB Path        to IR path
+ * The upstream ISP block diagram, including the different ISP OBWB blocks, can
+ * be found in:
+ * <src/ipa/nxp/neo/Documentation/source/neo_ipa_algorithms.rst>
  *
  * The user has the option to define in the calibration file if AWB gains should
  * be applied from OBWB0/1 or OBWB2 blocks. If not explicitly defined, the
@@ -77,14 +52,8 @@ namespace ipa::nxpneo::algorithms {
  * HDR merge mode where OBWB0/1 has to be used. The user configuration, if
  * present, takes precedence over the default configuration.
  *
- * The gain compensation of the AWB function is required to make sure to reach
- * maximum pixel range for the saturation function of the OBWB block to operate
- * properly.
- * To be effective, this compensation applies after the BLC offset removal.
- * This is the case if AWB is mapped in the same block as the BLC, or in a
- * different OBWB block but downstream in the ISP pipeline.
- * Also the BLC algorithm should run before the AWB algorithm in order to
- * use the computed scaled BLC offsets.
+ * Details about AWB dependencies can be found in the:
+ * <src/ipa/nxp/neo/Documentation/source/neo_ipa_algorithms.rst>
  *
  * AWB may share usage of the OBWB blocks with BLC, AWB configuring the
  * gains and BLC configuring the offsets. Thus, AWB also configures default

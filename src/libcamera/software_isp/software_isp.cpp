@@ -7,8 +7,10 @@
 
 #include "libcamera/internal/software_isp/software_isp.h"
 
-#include <cmath>
+#include <memory>
+#include <optional>
 #include <stdint.h>
+#include <string>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -117,8 +119,14 @@ SoftwareIsp::SoftwareIsp(PipelineHandler *pipe, const CameraSensor *sensor,
 		}
 	}
 
-	if (!softISPMode || softISPMode == "gpu")
-		debayer_ = std::make_unique<DebayerEGL>(std::move(stats), cm);
+	if (!softISPMode || softISPMode == "gpu") {
+		if (eGL::isAvailable()) {
+			debayer_ = std::make_unique<DebayerEGL>(std::move(stats), cm);
+		} else {
+			LOG(SoftwareIsp, Info)
+				<< "EGL not available, falling back to CPU debayer";
+		}
+	}
 
 #endif
 	if (!debayer_)
@@ -254,6 +262,19 @@ SoftwareIsp::strideAndFrameSize(const PixelFormat &outputFormat, const Size &siz
 }
 
 /**
+ * Get the preferred input stride in bytes for the given input format and size
+ * \param[in] inputFormat The input format
+ * \param[in] size The input size (width and height in pixels)
+ * \return The preferred input stride in bytes or 0 if there is no preference
+ */
+uint32_t SoftwareIsp::preferredInputStride(const PixelFormat &inputFormat, const Size &size)
+{
+	ASSERT(debayer_);
+
+	return debayer_->preferredInputStride(inputFormat, size);
+}
+
+/**
  * \brief Configure the SoftwareIsp object according to the passed in parameters
  * \param[in] inputCfg The input configuration
  * \param[in] outputCfgs The output configurations
@@ -385,15 +406,13 @@ void SoftwareIsp::stop()
 	ipa_->stop();
 
 	for (auto buffer : queuedOutputBuffers_) {
-		FrameMetadata &metadata = buffer->_d()->metadata();
-		metadata.status = FrameMetadata::FrameCancelled;
+		buffer->_d()->cancel();
 		outputBufferReady.emit(buffer);
 	}
 	queuedOutputBuffers_.clear();
 
 	for (auto buffer : queuedInputBuffers_) {
-		FrameMetadata &metadata = buffer->_d()->metadata();
-		metadata.status = FrameMetadata::FrameCancelled;
+		buffer->_d()->cancel();
 		inputBufferReady.emit(buffer);
 	}
 	queuedInputBuffers_.clear();

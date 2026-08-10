@@ -80,7 +80,6 @@ const std::vector<std::pair<BayerFormat, unsigned int>> BayerToMbusCodeMap{
 	{ { BayerFormat::GBRG, 16, BayerFormat::Packing::PISP1 }, MEDIA_BUS_FMT_SGBRG16_1X16, },
 	{ { BayerFormat::GRBG, 16, BayerFormat::Packing::PISP1 }, MEDIA_BUS_FMT_SGRBG16_1X16, },
 	{ { BayerFormat::RGGB, 16, BayerFormat::Packing::PISP1 }, MEDIA_BUS_FMT_SRGGB16_1X16, },
-	{ { BayerFormat::RGGB, 16, BayerFormat::Packing::PISP1 }, MEDIA_BUS_FMT_SRGGB16_1X16, },
 	{ { BayerFormat::MONO, 16, BayerFormat::Packing::None }, MEDIA_BUS_FMT_Y16_1X16, },
 	{ { BayerFormat::MONO, 16, BayerFormat::Packing::PISP1 }, MEDIA_BUS_FMT_Y16_1X16, },
 };
@@ -172,11 +171,14 @@ pisp_image_format_config toPiSPImageFormat(V4L2DeviceFormat &format)
 		image.stride2 = image.stride;
 		break;
 	case formats::NV21:
+		/*
+		 * ORDER_SWAPPED does not work with semi-planar formats, so
+		 * we going to have swap rows in the output CSC matrix.
+		 */
 		image.format = PISP_IMAGE_FORMAT_THREE_CHANNEL +
 			       PISP_IMAGE_FORMAT_BPS_8 +
 			       PISP_IMAGE_FORMAT_SAMPLING_420 +
-			       PISP_IMAGE_FORMAT_PLANARITY_SEMI_PLANAR +
-			       PISP_IMAGE_FORMAT_ORDER_SWAPPED;
+			       PISP_IMAGE_FORMAT_PLANARITY_SEMI_PLANAR;
 		image.stride2 = image.stride;
 		break;
 	case formats::YUYV:
@@ -200,11 +202,14 @@ pisp_image_format_config toPiSPImageFormat(V4L2DeviceFormat &format)
 		image.stride2 = image.stride;
 		break;
 	case formats::NV61:
+		/*
+		 * ORDER_SWAPPED does not work with semi-planar formats, so
+		 * we going to have swap rows in the output CSC matrix.
+		 */
 		image.format = PISP_IMAGE_FORMAT_THREE_CHANNEL +
 			       PISP_IMAGE_FORMAT_BPS_8 +
 			       PISP_IMAGE_FORMAT_SAMPLING_422 +
-			       PISP_IMAGE_FORMAT_PLANARITY_SEMI_PLANAR +
-			       PISP_IMAGE_FORMAT_ORDER_SWAPPED;
+			       PISP_IMAGE_FORMAT_PLANARITY_SEMI_PLANAR;
 		image.stride2 = image.stride;
 		break;
 	case formats::RGB888:
@@ -1223,6 +1228,18 @@ PiSPCameraData::platformValidate(RPi::RPiCameraConfiguration *rpiConfig) const
 			status = CameraConfiguration::Adjusted;
 		}
 
+		unsigned bpp = MediaBusFormatInfo::info(rpiConfig->sensorFormat_.code).bitsPerPixel;
+		if ((bpp == 16 || bpp == 14) &&
+		    bayer.packing != BayerFormat::Packing::None) {
+			LOG(RPI, Info)
+				<< "PISP compression incompatible with software fixups required for RAW"
+				<< bpp << ", disabling";
+
+			bayer.packing = BayerFormat::Packing::None;
+			rawStream->pixelFormat = bayer.toPixelFormat();
+			status = CameraConfiguration::Adjusted;
+		}
+
 		rawStreams[0].format =
 			RPi::PipelineHandlerBase::toV4L2DeviceFormat(cfe_[Cfe::Output0].dev(), rawStream);
 
@@ -1957,6 +1974,19 @@ bool PiSPCameraData::calculateCscConfiguration(const V4L2DeviceFormat &v4l2Forma
 				<< ", defaulting to sYCC";
 			be_->InitialiseYcbcr(csc, "jpeg");
 		}
+
+		if (pixFormat == formats::NV21 || pixFormat == formats::NV61) {
+			/*
+			 * The ORDER_SWAPPED flag doesn't work with semi-planar formats,
+			 * so instead we have to swap 2 matrix rows.
+			 */
+			pisp_be_ccm_config copy = csc;
+			memcpy(&csc.coeffs[3], &copy.coeffs[6], 3 * sizeof(csc.coeffs[0]));
+			memcpy(&csc.coeffs[6], &copy.coeffs[3], 3 * sizeof(csc.coeffs[0]));
+			csc.offsets[1] = copy.offsets[2];
+			csc.offsets[2] = copy.offsets[1];
+		}
+
 		return true;
 	}
 	/* There will be more formats to check for in due course. */
@@ -2190,7 +2220,7 @@ int PiSPCameraData::configureEntities(V4L2SubdeviceFormat sensorFormat,
 	};
 	const V4L2Subdevice::Stream embeddedDataStream{
 		csiVideoSinkPad,
-		sensor_->embeddedDataStream().value_or(V4L2Subdevice::Stream{}).stream
+		sensor_->embeddedDataStream().value_or(utils::defopt).stream
 	};
 
 	V4L2Subdevice::Routing routing;
@@ -2322,9 +2352,6 @@ void PiSPCameraData::tryRunPipeline()
 
 	fillRequestMetadata(job.sensorControls, request);
 
-	/* Set our state to say the pipeline is active. */
-	state_ = State::Busy;
-
 	unsigned int bayerId = cfe_[Cfe::Output0].getBufferId(job.buffers[&cfe_[Cfe::Output0]]);
 	unsigned int statsId = cfe_[Cfe::Stats].getBufferId(job.buffers[&cfe_[Cfe::Stats]]);
 	ASSERT(bayerId && statsId);
@@ -2341,7 +2368,13 @@ void PiSPCameraData::tryRunPipeline()
 	params.ipaContext = requestQueue_.front()->sequence();
 	params.delayContext = job.delayContext;
 	params.sensorControls = std::move(job.sensorControls);
-	params.requestControls = request->controls();
+	/* params.requestControls is set by handleControlLists. */
+
+	/* This sorts out synchronisation with ControlLists in earlier requests. */
+	handleControlLists(job.delayContext, params.requestControls);
+
+	/* Set our state to say the pipeline is active. */
+	state_ = State::Busy;
 
 	if (sensorMetadata_) {
 		unsigned int embeddedId =

@@ -40,11 +40,11 @@ namespace ipa::nxpneo::algorithms {
  * \class Ccm
  * \brief A color correction matrix algorithm
  *
- * The CCM algorithm should run after the AWB algorithm
- * since the CCM has dependency with the AWB.
- * Indeed the CCM algorithm is using the Colour Temperature
- * computed by the AWB algorithm to select matching colour
- * correction matrices.
+ * This algorithm configures the ISP RGB2YUV block based on the interpolated CCM
+ * matrices with the color temperature computed from the AWB algorithm.
+ *
+ * Details about CCM dependencies can be found in:
+ * <src/ipa/nxp/neo/Documentation/source/neo_ipa_algorithms.rst>
  */
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoCcm)

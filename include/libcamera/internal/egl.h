@@ -51,14 +51,15 @@ class eGLImage
 public:
 	/**
 	 * \brief Construct an eGLImage with explicit stride
+	 * \param[in] format Image GL format
 	 * \param[in] width Image width in pixels
 	 * \param[in] height Image height in pixels
 	 * \param[in] stride Row stride in bytes
 	 * \param[in] texture_unit OpenGL texture unit
 	 * \param[in] texture_unit_uniform_id Shader uniform ID
 	 */
-	eGLImage(uint32_t width, uint32_t height, uint32_t stride, GLenum texture_unit, uint32_t texture_unit_uniform_id)
-		: width_(width), height_(height), stride_(stride),
+	eGLImage(GLint format, uint32_t width, uint32_t height, uint32_t stride, GLenum texture_unit, uint32_t texture_unit_uniform_id)
+		: format_(format), width_(width), height_(height), stride_(stride),
 		  framesize_(stride * height),
 		  texture_unit_uniform_id_(texture_unit_uniform_id),
 		  texture_unit_(texture_unit)
@@ -79,6 +80,7 @@ public:
 		glDeleteTextures(1, &texture_);
 	}
 
+	GLint format_; /**< Image GL format */
 	uint32_t width_; /**< Image width in pixels */
 	uint32_t height_; /**< Image height in pixels */
 	uint32_t stride_; /**< Row stride in bytes */
@@ -88,6 +90,7 @@ public:
 	GLenum texture_unit_; /**< Texture unit associated with this image eg (GL_TEXTURE0) */
 	GLuint texture_; /**< OpenGL texture object ID */
 	GLuint fbo_; /**< OpenGL frame buffer object ID */
+	bool dmabuf_import_failed_ = false; /**< Previous image import failed */
 
 private:
 	LIBCAMERA_DISABLE_COPY_AND_MOVE(eGLImage)
@@ -100,25 +103,30 @@ public:
 	~eGL();
 
 	int initEGLContext();
+	static bool isAvailable();
 
 	int createInputDMABufTexture2D(eGLImage &eglImage, int fd);
 	int createOutputDMABufTexture2D(eGLImage &eglImage, int fd);
-	void createTexture2D(eGLImage &eglImage, GLint format, uint32_t width, uint32_t height, void *data);
+	void createTexture2D(eGLImage &eglImage, void *data);
+	void updateTexture2D(eGLImage &eglImage, void *data);
+	void createOutputTexture2D(eGLImage &eglImage);
+
+	int attachTextureToFBO(eGLImage &eglImage);
+	void activateBindTexture(eGLImage &eglImage);
 
 	void pushEnv(std::vector<std::string> &shaderEnv, const char *str);
 	void makeCurrent();
 
-	int compileVertexShader(GLuint &shaderId, const unsigned char *shaderData,
-				unsigned int shaderDataLen,
+	int compileVertexShader(GLuint &shaderId, Span<const unsigned char> shaderData,
 				Span<const std::string> shaderEnv);
-	int compileFragmentShader(GLuint &shaderId, const unsigned char *shaderData,
-				  unsigned int shaderDataLen,
+	int compileFragmentShader(GLuint &shaderId, Span<const unsigned char> shaderData,
 				  Span<const std::string> shaderEnv);
 	int linkProgram(GLuint &programId, GLuint fragmentshaderId, GLuint vertexshaderId);
 	void dumpShaderSource(GLuint shaderId);
 	void useProgram(GLuint programId);
 	void deleteProgram(GLuint programId);
 	void syncOutput();
+	void flushOutput();
 
 private:
 	LIBCAMERA_DISABLE_COPY_AND_MOVE(eGL)
@@ -129,8 +137,8 @@ private:
 	EGLContext context_ = EGL_NO_CONTEXT;
 	EGLSurface surface_ = EGL_NO_SURFACE;
 
-	int compileShader(int shaderType, GLuint &shaderId, const unsigned char *shaderData,
-			  unsigned int shaderDataLen,
+	static EGLDisplay probeDisplay();
+	int compileShader(int shaderType, GLuint &shaderId, Span<const unsigned char> shaderData,
 			  Span<const std::string> shaderEnv);
 
 	int createDMABufTexture2D(eGLImage &eglImage, int fd, bool output);

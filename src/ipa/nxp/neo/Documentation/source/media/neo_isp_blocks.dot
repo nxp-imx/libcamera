@@ -1,0 +1,69 @@
+
+digraph Pipeline {
+    rankdir=TB;
+    splines=ortho;        // orthogonal straight lines
+    nodesep=0.4;
+    ranksep=0.8;
+
+    node [shape=box, width=1.8];
+
+    // Inputs
+    input0 [label="INPUT0"];
+    input1 [label="INPUT1"];
+
+    // PIPECONF (wide box using record)
+    pipeconf [shape=record, label="{ PIPECONF | { INALIGN0 | INALIGN1 } | { LPALIGN0 | LPALIGN1 }}"];
+
+    // Left column
+    hc0     [label="HC0"];
+    decomp0 [label="HDR Decomp0"];
+    obwb0   [label="OBWB0"];
+
+    // Right column
+    hc1     [label="HC1"];
+    decomp1 [label="HDR Decomp1"];
+    obwb1   [label="OBWB1"];
+
+    // Merge + downstream
+    merge [label="HDR Merge"];
+    rgbir [label="RGBIR"];
+    obwb2 [label="OBWB2"];
+
+    rgb_path [shape=ellipse, label="to RGB Path"];
+    ir_path  [shape=ellipse, label="to IR Path"];
+
+    // -------- ALIGN COLUMNS --------
+    { rank=same; input0; input1 }
+    { rank=same; hc0; hc1 }
+    { rank=same; decomp0; decomp1 }
+    { rank=same; obwb0; obwb1 }
+
+    // -------- FORCE VERTICAL CHAINS --------
+    // Left vertical pipeline
+    input0 -> pipeconf [weight=20];
+    pipeconf -> hc0     [weight=20];
+    hc0 -> decomp0      [weight=20];
+    decomp0 -> obwb0    [weight=20];
+    obwb0 -> merge      [weight=20];
+
+    // Right vertical pipeline
+    input1 -> pipeconf [weight=20];
+    pipeconf -> hc1    [weight=20];
+    hc1 -> decomp1     [weight=20];
+    decomp1 -> obwb1   [weight=20];
+    obwb1 -> merge     [weight=20];
+
+    // Merge and output (centered)
+    merge -> rgbir [weight=20];
+    rgbir -> obwb2 [weight=20];
+
+    // Split outputs
+    rgbir -> ir_path [weight=5];
+    obwb2 -> rgb_path [weight=5];
+
+    // -------- KEEP COLUMNS STRAIGHT --------
+    // Invisible edges to "lock" columns
+    hc0 -> hc1 [style=invis, weight=10];
+    decomp0 -> decomp1 [style=invis, weight=10];
+    obwb0 -> obwb1 [style=invis, weight=10];
+}

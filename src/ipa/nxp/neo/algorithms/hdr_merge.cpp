@@ -33,34 +33,9 @@ namespace ipa::nxpneo::algorithms {
  * This block when enabled combines the pixels of the two images of line path 0
  * and line path 1 into a single output.
  *
- *       input0              input1
- *     AXI IN0 DMA         AXI IN1 DMA
- *          │                   │
- *  ┌───────▼───────────────────▼───────┐
- *  │ PIPECONF                          │
- *  │    LPALIGN0             LPALIGN1  │
- *  │    INALIGN0             INALIGN1  │
- *  └───────┬───────────────────┬───────┘
- *  ┌───────▼───────┐   ┌───────▼───────┐
- *  │      HC0      │   │      HC1      │
- *  └───────┬───────┘   └───────┬───────┘
- *  ┌───────▼───────┐   ┌───────▼───────┐
- *  │  HDR Decomp0  │   │  HDR Decomp1  │
- *  └───────┬───────┘   └───────┬───────┘
- *  ┌───────▼───────┐   ┌───────▼───────┐
- *  │     OBWB0     │   │     OBWB1     │
- *  └───────┬───────┘   └───────┬───────┘
- *  ┌───────▼───────────────────▼───────┐
- *  │             HDR Merge             │
- *  └─────────────────┬─────────────────┘
- *  ┌─────────────────▼─────────────────┐
- *  │               RGBIR               │
- *  └───────┬───────────────────┬───────┘
- *  ┌───────▼───────┐           │
- *  │     OBWB2     │           │
- *  └───────┬───────┘           │
- *          ▼                   ▼
- *      to RGB Path        to IR path
+ * The diagram showing the path from the two input images to the HDR-merge block
+ * can be found in:
+ * <src/ipa/nxp/neo/Documentation/source/neo_ipa_algorithms.rst>
  *
  * At first, image0 and image1 pixels (x,y) are scaled to the same level by
  * the gain, offset and shift parameters:
@@ -102,16 +77,9 @@ namespace ipa::nxpneo::algorithms {
  * - the HDR ratio between the two images (from the calibration file),
  * - the blending window size (from the calibration file),
  * - the bit depth of both images (available from IPA).
- * The computation assumes that:
- * - the output pixel bit depth of the HDR-merge block is 20-bits,
- * - at the input of the HDR-merge block:
- *   - the pixel bit depth is the native camera pixel bit depth, as produced by
- *     the HDR-decomp algorithm.
- *   - the black-level subtraction does not reduce the effective input dynamic
- *     range for the HDR-merge block, because the AWB gains applied after the
- *     black-level correction rescales the signal. This ensures that the
- *     saturation detection operates correctly despite the earlier black-level
- *     offset removal.
+ * The computation is based on the algorithm considerations and hardware
+ * constraints as described in:
+ * <src/ipa/nxp/neo/Documentation/source/neo_ipa_algorithms.rst>.
  * The calculation of the scaling parameters (scale and shift) assumes that
  * the HDR ratio is an integer power of two. Arbitrary gain values can be used
  * but requires usage of the manual configuration mode.
@@ -119,6 +87,9 @@ namespace ipa::nxpneo::algorithms {
  * image0 is output of the HDR merge block.
  * Auto mode is enabled by default, but it can be overridden in the
  * calibration file.
+ *
+ * Details about HDR-merge dependencies can be found in the:
+ * <src/ipa/nxp/neo/Documentation/source/neo_ipa_algorithms.rst>
  *
  * The following parameters are read from the calibration file:
  *
@@ -182,7 +153,7 @@ HdrMerge::HdrMerge()
 	  downscale_{ kDefaultDownscale0, kDefaultDownscale1 },
 	  upscale_{ kDefaultUpscale0, kDefaultUpscale1 },
 	  postscale_(kDefaultPostscale),
-	  enabled_(false), autoEnabled_(kAutoEnabled)
+	  autoEnabled_(kAutoEnabled)
 {
 }
 
@@ -201,6 +172,9 @@ int HdrMerge::init([[maybe_unused]] IPAContext &context,
 	int ret = parseCommonParams(tuningData);
 	if (ret)
 		return ret;
+
+	context.ctrlMap[&controls::HdrMode] = ControlInfo(controls::HdrModeValues,
+							  kDefaultHdrMode_);
 
 	return autoEnabled_ ?
 		parseAutoParams(tuningData) :
@@ -392,9 +366,31 @@ int HdrMerge::configure(IPAContext &context,
 			[[maybe_unused]] const IPACameraSensorInfo &configInfo)
 {
 	IPAPipelineMode &mode = context.configuration.pipelineMode;
-	enabled_ = mode == IPAPipelineMode::HdrMerge;
+	/*
+	 * Set the IPA context HDR enabled flag with the HDR merge pipeline
+	 * mode.
+	 */
+	context.configuration.hdr.enabled = mode == IPAPipelineMode::HdrMerge;
+	/*
+	 * Initialize the active state HDR enabled flag with the IPA context
+	 * HDR enabled flag.
+	 */
+	context.activeState.hdr.enabled = context.configuration.hdr.enabled;
 
 	context.configuration.hdr.ratioLong2Short = ratioL2S_;
+
+	/* Store image0 gain scale/shift for HDR disabled (scale to 20-bit). */
+	std::array<uint32_t, kNumImages> &bpps =
+		context.configuration.sensor.bpps;
+
+	int scaleShift = 20 - bpps[0];
+	if (scaleShift >= 0) {
+		gainScale20bitsImage0_ = 1 << scaleShift;
+		gainShift20bitsImage0_ = 0;
+	} else {
+		gainScale20bitsImage0_ = 1;
+		gainShift20bitsImage0_ = std::abs(scaleShift);
+	}
 
 	if (autoEnabled_)
 		computeParams(context);
@@ -523,23 +519,76 @@ void HdrMerge::computeParams(IPAContext &context)
 }
 
 /**
+ * \copydoc libcamera::ipa::Algorithm::queueRequest
+ */
+void HdrMerge::queueRequest(IPAContext &context,
+			    const uint32_t frame,
+			    IPAFrameContext &frameContext,
+			    const ControlList &controls)
+{
+	if (!context.configuration.hdr.enabled)
+		return;
+
+	auto &hdr = context.activeState.hdr;
+	const auto &hdrMode = controls.get(controls::HdrMode);
+
+	/* Force the static configuration for the first frame. */
+	if (!frame) {
+		frameContext.hdr.update = true;
+		hdr.userMode = kDefaultHdrMode_;
+	}
+
+	if (hdrMode) {
+		if (*hdrMode != controls::HdrModeOff &&
+		    *hdrMode != controls::HdrModeMultiExposure) {
+			LOG(NxpNeoAlgoHdrMerge, Warning)
+				<< " Values of controls::HdrMode " << *hdrMode
+				<< " is not supported";
+			return;
+		} else if ((*hdrMode == controls::HdrModeOff && hdr.enabled) ||
+			   (*hdrMode == controls::HdrModeMultiExposure && !hdr.enabled)) {
+			hdr.enabled = *hdrMode != controls::HdrModeOff;
+
+			LOG(NxpNeoAlgoHdrMerge, Debug)
+				<< (hdr.enabled ? "Enabling" : "Disabling")
+				<< " HDR";
+			frameContext.hdr.update = true;
+			hdr.userMode = *hdrMode;
+		}
+	}
+
+	frameContext.hdr.enabled = hdr.enabled;
+	frameContext.hdr.userMode = hdr.userMode;
+}
+
+/**
  * \copydoc libcamera::ipa::Algorithm::prepare
  */
-void HdrMerge::prepare([[maybe_unused]] IPAContext &context, const uint32_t frame,
-		       [[maybe_unused]] IPAFrameContext &frameContext,
+void HdrMerge::prepare([[maybe_unused]] IPAContext &context,
+		       [[maybe_unused]] const uint32_t frame,
+		       IPAFrameContext &frameContext,
 		       NxpNeoParams *params)
 {
-	if (!enabled_ || frame > 0)
+	if (!frameContext.hdr.update)
 		return;
 
 	/* HDR Merge block configuration */
 	auto config = params->block<BlockParamsType::HdrMerge>();
 	config.setEnabled(true);
 
+	/*
+	 * If HDR merge is disabled by user controls, the HDR blending is
+	 * disabled and only the image0 is provided as the output of the
+	 * HDR merge block.
+	 * For this, the image0 is scaled to 20-bit.
+	 */
 	config->ctrl_obpp = obpp_;
 	config->ctrl_motion_fix_en = motionfixEn_;
 	config->ctrl_blend_3x3 = blend3x3_;
-	config->ctrl_gain0bpp = gainBpp_[0];
+	/* If HDR is disabled, saturate image0 bit depth to 20-bit. */
+	config->ctrl_gain0bpp = frameContext.hdr.enabled ?
+		gainBpp_[0] :
+		static_cast<unsigned int>(NEO_HDR_MERGE_BPP_20BPP);
 	config->ctrl_gain1bpp = gainBpp_[1];
 
 	LOG(NxpNeoAlgoHdrMerge, Debug)
@@ -558,14 +607,17 @@ void HdrMerge::prepare([[maybe_unused]] IPAContext &context, const uint32_t fram
 		<< utils::hex(config->gain_offset_offset0)
 		<< "/" << utils::hex(config->gain_offset_offset1);
 
-	config->gain_scale_scale0 = gainScale_[0];
+	/* If HDR is disabled, scale image0 to 20-bit. */
+	config->gain_scale_scale0 =
+		frameContext.hdr.enabled ? gainScale_[0] : gainScale20bitsImage0_;
 	config->gain_scale_scale1 = gainScale_[1];
 
 	LOG(NxpNeoAlgoHdrMerge, Debug)
 		<< "gain scale (0/1) " << utils::hex(config->gain_scale_scale0)
 		<< "/" << utils::hex(config->gain_scale_scale1);
 
-	config->gain_shift_shift0 = gainShift_[0];
+	config->gain_shift_shift0 =
+		frameContext.hdr.enabled ? gainShift_[0] : gainShift20bitsImage0_;
 	config->gain_shift_shift1 = gainShift_[1];
 
 	LOG(NxpNeoAlgoHdrMerge, Debug)
@@ -573,10 +625,20 @@ void HdrMerge::prepare([[maybe_unused]] IPAContext &context, const uint32_t fram
 		<< static_cast<int>(config->gain_shift_shift0)
 		<< "/" << static_cast<int>(config->gain_shift_shift1);
 
-	config->luma_th_th0 = lumaTh0_;
+	/*
+	 * If HDR is disabled, disable blending and output image0 only.
+	 * For this,
+	 * - image0 should be scaled to 20-bit
+	 * - luma value should be scaled to the max luma threshold 16-bit value
+	 * - luma threshold is set to its highest 16-bit value
+	 */
+	const uint8_t lumaScaleThShift20bitsImage0 = 20 - 16;
+	const uint16_t maxLumaTh0 = std::numeric_limits<uint16_t>::max();
+	config->luma_th_th0 = frameContext.hdr.enabled ? lumaTh0_ : maxLumaTh0;
 	config->luma_scale_scale = lumaScale_;
 	config->luma_scale_shift = lumaScaleShift_;
-	config->luma_scale_thshift = lumaScaleThShift_;
+	config->luma_scale_thshift = frameContext.hdr.enabled ?
+		lumaScaleThShift_ : lumaScaleThShift20bitsImage0;
 
 	LOG(NxpNeoAlgoHdrMerge, Debug)
 		<< "luma th0 " << utils::hex(config->luma_th_th0)
@@ -598,6 +660,18 @@ void HdrMerge::prepare([[maybe_unused]] IPAContext &context, const uint32_t fram
 		<< static_cast<int>(config->upscale_imgscale0)
 		<< "/" << static_cast<int>(config->upscale_imgscale1)
 		<< " postscale " << static_cast<int>(config->post_scale_scale);
+}
+
+/**
+ * \copydoc libcamera::ipa::Algorithm::process
+ */
+void HdrMerge::process([[maybe_unused]] IPAContext &context,
+		       [[maybe_unused]] const uint32_t frame,
+		       [[maybe_unused]] IPAFrameContext &frameContext,
+		       [[maybe_unused]] const NxpNeoStats *stats,
+		       ControlList &metadata)
+{
+	metadata.set(controls::HdrMode, frameContext.hdr.userMode);
 }
 
 REGISTER_IPA_ALGORITHM(HdrMerge, "HdrMerge")

@@ -1,0 +1,15 @@
+digraph board {
+        n00000071 [label="{{<port0> 0 | <port1> 1 | <port2> 2} | neoisp-0\n/dev/v4l-subdev0 | {<port3> 3 | <port4> 4 | <port5> 5}}", shape=Mrecord, style=filled, fillcolor=green]
+        n00000071:port3 -> n0000008a
+        n00000071:port4 -> n00000090 [style=dashed]
+        n00000071:port5 -> n00000096
+        n00000078 [label="neoisp-input0-0\n/dev/video11", shape=box, style=filled, fillcolor=yellow]
+        n00000078 -> n00000071:port0 [style=bold]
+        n0000007e [label="neoisp-input1-0\n/dev/video12", shape=box, style=filled, fillcolor=yellow]
+        n0000007e -> n00000071:port1 [style=dashed]
+        n00000084 [label="neoisp-params-0\n/dev/video13", shape=box, style=filled, fillcolor=yellow]
+        n00000084 -> n00000071:port2
+        n0000008a [label="neoisp-frame-0\n/dev/video14", shape=box, style=filled, fillcolor=yellow]
+        n00000090 [label="neoisp-ir-0\n/dev/video15", shape=box, style=filled, fillcolor=yellow]
+        n00000096 [label="neoisp-stats-0\n/dev/video16", shape=box, style=filled, fillcolor=yellow]
+}

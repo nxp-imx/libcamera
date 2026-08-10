@@ -16,10 +16,11 @@
 
 #include <linux/dma-buf.h>
 #include <linux/dma-heap.h>
+#include <linux/drm_fourcc.h>
 
 #include <libcamera/base/thread.h>
 
-#include <libdrm/drm_fourcc.h>
+#include <GLES3/gl32.h>
 
 namespace libcamera {
 
@@ -99,6 +100,62 @@ void eGL::syncOutput()
 }
 
 /**
+ * \brief Flush the rendering pipeline
+ *
+ * Calls glFlush().
+ *
+ */
+void eGL::flushOutput()
+{
+	ASSERT(tid_ == Thread::currentId());
+
+	glFlush();
+}
+
+/**
+ * \brief Attach a texture to a frame-buffer-object
+ *
+ * \param[in,out] eglImage EGL image containing texture to attach to FBO
+ *
+ * Helper function to make attachment of texture to FBO easy to reuse.
+ *
+ * \return 0 on success, or -ENODEV on failure
+ */
+int eGL::attachTextureToFBO(eGLImage &eglImage)
+{
+	int ret = 0;
+
+	// Generate a framebuffer from our texture direct to dma-buf handle buffer
+	glBindFramebuffer(GL_FRAMEBUFFER, eglImage.fbo_);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, eglImage.texture_, 0);
+
+	GLenum err = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	if (err != GL_FRAMEBUFFER_COMPLETE) {
+		LOG(eGL, Error) << "glFrameBufferTexture2D error " << err;
+		ret = -ENODEV;
+	}
+
+	return ret;
+}
+
+/**
+ * \brief Activate a texture unit and bind a texture to that unit
+ * \param[in,out] eglImage EGL image containing data related to unit and texture id
+ *
+ * When we create a texture we will bind a texture unit and texture id so
+ * we can set filters. For the case where a texture already exists though
+ * we need to activate and bind an existing texture. This helper function
+ * facilitates both cases.
+ *
+ */
+void eGL::activateBindTexture(eGLImage &eglImage)
+{
+	// Bind texture unit and texture
+	glActiveTexture(eglImage.texture_unit_);
+	glBindTexture(GL_TEXTURE_2D, eglImage.texture_);
+}
+
+/**
  * \brief Create a DMA-BUF backed 2D texture
  * \param[in,out] eglImage EGL image to associate with the DMA-BUF
  * \param[in] fd DMA-BUF file descriptor
@@ -112,13 +169,32 @@ void eGL::syncOutput()
  */
 int eGL::createDMABufTexture2D(eGLImage &eglImage, int fd, bool output)
 {
+	EGLint drm_format;
+	int ret = 0;
+
 	ASSERT(tid_ == Thread::currentId());
+
+	switch (eglImage.format_) {
+	case GL_RED:
+	case GL_LUMINANCE:
+		drm_format = DRM_FORMAT_R8;
+		break;
+	case GL_RG:
+		drm_format = DRM_FORMAT_RG88;
+		break;
+	case GL_RGBA:
+		drm_format = DRM_FORMAT_ARGB8888;
+		break;
+	default:
+		LOG(eGL, Error) << "unhandled GL format";
+		return -ENODEV;
+	}
 
 	// clang-format off
 	EGLint image_attrs[] = {
 		EGL_WIDTH, (EGLint)eglImage.width_,
 		EGL_HEIGHT, (EGLint)eglImage.height_,
-		EGL_LINUX_DRM_FOURCC_EXT, DRM_FORMAT_ARGB8888,
+		EGL_LINUX_DRM_FOURCC_EXT, drm_format,
 		EGL_DMA_BUF_PLANE0_FD_EXT, fd,
 		EGL_DMA_BUF_PLANE0_OFFSET_EXT, 0,
 		EGL_DMA_BUF_PLANE0_PITCH_EXT, (EGLint)eglImage.stride_,
@@ -133,13 +209,12 @@ int eGL::createDMABufTexture2D(eGLImage &eglImage, int fd, bool output)
 					      NULL, image_attrs);
 
 	if (image == EGL_NO_IMAGE_KHR) {
-		LOG(eGL, Error) << "eglCreateImageKHR fail";
+		LOG(eGL, Debug) << "eglCreateImageKHR fail";
+		eglImage.dmabuf_import_failed_ = true;
 		return -ENODEV;
 	}
 
-	// Bind texture unit and texture
-	glActiveTexture(eglImage.texture_unit_);
-	glBindTexture(GL_TEXTURE_2D, eglImage.texture_);
+	activateBindTexture(eglImage);
 
 	// Generate texture with filter semantics
 	glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
@@ -153,19 +228,10 @@ int eGL::createDMABufTexture2D(eGLImage &eglImage, int fd, bool output)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-	if (output) {
-		// Generate a framebuffer from our texture direct to dma-buf handle buffer
-		glBindFramebuffer(GL_FRAMEBUFFER, eglImage.fbo_);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, eglImage.texture_, 0);
+	if (output)
+		ret = attachTextureToFBO(eglImage);
 
-		GLenum err = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-		if (err != GL_FRAMEBUFFER_COMPLETE) {
-			LOG(eGL, Error) << "glFrameBufferTexture2D error " << err;
-			return -ENODEV;
-		}
-	}
-
-	return 0;
+	return ret;
 }
 
 /**
@@ -208,9 +274,6 @@ int eGL::createOutputDMABufTexture2D(eGLImage &eglImage, int fd)
 /**
  * \brief Create a 2D texture from a memory buffer
  * \param[in,out] eglImage EGL image to associate with the texture
- * \param[in] format OpenGL internal format (e.g., GL_RGB, GL_RGBA)
- * \param[in] width Texture width in pixels
- * \param[in] height Texture height in pixels
  * \param[in] data Pointer to pixel data, or nullptr for uninitialised texture
  *
  * Creates a 2D texture from a CPU-accessible memory buffer. The texture
@@ -218,15 +281,14 @@ int eGL::createOutputDMABufTexture2D(eGLImage &eglImage, int fd)
  * is useful for uploading static data like lookup tables or uniform color
  * matrices to the GPU.
  */
-void eGL::createTexture2D(eGLImage &eglImage, GLint format, uint32_t width, uint32_t height, void *data)
+void eGL::createTexture2D(eGLImage &eglImage, void *data)
 {
 	ASSERT(tid_ == Thread::currentId());
 
-	glActiveTexture(eglImage.texture_unit_);
-	glBindTexture(GL_TEXTURE_2D, eglImage.texture_);
+	activateBindTexture(eglImage);
 
 	// Generate texture, bind, associate image to texture, configure, unbind
-	glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+	glTexImage2D(GL_TEXTURE_2D, 0, eglImage.format_, eglImage.width_, eglImage.height_, 0, eglImage.format_, GL_UNSIGNED_BYTE, data);
 
 	// Nearest filtering
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -235,6 +297,80 @@ void eGL::createTexture2D(eGLImage &eglImage, GLint format, uint32_t width, uint
 	// Wrap to edge to avoid edge artifacts
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+}
+
+EGLDisplay eGL::probeDisplay()
+{
+	EGLDisplay display;
+
+	if (!eglBindAPI(EGL_OPENGL_ES_API)) {
+		LOG(eGL, Info) << "API bind fail";
+		return EGL_NO_DISPLAY;
+	}
+
+	display = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA,
+					EGL_DEFAULT_DISPLAY,
+					nullptr);
+
+	if (display == EGL_NO_DISPLAY) {
+		LOG(eGL, Info) << "Unable to get EGL display";
+		return EGL_NO_DISPLAY;
+	}
+
+	if (eglInitialize(display, nullptr, nullptr) != EGL_TRUE) {
+		LOG(eGL, Error) << "eglInitialize fail";
+		return EGL_NO_DISPLAY;
+	}
+
+	return display;
+}
+
+/**
+ * \brief Probe whether EGL surfaceless rendering is available
+ *
+ * Checks if an EGL surfaceless display can be obtained and initialised.
+ * The display is immediately terminated so that no resources are leaked.
+ *
+ * \return True if EGL surfaceless rendering is available, false otherwise
+ */
+bool eGL::isAvailable()
+{
+	EGLDisplay display = probeDisplay();
+	if (display == EGL_NO_DISPLAY)
+		return false;
+
+	eglTerminate(display);
+	return true;
+}
+
+/**
+ * \brief Update a 2D texture already created
+ * \param[in,out] eglImage EGL image to associate with the texture
+ * \param[data] Data to update the texture with
+ *
+ * Updates a 2D texture in VRAM.
+ */
+void eGL::updateTexture2D(eGLImage &eglImage, void *data)
+{
+	ASSERT(tid_ == Thread::currentId());
+
+	activateBindTexture(eglImage);
+
+	// Update an already existing texture
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, eglImage.width_, eglImage.height_, eglImage.format_, GL_UNSIGNED_BYTE, data);
+}
+
+/**
+ * \brief Create a 2D texture attached to an FBO for render-to-texture
+ * \param[in,out] eglImage EGL image to associate with the texture
+ *
+ * Creates a 2D texture in VRAM. Subsequetly attach the texture to the
+ * texture unit specified in the eGLImage object.
+ */
+void eGL::createOutputTexture2D(eGLImage &eglImage)
+{
+	createTexture2D(eglImage, NULL);
+	attachTextureToFBO(eglImage);
 }
 
 /**
@@ -267,21 +403,9 @@ int eGL::initEGLContext()
 	EGLint numConfigs;
 	EGLConfig config;
 
-	if (!eglBindAPI(EGL_OPENGL_ES_API)) {
-		LOG(eGL, Error) << "API bind fail";
-		goto fail;
-	}
-
-	display_ = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA,
-					 EGL_DEFAULT_DISPLAY,
-					 nullptr);
+	display_ = probeDisplay();
 	if (display_ == EGL_NO_DISPLAY) {
-		LOG(eGL, Error) << "Unable to get EGL display";
-		goto fail;
-	}
-
-	if (eglInitialize(display_, nullptr, nullptr) != EGL_TRUE) {
-		LOG(eGL, Error) << "eglInitialize fail";
+		LOG(eGL, Error) << "Unable to probe display";
 		goto fail;
 	}
 
@@ -329,6 +453,7 @@ int eGL::initEGLContext()
 
 	makeCurrent();
 
+	LOG(eGL, Info) << "EGL: GL_RENDERER: " << glGetString(GL_RENDERER);
 	LOG(eGL, Info) << "EGL: GL_VERSION: " << glGetString(GL_VERSION);
 
 	return 0;
@@ -400,8 +525,7 @@ void eGL::pushEnv(std::vector<std::string> &shaderEnv, const char *str)
 /**
  * \brief Compile a vertex shader
  * \param[out] shaderId OpenGL shader object ID
- * \param[in] shaderData Pointer to shader source code
- * \param[in] shaderDataLen Length of shader source in bytes
+ * \param[in] shaderData Shader source code
  * \param[in] shaderEnv Span of preprocessor definitions to prepend
  *
  * Compiles a vertex shader from source code with optional preprocessor
@@ -409,18 +533,17 @@ void eGL::pushEnv(std::vector<std::string> &shaderEnv, const char *str)
  *
  * \return 0 on success, or -EINVAL on compilation failure
  */
-int eGL::compileVertexShader(GLuint &shaderId, const unsigned char *shaderData,
-			     unsigned int shaderDataLen,
+int eGL::compileVertexShader(GLuint &shaderId,
+			     Span<const unsigned char> shaderData,
 			     Span<const std::string> shaderEnv)
 {
-	return compileShader(GL_VERTEX_SHADER, shaderId, shaderData, shaderDataLen, shaderEnv);
+	return compileShader(GL_VERTEX_SHADER, shaderId, shaderData, shaderEnv);
 }
 
 /**
  * \brief Compile a fragment shader
  * \param[out] shaderId OpenGL shader object ID
- * \param[in] shaderData Pointer to shader source code
- * \param[in] shaderDataLen Length of shader source in bytes
+ * \param[in] shaderData Shader source code
  * \param[in] shaderEnv Span of preprocessor definitions to prepend
  *
  * Compiles a fragment shader from source code with optional preprocessor
@@ -428,19 +551,18 @@ int eGL::compileVertexShader(GLuint &shaderId, const unsigned char *shaderData,
  *
  * \return 0 on success, or -EINVAL on compilation failure
  */
-int eGL::compileFragmentShader(GLuint &shaderId, const unsigned char *shaderData,
-			       unsigned int shaderDataLen,
+int eGL::compileFragmentShader(GLuint &shaderId,
+			       Span<const unsigned char> shaderData,
 			       Span<const std::string> shaderEnv)
 {
-	return compileShader(GL_FRAGMENT_SHADER, shaderId, shaderData, shaderDataLen, shaderEnv);
+	return compileShader(GL_FRAGMENT_SHADER, shaderId, shaderData, shaderEnv);
 }
 
 /**
  * \brief Compile a shader of specified type
  * \param[in] shaderType GL_VERTEX_SHADER or GL_FRAGMENT_SHADER
  * \param[out] shaderId OpenGL shader object ID
- * \param[in] shaderData Pointer to shader source code
- * \param[in] shaderDataLen Length of shader source in bytes
+ * \param[in] shaderData Shader source code
  * \param[in] shaderEnv Span of preprocessor definitions to prepend
  *
  * Internal helper function for shader compilation. Prepends environment
@@ -448,8 +570,8 @@ int eGL::compileFragmentShader(GLuint &shaderId, const unsigned char *shaderData
  *
  * \return 0 on success, or -EINVAL on compilation failure
  */
-int eGL::compileShader(int shaderType, GLuint &shaderId, const unsigned char *shaderData,
-		       unsigned int shaderDataLen,
+int eGL::compileShader(int shaderType, GLuint &shaderId,
+		       Span<const unsigned char> shaderData,
 		       Span<const std::string> shaderEnv)
 {
 	GLint success;
@@ -468,8 +590,8 @@ int eGL::compileShader(int shaderType, GLuint &shaderId, const unsigned char *sh
 	}
 
 	// Now the main body of the shader program
-	shaderSourceData[i] = reinterpret_cast<const GLchar *>(shaderData);
-	shaderDataLengths[i] = shaderDataLen;
+	shaderSourceData[i] = reinterpret_cast<const GLchar *>(shaderData.data());
+	shaderDataLengths[i] = shaderData.size();
 
 	// And create the shader
 	shaderId = glCreateShader(shaderType);

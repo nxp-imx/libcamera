@@ -72,6 +72,7 @@ protected:
 		ASSERT_EQ(v2.min(4.0), (Vector<double, 3>{{ 1.0, 4.0, 4.0 }}));
 		ASSERT_EQ(v2.max(v3), (Vector<double, 3>{{ 4.0, 4.0, 8.0 }}));
 		ASSERT_EQ(v2.max(4.0), (Vector<double, 3>{{ 4.0, 4.0, 8.0 }}));
+		ASSERT_EQ(v2.clamp(2.0, 6.0), (Vector<double, 3>{{ 2.0, 4.0, 6.0 }}));
 
 		ASSERT_EQ(v2.dot(v3), 52.0);
 
@@ -92,6 +93,11 @@ protected:
 		ASSERT_EQ(v2, (Vector<double, 3>{{ 4.0, 16.0, 32.0 }}));
 		v2 /= 4.0;
 		ASSERT_EQ(v2, (Vector<double, 3>{{ 1.0, 4.0, 8.0 }}));
+
+		Vector<int, 3> vi{{ 8, 16, 32 }};
+		ASSERT_EQ(vi >> 2, (Vector<int, 3>{{ 2, 4, 8 }}));
+		vi >>= 1;
+		ASSERT_EQ(vi, (Vector<int, 3>{{ 4, 8, 16 }}));
 
 		return TestPass;
 	}

@@ -33,53 +33,19 @@ namespace ipa::nxpneo::algorithms {
  * values when the sensor uses compression. It may also be used for simple
  * linear rescaling of the pixel values.
  *
- *       input0              input1
- *     AXI IN0 DMA         AXI IN1 DMA
- *          │                   │
- *  ┌───────▼───────────────────▼───────┐
- *  │ PIPECONF                          │
- *  │    LPALIGN0             LPALIGN1  │
- *  │    INALIGN0             INALIGN1  │
- *  └───────┬───────────────────┬───────┘
- *  ┌───────▼───────┐   ┌───────▼───────┐
- *  │      HC0      │   │      HC1      │
- *  └───────┬───────┘   └───────┬───────┘
- *  ┌───────▼───────┐   ┌───────▼───────┐
- *  │  HDR Decomp0  │   │  HDR Decomp1  │
- *  └───────┬───────┘   └───────┬───────┘
- *  ┌───────▼───────┐   ┌───────▼───────┐
- *  │     OBWB0     │   │     OBWB1     │
- *  └───────┬───────┘   └───────┬───────┘
- *  ┌───────▼───────────────────▼───────┐
- *  │             HDR Merge             │
- *  └─────────────────┬─────────────────┘
- *  ┌─────────────────▼─────────────────┐
- *  │               RGBIR               │
- *  └───────┬───────────────────┬───────┘
- *  ┌───────▼───────┐           │
- *  │     OBWB2     │           │
- *  └───────┬───────┘           │
- *          ▼                   ▼
- *      to RGB Path        to IR path
- *
- * Input format to the HDR Decompression block is either the native sensor
- * output pixel format or a MSB-aligned shifted version of it - see PIPECONF
- * block LPALIGN0/1 configurations.
+ * Input format to the HDR Decompression block reflects the PIPECONF block
+ * LPALIGN0/1 configurations as described in:
+ * <src/ipa/nxp/neo/Documentation/source/neo_ipa_algorithms.rst>.
  * When a non-linear decompression is to be applied the input pixel format of
  * the block should be limited to 16-bit bit depth to be able to configure some
  * knee-points. In that case the LPALIGN0/1 configuration should typically be
  * set to zero explicitly in the calibration file to avoid rescaling the native
  * bit depth.
  *
- * If the HDR merge block is not used, the target bit depth at the output of
- * the HDR Decompression block is:
- * - 20-bit on line path 0 (input0)
- * - 16-bit on line path 1 (input1)
- * When the HDR block is used, the target bit depth at the output of the HDR
- * Decompression blocks is the same as the native bit depth, with a minimum
- * of 12-bit to have support for the saturation in the subsequent OBWB blocks.
- * Thus, the HDR block is configured either as bypass or, for 10-bit HDR merge
- * mode, with the necessary gain to convert from 10-bit to 12-bit bit depth.
+ * Output pixel bit depths of the HDR Decompression block are the ones of the
+ * HDR-merge block inputs, as described in the Neo IPA algorithms documentation
+ * found in:
+ * <src/ipa/nxp/neo/Documentation/source/neo_ipa_algorithms.rst>,
  *
  * When the HDR Decompression block is explicitly configured in the calibration
  * file, those values are applied with priority.
@@ -97,21 +63,6 @@ namespace ipa::nxpneo::algorithms {
  * - ratios: KNEE_RATIO[0-4] (u7.5)
  * Last entry in the offsets/newpoints/ratios arrays is used as the default case
  * when no value from points[] array matched the condition (pv < points[N]).
- *
- * If no block configuration is present in the calibration file, the algorithm
- * falls back on a default configuration logic, and the block will be configured
- * as simple linear gain or bypass, without decompression.
- * If pipeline is not in HDR-merge mode, it is assumed that PIPECONF.LPALIGN0/1
- * is set to 1 meaning that camera native bit depth has been rescaled.
- * Most of the time block can be used in bypass, as the input0 and input1 bit
- * depth already match the targeted HDR Decompression block output bit depth
- * that is 20-bit for input0 and 16-bit for input1.
- * In HDR-merge mode of operation, it is assumed that PIPECONF.LPALIGN0/1 has
- * been set to zero to avoid rescaling. Native bit depth is expected at the
- * output of the HDR Decompression block so it can be configured in bypass mode.
- * See the PipeConf algorithm for PIPECONF block rescaling logic and exceptions,
- * depending on PIPECONF.LPALIGN0/1, the native bit depth and the ISP
- * hardware revision.
  */
 
 LOG_DEFINE_CATEGORY(NxpNeoAlgoHdrDecomp)
@@ -255,31 +206,8 @@ int HdrDecomp::configure(IPAContext &context,
 			 [[maybe_unused]] const IPACameraSensorInfo &configInfo)
 {
 	/*
-	 * When no user configuration is present in the configuration file we
-	 * fallback to a default linear bypass configuration of the block.
-	 * There is a hardware peculiarity in the ISP with 12-bit bit depth:
-	 * - Rescaling for input0 and input1 is done to 16-bit regardless of the
-	 *   PIPECONF.LPALIGN setting.
-	 * This leads to 2 exceptions using 12-bit input0 and input1 bit depth:
-	 * 1) In non HDR-merge mode, the need is to rescale the bit depth to:
-	 *    - 20-bit for input0.
-	 *    - 16-bit for input1.
-	 *    In that case, the HDR Decompression is configured to apply:
-	 *    - an additional gain of 16 for the input0 rescaling 16-bit to
-	 *      20-bit conversion.
-	 *    - linear decompression (no additional gain) for the input1
-	 * 2) In HDR-merge mode there is the opposite issue where we want to
-	 *    keep the native sensor bit depth up to the HDR-merge block.
-	 *    For that purpose LPALIGN0/1=0 is set to avoid PIPECONF rescaling.
-	 *    But it does not apply to that specific case so a (1/16) fractional
-	 *    gain needs to be set to revert the bit depth from 16-bit to 12-bit
-	 *    for both input0 and input1.
-	 * During HDR merge operation where we want to keep the native sensor
-	 * bitdepth up to the HDR merge block, there is a constraint coming from
-	 * the OBWB block, whose saturation (obpp) is configurable only from
-	 * 12-bit onwards. Thus, for a lower bit depth (10-bit) the necessary
-	 * gain is applied in HDR Decomp block to rescale the input to 12-bit
-	 * bit depth in order to meet the OBWB0/1 constraints.
+	 * The algorithm considerations and hardware constraints can be found in:
+	 * <src/ipa/nxp/neo/Documentation/source/neo_ipa_algorithms.rst>.
 	 */
 	IPAPipelineMode &mode = context.configuration.pipelineMode;
 	std::array<uint32_t, 2> &bpps = context.configuration.sensor.bpps;

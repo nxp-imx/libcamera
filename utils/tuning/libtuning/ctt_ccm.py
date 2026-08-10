@@ -219,11 +219,11 @@ def ccm(imgs, cal_cr_list, cal_cb_list):
 
         for RGB in zip(r, g, b):
             ccm_applied_rgb = np.dot(formatted_ccm, (np.array(RGB) / 256))
-            optimised_ccm_rgb.append(gamma(ccm_applied_rgb))
+            optimised_ccm_rgb.append(np.clip(gamma(ccm_applied_rgb), 0.0, 255.0))
             optimised_ccm_lab.append(colors.RGB_to_LAB(ccm_applied_rgb))
 
             optimised_ccm_applied_rgb = np.dot(formatted_optimised_ccm, np.array(RGB) / 256)
-            after_gamma_rgb.append(gamma(optimised_ccm_applied_rgb))
+            after_gamma_rgb.append(np.clip(gamma(optimised_ccm_applied_rgb), 0.0, 255.0))
             after_gamma_lab.append(colors.RGB_to_LAB(optimised_ccm_applied_rgb))
         '''
         Gamma After RGB / LAB - not used in calculations, only used for visualisation

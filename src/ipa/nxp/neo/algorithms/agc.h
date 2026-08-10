@@ -34,8 +34,9 @@ public:
 
 	virtual int init(IPAContext &context, const ValueNode &tuningData) = 0;
 	virtual void configure(IPAContext &context);
-	virtual void setupHistograms(IPAContext &context,
-				     NxpNeoParams *params) const = 0;
+	virtual void setupHistograms(const IPAContext &context,
+				     const IPAFrameContext &frameContext,
+				     NxpNeoParams *params) = 0;
 	virtual void setAwbGains([[maybe_unused]] IPAContext &context,
 				 [[maybe_unused]] IPAFrameContext &frameContext)
 	{
@@ -65,14 +66,16 @@ public:
 	AgcStatsRgb() { cameraContext_ = IPACameraContext::Rgb; }
 
 	int init(IPAContext &context, const ValueNode &tuningData) override;
-	void configure(IPAContext &context) override;
-	void setupHistograms(IPAContext &context, NxpNeoParams *params) const override;
+	void setupHistograms(const IPAContext &context,
+			     const IPAFrameContext &frameContext,
+			     NxpNeoParams *params) override;
 	void setAwbGains(IPAContext &context, IPAFrameContext &frameContext) override;
 	void parseStatistics(const NxpNeoStats *stats) override;
 
 private:
 	int parseTuningDataRgb(const ValueNode &tuningData);
-	void configureHistScale(IPAContext &context);
+	void configureHistScale(const IPAContext &context,
+				const IPAFrameContext &frameContext);
 	double estimateLuminance(double gain) const override;
 
 	static const RGB<uint8_t> kHistIds;
@@ -88,7 +91,9 @@ public:
 	AgcStatsIr() { cameraContext_ = IPACameraContext::Ir; }
 
 	int init(IPAContext &context, const ValueNode &tuningData) override;
-	void setupHistograms(IPAContext &context, NxpNeoParams *params) const override;
+	void setupHistograms(const IPAContext &context,
+			     const IPAFrameContext &frameContext,
+			     NxpNeoParams *params) override;
 	void parseStatistics(const NxpNeoStats *stats) override;
 
 private:

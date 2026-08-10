@@ -37,46 +37,13 @@ namespace ipa::nxpneo::algorithms {
  * in OBWB0/1 instances prior to the HDR-merge block, or in the OBWB2 instance
  * post HDR-merge.
  *
- *       input0              input1
- *     AXI IN0 DMA         AXI IN1 DMA
- *          │                   │
- *  ┌───────▼───────────────────▼───────┐
- *  │ PIPECONF                          │
- *  │    LPALIGN0             LPALIGN1  │
- *  │    INALIGN0             INALIGN1  │
- *  └───────┬───────────────────┬───────┘
- *  ┌───────▼───────┐   ┌───────▼───────┐
- *  │      HC0      │   │      HC1      │
- *  └───────┬───────┘   └───────┬───────┘
- *  ┌───────▼───────┐   ┌───────▼───────┐
- *  │  HDR Decomp0  │   │  HDR Decomp1  │
- *  └───────┬───────┘   └───────┬───────┘
- *  ┌───────▼───────┐   ┌───────▼───────┐
- *  │     OBWB0     │   │     OBWB1     │
- *  └───────┬───────┘   └───────┬───────┘
- *  ┌───────▼───────────────────▼───────┐
- *  │             HDR Merge             │
- *  └─────────────────┬─────────────────┘
- *  ┌─────────────────▼─────────────────┐
- *  │               RGBIR               │
- *  └───────┬───────────────────┬───────┘
- *  ┌───────▼───────┐           │
- *  │     OBWB2     │           │
- *  └───────┬───────┘           │
- *          ▼                   ▼
- *      to RGB Path        to IR path
- *
- * At the output of the HDR Decomp blocks, the camera native bit depth is
- * expected to be:
- * - Rescaled to 20-bit (input0) and 16-bit (input1) when HDR-merge block is not
- *   used
- * - Native camera bit depth (no rescaling) when HDR-merge block is used,
- *   unless native bit depth is 10-bit where it would have been rescaled to
- *   12-bit to cope with OBWB saturation that requires at least 12-bit.
- *
- * Thus, those input formats are the ones relevant to OBWB0/1 instances.
- * Conversely, at the output of HDR-merge block, bit depth is expected to be
- * unconditionally 20-bit which is relevant to the OBWB2 instance input.
+ * As described in the Neo IPA algorithms documentation found in
+ * <src/ipa/nxp/neo/Documentation/source/neo_ipa_algorithms.rst>,
+ * the pixel bit depth of the OBWB instances inputs are:
+ * - for the OBWB0/1 instances: the pixel bit depths of the HDR-merge block
+ *   inputs.
+ * - for the OBWB2 instance: the output bit depth of the HDR-merge block which
+ *   is unconditionally 20-bit.
  *
  * When HDR-merge block is used to aggregate multiple captures, BLC is to be
  * applied before the merge as further gain will be applied by this block.
@@ -96,6 +63,9 @@ namespace ipa::nxpneo::algorithms {
  * case, a calibration entry specifies the reference sensor bit depth
  * corresponding to the calibration value. That digital value will then be
  * applied to all pixel formats.
+ *
+ * Details about BLC dependencies can be found in:
+ * <src/ipa/nxp/neo/Documentation/source/neo_ipa_algorithms.rst>
  *
  * Relevant keys in the BLC section of the calibration file:
  * R: offset for R channel (signed, 16-bit bit depth)

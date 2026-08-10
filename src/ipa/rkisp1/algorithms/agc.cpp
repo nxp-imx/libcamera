@@ -55,7 +55,7 @@ int Agc::parseMeteringModes(IPAContext &context, const ValueNode &tuningData)
 		}
 
 		std::vector<uint8_t> weights =
-			value.get<std::vector<uint8_t>>().value_or(std::vector<uint8_t>{});
+			value.get<std::vector<uint8_t>>().value_or(utils::defopt);
 		if (weights.size() != context.hw.numHistogramWeights) {
 			LOG(RkISP1Agc, Warning)
 				<< "Failed to read metering mode'" << key << "'";
@@ -142,8 +142,8 @@ int Agc::init(IPAContext &context, const ValueNode &tuningData)
 	if (ret)
 		return ret;
 
-	const ValueNode &yamlMeteringModes = tuningData["AeMeteringMode"];
-	ret = parseMeteringModes(context, yamlMeteringModes);
+	const ValueNode &meteringModes = tuningData["AeMeteringMode"];
+	ret = parseMeteringModes(context, meteringModes);
 	if (ret)
 		return ret;
 
