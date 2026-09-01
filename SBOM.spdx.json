@@ -1,0 +1,53 @@
+{
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "spdxVersion": "SPDX-2.3",
+  "creationInfo": {
+    "created": "2026-08-26T03:49:38Z",
+    "creators": [
+      "Organization: NXP"
+    ],
+    "licenseListVersion": "3.28"
+  },
+  "name": "libcamera-lf-6.18.37-2.1.0",
+  "dataLicense": "CC0-1.0",
+  "documentNamespace": "https://nxp.com/spdx/f07482f4-db29-4970-8052-19fe8d63111c",
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-package-f07482f4-db29-4970-8052-19fe8d63111c",
+      "name": "libcamera",
+      "versionInfo": "lf-6.18.37-2.1.0",
+      "licenseConcluded": "LGPL-2.1-or-later",
+      "licenseDeclared": "LGPL-2.1-or-later",
+      "downloadLocation": "https://github.com/nxp-imx/libcamera -b lf-6.18.37-2.1.0",
+      "originator": "Organization: NXP",
+      "supplier": "NOASSERTION",
+      "externalRefs": [],
+      "filesAnalyzed": false
+    },
+    {
+      "SPDXID": "SPDXRef-package-f07482f4-db29-4970-8052-19fe8d63111c---712cef45-6faf-4543-aa05-e3f6a41417cf",
+      "name": "libcamera",
+      "versionInfo": "0.7.2",
+      "licenseConcluded": "GPL-2.0-or-later",
+      "licenseDeclared": "GPL-2.0-or-later",
+      "homepage": "https://libcamera.org/",
+      "downloadLocation": "NOASSERTION",
+      "originator": "Organization: unknown",
+      "supplier": "NOASSERTION",
+      "externalRefs": [],
+      "filesAnalyzed": false
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-package-f07482f4-db29-4970-8052-19fe8d63111c"
+    },
+    {
+      "spdxElementId": "SPDXRef-package-f07482f4-db29-4970-8052-19fe8d63111c",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-package-f07482f4-db29-4970-8052-19fe8d63111c---712cef45-6faf-4543-aa05-e3f6a41417cf"
+    }
+  ]
+}
