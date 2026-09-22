@@ -1,0 +1,82 @@
+{
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "spdxVersion": "SPDX-2.3",
+  "creationInfo": {
+    "created": "2026-09-14T09:49:46Z",
+    "creators": [
+      "Organization: NXP"
+    ],
+    "licenseListVersion": "3.28"
+  },
+  "name": "libcamera-automotive-16.0.0_2.1.0",
+  "dataLicense": "CC0-1.0",
+  "documentNamespace": "https://nxp.com/spdx/b2d4e0e9-75fe-45bf-9f3c-994d7630b25c",
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-package-b2d4e0e9-75fe-45bf-9f3c-994d7630b25c",
+      "name": "libcamera",
+      "versionInfo": "automotive-16.0.0_2.1.0",
+      "licenseConcluded": "(LGPL-2.1-or-later)",
+      "licenseDeclared": "(LGPL-2.1-or-later)",
+      "downloadLocation": "NOASSERTION",
+      "originator": "Organization: NXP",
+      "supplier": "NOASSERTION",
+      "externalRefs": [],
+      "filesAnalyzed": false
+    },
+    {
+      "SPDXID": "SPDXRef-package-b2d4e0e9-75fe-45bf-9f3c-994d7630b25c---c545f9a2-a807-40a5-a046-82b2ff3e8fec",
+      "name": "libcamera",
+      "versionInfo": "0.7.0",
+      "licenseConcluded": "(CC-BY-SA-4.0 AND GPL-2.0-or-later AND LGPL-2.1-or-later)",
+      "licenseDeclared": "(CC-BY-SA-4.0 AND GPL-2.0-or-later AND LGPL-2.1-or-later)",
+      "homepage": "https://git.linuxtv.org/libcamera.git/",
+      "downloadLocation": "NOASSERTION",
+      "originator": "Organization: opensuse",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "OTHER",
+          "referenceLocator": "e39f974a-4b11-48a7-ad63-03293db83c64",
+          "referenceType": "BlackDuck-ComponentOrigin"
+        },
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceLocator": "pkg:rpm/opensuse/libcamera@0.7.0-1.3?arch=armv7hl",
+          "referenceType": "purl"
+        }
+      ],
+      "filesAnalyzed": false
+    },
+    {
+      "SPDXID": "SPDXRef-package-b2d4e0e9-75fe-45bf-9f3c-994d7630b25c---712cef45-6faf-4543-aa05-e3f6a41417cf",
+      "name": "libcamera",
+      "versionInfo": "0.7.2",
+      "licenseConcluded": "GPL-2.0-or-later",
+      "licenseDeclared": "GPL-2.0-or-later",
+      "homepage": "https://libcamera.org/",
+      "downloadLocation": "NOASSERTION",
+      "originator": "Organization: libcamera",
+      "supplier": "NOASSERTION",
+      "externalRefs": [],
+      "filesAnalyzed": false
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-package-b2d4e0e9-75fe-45bf-9f3c-994d7630b25c"
+    },
+    {
+      "spdxElementId": "SPDXRef-package-b2d4e0e9-75fe-45bf-9f3c-994d7630b25c",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-package-b2d4e0e9-75fe-45bf-9f3c-994d7630b25c---712cef45-6faf-4543-aa05-e3f6a41417cf"
+    },
+    {
+      "spdxElementId": "SPDXRef-package-b2d4e0e9-75fe-45bf-9f3c-994d7630b25c",
+      "relationshipType": "DYNAMIC_LINK",
+      "relatedSpdxElement": "SPDXRef-package-b2d4e0e9-75fe-45bf-9f3c-994d7630b25c---c545f9a2-a807-40a5-a046-82b2ff3e8fec"
+    }
+  ]
+}
