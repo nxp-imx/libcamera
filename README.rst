@@ -29,7 +29,7 @@ To fetch the sources, build and install:
 
 .. code::
 
-  git clone https://git.libcamera.org/libcamera/libcamera.git
+  git clone https://github.com/nxp-imx/libcamera.git
   cd libcamera
   meson setup build
   ninja -C build install
